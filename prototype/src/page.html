@@ -334,7 +334,7 @@ for (const b of document.querySelectorAll('[data-sp]')) b.addEventListener('clic
 // Zaman: fizik gercek zamanli (1x'te ekranda 1 saniye = sahada 1 saniye), mac saati 6 kat hizli akar.
 // Deneme surumunde 1x %20 hizli oynar, mac yaklasik 12,5 dakika surer. 4x ve 16x yalniz izlemek icindir.
 const WATCH_SPEED = 1.39; // izleme: 1x %39 hizli (mac ~11 dk); motor adimi st.dt (0,1 s)
-const PLAY_DT = 0.1; // oynarken motor adimi (20 adim/s denemesi kalibrasyonla birlikte: gol sayisi farkli cikti)
+const PLAY_DT = 0.05; // oynarken motor 20 adim/s (girdi gecikmesi 50 ms alti); izleme ve kalibrasyon 0,1 s
 const isDead = () => st.t < st.restartUntil && !ballMoving(st);
 function frame(now) {
   const dtReal = Math.min(0.1, (now - last) / 1000);
@@ -1165,7 +1165,7 @@ function renderReport() {
   ];
   const maxDev = Math.max(...c.slice(1).map((r) => Math.max(Math.abs(r.w - r.tw), Math.abs(r.d - r.td), Math.abs(r.l - r.tl))));
   el.innerHTML = `
-    <p class="lead">Motor, güç farkı olan maçlarda Metrik dokümanındaki simülasyon eğrisini <b>en fazla ${maxDev.toFixed(1).replace('.', ',')} puan sapmayla</b> tutturuyor. ${c.length} farklı güç oranında toplam ${c.reduce((a, r) => a + r.n, 0).toLocaleString('tr-TR')} maç oynatıldı; ayrıca eşit takımlarla 2.000 maçlık bir taraf testi yapıldı ve taraf avantajı çıkmadı.</p>
+    <p class="lead">Motor, güç farkı olan maçlarda Metrik dokümanındaki simülasyon eğrisini <b>en fazla ${maxDev.toFixed(1).replace('.', ',')} puan sapmayla</b> tutturuyor. ${c.length} farklı güç oranında toplam ${c.reduce((a, r) => a + r.n, 0).toLocaleString('tr-TR')} maç oynatıldı (motor 2.0, fiziksel top).</p>
     <div class="grid2">
       <div class="panel"><h3>Güç farkına göre sonuçlar</h3><div class="chart">${svg}</div>
         <div class="legend"><span><i style="background:${hm}"></i>Güçlü takımın galibiyeti</span><span><i style="background:${aw}"></i>Beraberlik</span><span>Noktalar: motor · kesik çizgi: hedef eğri</span></div></div>
@@ -1179,6 +1179,7 @@ function renderReport() {
       <thead><tr><th>Güç oranı</th><th>Maç</th><th>Motor G / B / M</th><th>Hedef G / B / M</th><th>Maç başı gol</th></tr></thead>
       <tbody>${c.map((r) => `<tr><td>${r.r.toFixed(2).replace('.', ',')}</td><td>${r.n}</td><td>%${r.w.toFixed(0)} / %${r.d.toFixed(0)} / %${r.l.toFixed(0)}</td><td>%${r.tw.toFixed(0)} / %${r.td.toFixed(0)} / %${r.tl.toFixed(0)}</td><td>${r.g.toFixed(2).replace('.', ',')}</td></tr>`).join('')}</tbody></table></div>
       <p class="note">Güç oranı 1,00 satırında iki takım tamamen eşittir; oradaki fark tesadüftür.</p></div>
+    <p class="note">Güç eğrisi ve maç istatistikleri motor 2.0 (fiziksel top, Dilim 0.4) ile ${c.reduce((a, r) => a + r.n, 0).toLocaleString('tr-TR')} maçta ölçüldü; kalibrasyon sürüyor. Aşağıdaki taktik dengesi ve formasyon tabloları motor 1 (v12) ölçümleridir, kalibrasyon bitince yeniden koşulacak.</p>
     <div class="panel"><h3>Taktik dengesi (seçenek havuzu testi)</h3>
       <p class="note">Her seçenek, diğer ayarları rastgele seçilmiş takımlarla, tamamen rastgele kurulmuş rakiplere karşı ${BALANCE.per} maç oynadı (toplam ${BALANCE.n.toLocaleString('tr-TR')} maç, güçler eşit). Sayı maç başı puan, parantez ortalamadan farkı. Bu örneklemde tesadüf payı yaklaşık ±0,11. Hedef: hiçbir seçenek bu payın belirgin dışında kalmasın. Denge önce mekaniklerle (ara pas yarışı, ofsayt, geçiş anı, yorgunluk), sonra Maç Motoru sekmesindeki taktik etkileşim tablosuyla sağlanır; tablo veri olarak tutulur ve canlı oyunda ayarlanabilir. Saldırgan ayarların sezon içi bedeli (ek yorgunluk) bu testte yoktur.</p>
       <div class="tblwrap"><table class="tbl"><thead><tr><th>Ayar</th><th colspan="5">Maç başı puan</th></tr></thead><tbody>

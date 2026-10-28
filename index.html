@@ -235,11 +235,11 @@ const P = {
     gkDive: 2.4, // kalecinin sut aninda en fazla uzanma (m)
     gkCatch: 17, // bu hizin altindaki topu kaleci tutar, ustunu cıkartir (celer)
     kickCd: 0.6, // vuran oyuncu bu sure topa yeniden dokunamaz (s)
-    kickErr: 0.045, // vurus aci hatasi tabani (radyan, 1 sigma); guc orani ve baski ile olceklenir
+    kickErr: 0.04, // vurus aci hatasi tabani (radyan, 1 sigma); guc orani ve baski ile olceklenir
     kickErrPress: 0.5, // baski basina ek hata orani
-    shotErr: 0.1, // sut aci hatasi tabani (radyan)
+    shotErr: 0.13, // sut aci hatasi tabani (radyan)
     shotSpeed: 24, // sut hizi tabani (m/s)
-    reactOpp: 0.4, // rakibin yeni vurulan topa tepki suresi (s)
+    reactOpp: 0.5, // rakibin yeni vurulan topa tepki suresi (s)
     reactMate: 0.25, // hedeflenmemis takim arkadasinin tepki suresi
     tackleRate: 0.22, // temas mesafesinde mudahale denemesi (1/s), baskiyla artar
     accel: 12, // oyuncu ivmesi (m/s2): durdugu yerden tam hiza ~0,6 s, 180 derece donus hiz kaybi
@@ -255,7 +255,7 @@ const P = {
     thruMinX: 58, // ara pas hedefi en az bu kadar ileride olmali (hucum ucuncu bolgesine yakin)
     thruSpeed: 14,
     lobCost: 0.06, // havadan (asirtma) ara pasin isabet bedeli // ara pasin top hizi (m/s); kosucuya gore agirlik verilir
-    thruV: 0.08, // ara pas hedefinin deger carpani (kosuda ilk kontrol riski)
+    thruV: 0.06, // ara pas hedefinin deger carpani (kosuda ilk kontrol riski)
     fatK: 0.15, // kondisyon tukendiginde en fazla guc/hiz kaybi
     fatPow: 1.4, // kaybin egriligi
     oneOnOne: 2.0,
@@ -301,7 +301,8 @@ const P = {
     shotSlope: 0.75, // sut kalitesinde sutcu/kaleci oraninin etkisi
     xgScale: 1.11, // akan oyun gol olasiligi carpani (baseXg gercek xG olcegindedir)
     shotBias: 0.0,
-    shotW: 0.6, // sut kararinin agirligi (hacim ayari)
+    shotW: 0.85, // sut kararinin agirligi (hacim ayari)
+    safePass: 0.011, // pas seciminde guvenlik egilimi (beklenen deger birimi, isabet olasiligi basina)
     minShotXg: 0.012, // bu ham xG'nin altindaki pozisyondan sut dusunulmez (~27 m merkez)
     maxShotP: 0.7, // akan oyunda tek sutun en yuksek gol olasiligi
     onTargetBase: 0.26, // blok olmayan sutun isabetli olma tabani (+1,2 x gol olasiligi)
@@ -353,6 +354,7 @@ function gauss(rng) {
 // Hucum cercevesi: takim her zaman x=105'e hucum ediyormus gibi
 // ikinci yarida takimlar taraf degistirir: cerceve donusumu yariya gore yapilir
 let FLIP = false;
+let FACE_DT = 0.1; // bakis yonu yumusatmasi icin gecerli adim suresi (step() ayarlar)
 const eff = (side) => (FLIP ? (1 - side) : side);
 function toFrame(side, x, y) {
     return eff(side) === 0 ? [x, y] : [L - x, W - y];
@@ -658,10 +660,11 @@ function createMatch(a0, b0, seed, opts) {
     return st;
 }
 // bakis yonu: hareket yonune dogru yumusakca doner
-function face(p, dx, dy, w = 0.45) {
+function face(p, dx, dy, w0 = 0.45) {
     const d = Math.hypot(dx, dy);
     if (d < 0.02)
         return;
+    const w = 1 - Math.pow(1 - w0, FACE_DT / 0.1); // donus hizi adim suresinden bagimsiz
     let hx = p.hx * (1 - w) + (dx / d) * w;
     let hy = p.hy * (1 - w) + (dy / d) * w;
     const n = Math.hypot(hx, hy) || 1;
@@ -1180,20 +1183,31 @@ function updateAnchorsAndMove(st) {
             }
             // kaleci: kendi kalesine gelen sut - topun yolunu keser (dalis hizi), tepkiden sonra
             if (p.pos === 'GK' && loose && st.ball.kind === 'shot' && st.ball.kicker && st.ball.kicker.side !== s) {
+                // sut: kaleci cizgisinden cok acilmaz; topun yolunda kendisine en yakin noktaya (yana) atilir
                 const pts = ballPath(st);
-                const ip = interceptPt(p, pts, 0.12, 8.5, 2.6);
                 if (st.ball.pkY !== undefined) {
                     [tx, ty] = fromFrame(s, 0.8, toFrame(s, 0, st.ball.pkY)[1]);
                 } // penalti: tahmin ettigi koseye dalar
-                else if (ip) {
-                    tx = ip.pt.x;
-                    ty = ip.pt.y;
-                }
                 else {
-                    // yetisemiyor: kale cizgisinde topun gececegi noktaya yine de uzanir
-                    const last = pts[pts.length - 1];
-                    const [, lyf] = toFrame(s, last.x, last.y);
-                    [tx, ty] = fromFrame(s, 1.0, clamp(lyf, 29.5, 38.5));
+                    let best = null, bd = 1e9;
+                    for (const pt of pts) {
+                        if (pt.z > 2.6)
+                            continue;
+                        const dd = hyp(pt.x - p.x, pt.y - p.y);
+                        if (dd < bd) {
+                            bd = dd;
+                            best = pt;
+                        }
+                    }
+                    if (best) {
+                        tx = best.x;
+                        ty = best.y;
+                    }
+                    else {
+                        const last = pts[pts.length - 1];
+                        const [, lyf] = toFrame(s, last.x, last.y);
+                        [tx, ty] = fromFrame(s, 1.0, clamp(lyf, 29.5, 38.5));
+                    }
                 }
                 urg = 1.25; // dalis
             }
@@ -1315,7 +1329,8 @@ function separate(st) {
                 nx = 0;
                 ny = 1;
             }
-            const push = ((a.side === b.side ? sameD : minD) - d) / 2;
+            // itme adim suresiyle olceklenir (saniye basina ayni etki)
+            const push = (((a.side === b.side ? sameD : minD) - d) / 2) * Math.min(1, st.dt / 0.1);
             const wa = st.owner === a ? 0.3 : 1;
             const wb = st.owner === b ? 0.3 : 1;
             mx[i] -= nx * push * wa;
@@ -1553,6 +1568,7 @@ function step(st) {
         return;
     FLIP = st.half % 2 === 0;
     const dt = st.dt;
+    FACE_DT = dt;
     st.t += dt;
     st.clock += dt;
     // efektif sure: mac saati yalniz top oyundayken akar (duran top beklemesi, gol sevinci, olu top sayilmaz);
@@ -1874,6 +1890,7 @@ function aiDecide(st, c) {
             ev += 0.0006 * Math.max(0, mxf - cxf);
         if (team.tactic.tempo === 0)
             ev += 0.004 * (ps - 0.85);
+        ev += P.safePass * (ps - 0.8); // guvenli pas egilimi (pas isabeti kalibrasyonu)
         ev += gauss(st.rng) * noiseSigma;
         if (ev > bestEV) {
             bestEV = ev;
@@ -2913,7 +2930,7 @@ function shootAt(st, c, xg, opt = {}) {
     const power = opt.power ?? 0.5;
     const speed = opt.header ? 11 + st.rng() * 4 : opt.penalty ? 23 : opt.freekick ? 21 : clamp(P.shotSpeed + power * 6 + st.rng() * 2, 14, P.kickMax);
     // yukselme: kafa vurusu asagi, penalti alcak, serbest vurus barajin ustunden (ust falso ile duser), akan oyunda hata payi
-    const vz = opt.header ? -0.3 + st.rng() * 1.2 : opt.penalty ? 0.8 + st.rng() * 1.2 : opt.freekick ? 7.2 + st.rng() * 0.8 : clamp(0.8 + power * 2.5 + gauss(st.rng) * 2.2, -0.2, 9);
+    const vz = opt.header ? -0.3 + st.rng() * 1.2 : opt.penalty ? 0.8 + st.rng() * 1.2 : opt.freekick ? 7.2 + st.rng() * 0.8 : clamp(0.8 + power * 2.5 + gauss(st.rng) * 2.6, -0.2, 9);
     const sw = opt.sw !== undefined ? opt.sw : opt.freekick ? (st.rng() < 0.5 ? 1 : -1) * (2.2 + st.rng() * 1.2) : (st.rng() - 0.5) * 0.8;
     const kind = opt.penalty ? 'penalty' : opt.freekick ? 'freekick' : opt.header ? (opt.setPiece ? 'sp-header' : 'header') : 'open';
     kickBall(st, c, dx / d, dy / d, speed, vz, sw, 'shot', { tx, ty, shot: { xg, setPiece: !!opt.setPiece, kind, penalty: !!opt.penalty }, sigma: opt.sigma, dip: opt.freekick ? 3 : 0 });
@@ -2937,9 +2954,9 @@ function shootAt(st, c, xg, opt = {}) {
 function clearBall(st, p, header = false) {
     const [pxf, pyf] = toFrame(p.side, p.x, p.y);
     const press = pressureOn(st, p, p.x, p.y, 3.5);
-    const hurried = pxf < 12 && press > 0.4 && st.rng() < 0.35;
-    const tyf = pyf < 34 ? Math.max(-3, pyf - (hurried ? 30 : 18)) : Math.min(71, pyf + (hurried ? 30 : 18));
-    const [tx, ty] = fromFrame(p.side, hurried ? pxf - 2 + st.rng() * 8 : Math.min(104, pxf + 35), tyf);
+    const hurried = pxf < 14 && press > 0.3 && st.rng() < (pxf < 8 ? 0.55 : 0.4);
+    const tyf = pyf < 34 ? Math.max(-3, pyf - (hurried ? 10 + st.rng() * 15 : 18)) : Math.min(71, pyf + (hurried ? 10 + st.rng() * 15 : 18));
+    const [tx, ty] = fromFrame(p.side, hurried ? pxf - 7 + st.rng() * 9 : Math.min(104, pxf + 35), tyf);
     if (hurried)
         dbg('aceleli_uzaklastirma');
     const b = st.ball;
@@ -3070,7 +3087,10 @@ function ballContacts(st) {
     const chase = st._chase ?? new Map();
     const pts = st._prevBall;
     const bx0 = pts ? pts[0] : b.x, by0 = pts ? pts[1] : b.y, z0 = pts ? pts[2] : b.z;
-    const segLen = hyp(b.x - bx0, b.y - by0);
+    // temas penceresi adim suresinden bagimsiz: en az 0,1 s ileri bakilir (ince adimda temas yaricapin kenarinda yakalanmasin)
+    const ext = Math.max(0, 0.1 - st.dt);
+    const bx1 = b.x + b.vx * ext, by1 = b.y + b.vy * ext, z1 = Math.max(0, b.z + b.vz * ext);
+    const segLen = hyp(bx1 - bx0, by1 - by0);
     const speed = ballSpeed(st);
     const cands = [];
     for (const p of st.players) {
@@ -3088,14 +3108,14 @@ function ballContacts(st) {
         // henuz tepki vermemis oyuncuya top ancak carparsa dokunur
         const aware = p === b.intended || chase.has(p) || !b.kicker || speed < 3;
         const reacted = b.kicker ? st.t - b.kickT >= reactOf(st, p) : true;
-        let reach = gkHands ? P.gkReach : aware ? P.reach : reacted ? P.reach * 0.8 : 0.4;
+        let reach = gkHands ? P.gkReach : aware ? P.reach : reacted ? P.reach * 0.7 : 0.4;
         // sert top: yalniz rakip kosan oyuncu onune atlar (blok); digerleri ancak carparsa dokunur
         if (!gkHands && speed > P.ctrlSpeed && (!aware || (b.kicker && p.side === b.kicker.side)))
             reach = b.kind === 'shot' && b.kicker && p.side !== b.kicker.side ? 0.7 : 0.45;
         // kaleci sutta dalar: tepki suresi gectikce erisimi uzar
         if (gkHands && b.kind === 'shot' && b.kicker && b.kicker.side !== p.side)
             reach = gkLetGo ? 0.5 : P.gkReach + clamp((st.t - b.kickT - 0.15) * 2.5, 0, P.gkDive - P.gkReach);
-        const c = contactOf(p, bx0, by0, b.x, b.y, z0, b.z, reach);
+        const c = contactOf(p, bx0, by0, bx1, by1, z0, z1, reach);
         if (!c)
             continue;
         const maxZ = gkHands ? 2.7 : P.headZ[1];
@@ -3132,6 +3152,17 @@ function ballContacts(st) {
     }
     resolveContact(st, win.p, win.z, speed, win.d);
 }
+// topun tahmini yolunun (0,6 s) oyuncuya en yakin gecis uzakligi: kurtaris olasiligi temasin hangi adimda yakalandigina bagli olmasin
+function minDistToPath(st, p, maxT = 0.6) {
+    const pts = ballPath(st, 1.5);
+    let best = hyp(pts[0].x - p.x, pts[0].y - p.y);
+    for (let i = 1; i < pts.length && pts[i].t <= maxT + 1e-9; i++) {
+        const c = contactOf(p, pts[i - 1].x, pts[i - 1].y, pts[i].x, pts[i].y, pts[i - 1].z, pts[i].z, 99);
+        if (c && c.z <= 2.7 && c.d < best)
+            best = c.d;
+    }
+    return best;
+}
 const chaseNow = (st, p) => !!st._chase?.has(p);
 function resolveContact(st, p, z, speed, dist) {
     const b = st.ball;
@@ -3159,7 +3190,8 @@ function resolveContact(st, p, z, speed, dist) {
             const shooter = b.kicker;
             const reachMax = P.gkReach + clamp((st.t - b.kickT - 0.15) * 2.5, 0, P.gkDive - P.gkReach);
             const skill = 0.22 * Math.log(eg(p) / eg(shooter)) + (p.traits.includes('Refleks') ? 0.06 : 0) - (p.emergencyGk ? 0.3 : 0);
-            const pSave = clamp(0.98 - 0.6 * (dist / reachMax) - (speed - 16) / 55 + skill, 0.12, 0.98);
+            const dPath = Math.min(dist, minDistToPath(st, p));
+            const pSave = clamp(0.93 - 0.6 * (dPath / reachMax) - (speed - 16) / 55 + skill, 0.1, 0.97);
             if (st.rng() < pSave) {
                 st.stats[kickerSide].onTarget++;
                 st.events.push({ t: st.clock, type: 'save', side: kickerSide, player: shooter.num, xg: b.shot?.xg });
@@ -3180,12 +3212,14 @@ function resolveContact(st, p, z, speed, dist) {
                     const [, byf] = toFrame(side, b.x, b.y);
                     const latSign = byf < 34 ? -1 : 1;
                     const lat = latSign * (0.8 + st.rng() * 1.2);
-                    // dalarak celme: top yana ve cogu kez geriye (kale cizgisine) seker; one celme kale onundeyse
-                    const fw = Math.abs(byf - 34) < 2 ? 0.2 + st.rng() * 0.5 : -0.7 + st.rng() * 0.8;
-                    const dx = fwx * fw + -fwy * lat, dy = fwy * fw + fwx * lat;
+                    // dalarak celme: top yana ve geriye (kale cizgisine, korner) seker; kale agzinin onundeyse kuvvetle yana
+                    const inMouth = Math.abs(byf - 34) < 4.7;
+                    const fw = inMouth ? -0.2 + st.rng() * 0.3 : -0.9 + st.rng() * 0.8;
+                    const latK = inMouth ? 2.2 : 1;
+                    const dx = fwx * fw + -fwy * lat * latK, dy = fwy * fw + fwx * lat * latK;
                     const dn = hyp(dx, dy) || 1;
                     const ang = Math.atan2(dy / dn, dx / dn);
-                    const psp = 5 + st.rng() * 5;
+                    const psp = 6 + st.rng() * 5;
                     b.vx = Math.cos(ang) * psp;
                     b.vy = Math.sin(ang) * psp;
                     b.vz = 1.5 + st.rng() * 2;
@@ -3286,6 +3320,12 @@ function resolveContact(st, p, z, speed, dist) {
         b.intended = null;
         b.shot = null;
         b.offside = null;
+        return;
+    }
+    // kendi ucuncu bolgesinde baski altindaki savunmaci rakipten gelen topu kontrol etmez, ilk vurusta uzaklastirir
+    if (b.kicker && kickerSide !== side && pxf < 25 && p.pos !== 'GK' && pressureOn(st, p, p.x, p.y, 4) > 0.3 && (b.kind === 'shot' || b.kind === 'cross' || b.kind === 'through' || b.kind === 'loose' || speed > 7)) {
+        dbg('ilk_vurus_uzaklastirma');
+        clearBall(st, p, false);
         return;
     }
     // kontrol: ilk dokunus; hizli topta ve dusuk gucte kontrol hatasi (top birkaç metre acilir)
@@ -3709,7 +3749,7 @@ function foul(st, d, c, cxf) {
     const lastMan = cxf > 70 && between === 0;
     if (lastMan)
         dbg('son_adam');
-    const pY = lastMan ? 0.5 : 0.13;
+    const pY = lastMan ? 0.5 : 0.09;
     const pR = lastMan ? 0.15 : 0.004;
     const r = st.rng();
     if (r < pR + pY)
@@ -3833,7 +3873,7 @@ function makeTeam(name, short, gg, opts = {}, names = NAMES_A, color = '#c8302c'
 
 </script>
 <script>
-const SUMMARY = {"curve": [{"r": 1, "n": 800, "w": 36.0, "d": 26.875, "l": 37.125, "tw": 36.49767695715822, "td": 27.00464416122027, "tl": 36.49767695715822, "g": 2.51875, "gs": 1.2475, "gw": 1.27125}, {"r": 1.05, "n": 800, "w": 45.25, "d": 27.125, "l": 27.625, "tw": 43.97919882638014, "td": 26.506454967459632, "tl": 29.514342367411007, "g": 2.46, "gs": 1.3975, "gw": 1.0625}, {"r": 1.1, "n": 800, "w": 48.875, "d": 26.125, "l": 25.0, "tw": 51.3665531827201, "td": 25.14611623695742, "tl": 23.487318168350136, "g": 2.53125, "gs": 1.53375, "gw": 0.9975}, {"r": 1.2, "n": 800, "w": 67.5, "d": 21.75, "l": 10.75, "tw": 65.05097512979943, "td": 20.734209490942714, "tl": 14.214697293794307, "g": 2.695, "gs": 1.9775, "gw": 0.7175}, {"r": 1.3, "n": 800, "w": 79.75, "d": 13.625000000000002, "l": 6.624999999999998, "tw": 76.41076130363238, "td": 15.46650501542073, "tl": 8.121858052011017, "g": 3.05625, "gs": 2.48875, "gw": 0.5675}, {"r": 1.5, "n": 800, "w": 91.625, "d": 6.625, "l": 1.75, "tw": 91.059557196392, "td": 6.67123296233468, "tl": 2.244124705553823, "g": 3.66875, "gs": 3.30625, "gw": 0.3625}], "dist": {"3": 200, "4": 112, "1": 160, "0": 58, "2": 194, "5": 46, "6": 24, "9": 1, "7": 4, "8": 1}, "n_eq": 800, "team": {"shots": 9.086875, "ot": 3.674375, "xg": 1.2668915129921807, "passes": 138.986875, "passpct": 80.14380854307286, "fouls": 2.140625, "yel": 0.26875, "red": 0.0125, "corners": 2.51625, "offsides": 0.4575, "sp": 26.699751861042184}};
+const SUMMARY = {"curve": [{"r": 1, "n": 200, "w": 35.5, "d": 21.5, "l": 43.0, "tw": 36.49767695715822, "td": 27.00464416122027, "tl": 36.49767695715822, "g": 2.615, "gs": 1.215, "gw": 1.4}, {"r": 1.05, "n": 200, "w": 41.0, "d": 25.5, "l": 33.5, "tw": 43.97919882638014, "td": 26.506454967459632, "tl": 29.514342367411007, "g": 2.745, "gs": 1.465, "gw": 1.28}, {"r": 1.1, "n": 200, "w": 52.5, "d": 20.5, "l": 27.0, "tw": 51.3665531827201, "td": 25.14611623695742, "tl": 23.487318168350136, "g": 2.895, "gs": 1.755, "gw": 1.14}, {"r": 1.2, "n": 200, "w": 68.0, "d": 21.0, "l": 11.0, "tw": 65.05097512979943, "td": 20.734209490942714, "tl": 14.214697293794307, "g": 2.93, "gs": 2.14, "gw": 0.79}, {"r": 1.3, "n": 200, "w": 78.0, "d": 14.000000000000002, "l": 7.999999999999998, "tw": 76.41076130363238, "td": 15.46650501542073, "tl": 8.121858052011017, "g": 3.29, "gs": 2.605, "gw": 0.685}, {"r": 1.5, "n": 200, "w": 95.0, "d": 3.5000000000000004, "l": 1.4999999999999996, "tw": 91.059557196392, "td": 6.67123296233468, "tl": 2.244124705553823, "g": 4.19, "gs": 3.735, "gw": 0.455}], "dist": {"3": 43, "1": 45, "2": 51, "6": 10, "4": 25, "5": 16, "0": 9, "7": 1}, "n_eq": 200, "team": {"shots": 9.085, "ot": 5.1475, "xg": 0.7881426947243536, "passes": 191.1825, "passpct": 77.69801106272803, "fouls": 2.7425, "yel": 0.285, "red": 0.0325, "corners": 0.5025, "offsides": 0.11, "sp": 13.001912045889101}};
 const BALANCE = {"n": 11700, "per": 300, "mean": 1.3894871794871795, "dims": [{"lab": "Formasyon", "vals": [{"n": "3-5-2", "ppg": 1.343}, {"n": "4-2-3-1", "ppg": 1.46}, {"n": "4-3-3", "ppg": 1.44}, {"n": "4-4-2", "ppg": 1.343}, {"n": "5-3-2", "ppg": 1.543}]}, {"lab": "Pres", "vals": [{"n": "Düşük", "ppg": 1.377}, {"n": "Orta", "ppg": 1.38}, {"n": "Yüksek", "ppg": 1.457}]}, {"lab": "Savunma hattı", "vals": [{"n": "Derin", "ppg": 1.287}, {"n": "Orta", "ppg": 1.22}, {"n": "Önde", "ppg": 1.46}]}, {"lab": "Oyun stili", "vals": [{"n": "Kısa pas", "ppg": 1.33}, {"n": "Dengeli", "ppg": 1.483}, {"n": "Direkt", "ppg": 1.243}]}, {"lab": "Tempo", "vals": [{"n": "Yavaş", "ppg": 1.33}, {"n": "Normal", "ppg": 1.52}, {"n": "Hızlı", "ppg": 1.42}]}, {"lab": "Genişlik", "vals": [{"n": "Dar", "ppg": 1.463}, {"n": "Normal", "ppg": 1.503}, {"n": "Geniş", "ppg": 1.257}]}, {"lab": "Hatlar arası", "vals": [{"n": "Kompakt", "ppg": 1.52}, {"n": "Normal", "ppg": 1.307}, {"n": "Açık", "ppg": 1.363}]}, {"lab": "Ofsayt tuzağı", "vals": [{"n": "Kapalı", "ppg": 1.387}, {"n": "Açık", "ppg": 1.323}]}, {"lab": "Bekler", "vals": [{"n": "Savunmada", "ppg": 1.34}, {"n": "Dengeli", "ppg": 1.383}, {"n": "Bindir", "ppg": 1.38}]}, {"lab": "Merkez orta saha", "vals": [{"n": "Geride", "ppg": 1.41}, {"n": "Dengeli", "ppg": 1.34}, {"n": "Ceza sahasına", "ppg": 1.397}]}, {"lab": "Kanatlar", "vals": [{"n": "Çizgide", "ppg": 1.417}, {"n": "İçe kat", "ppg": 1.5}]}, {"lab": "Forvet koşuları", "vals": [{"n": "Güvenli", "ppg": 1.417}, {"n": "Dengeli", "ppg": 1.53}, {"n": "Riskli", "ppg": 1.28}]}, {"lab": "Duran topta ceza sahasına", "vals": [{"n": "3", "ppg": 1.367}, {"n": "5", "ppg": 1.377}, {"n": "7", "ppg": 1.293}]}]};
 const MATCHUP = [{"a": "4-3-3", "b": "4-4-2", "pa": 1.335, "pb": 1.41}, {"a": "4-3-3", "b": "3-5-2", "pa": 1.63, "pb": 1.075}, {"a": "4-4-2", "b": "4-2-3-1", "pa": 1.1, "pb": 1.685}, {"a": "4-4-2", "b": "5-3-2", "pa": 0.865, "pb": 1.9}, {"a": "4-2-3-1", "b": "5-3-2", "pa": 1.35, "pb": 1.44}, {"a": "4-3-3", "b": "4-2-3-1", "pa": 1.725, "pb": 1.065}, {"a": "4-3-3", "b": "5-3-2", "pa": 1.135, "pb": 1.675}, {"a": "4-4-2", "b": "3-5-2", "pa": 1.665, "pb": 1.17}, {"a": "4-2-3-1", "b": "3-5-2", "pa": 1.015, "pb": 1.735}, {"a": "3-5-2", "b": "5-3-2", "pa": 1.49, "pb": 1.28}];
 
@@ -3962,7 +4002,7 @@ for (const b of document.querySelectorAll('[data-sp]')) b.addEventListener('clic
 // Zaman: fizik gercek zamanli (1x'te ekranda 1 saniye = sahada 1 saniye), mac saati 6 kat hizli akar.
 // Deneme surumunde 1x %20 hizli oynar, mac yaklasik 12,5 dakika surer. 4x ve 16x yalniz izlemek icindir.
 const WATCH_SPEED = 1.39; // izleme: 1x %39 hizli (mac ~11 dk); motor adimi st.dt (0,1 s)
-const PLAY_DT = 0.1; // oynarken motor adimi (20 adim/s denemesi kalibrasyonla birlikte: gol sayisi farkli cikti)
+const PLAY_DT = 0.05; // oynarken motor 20 adim/s (girdi gecikmesi 50 ms alti); izleme ve kalibrasyon 0,1 s
 const isDead = () => st.t < st.restartUntil && !ballMoving(st);
 function frame(now) {
   const dtReal = Math.min(0.1, (now - last) / 1000);
@@ -4793,7 +4833,7 @@ function renderReport() {
   ];
   const maxDev = Math.max(...c.slice(1).map((r) => Math.max(Math.abs(r.w - r.tw), Math.abs(r.d - r.td), Math.abs(r.l - r.tl))));
   el.innerHTML = `
-    <p class="lead">Motor, güç farkı olan maçlarda Metrik dokümanındaki simülasyon eğrisini <b>en fazla ${maxDev.toFixed(1).replace('.', ',')} puan sapmayla</b> tutturuyor. ${c.length} farklı güç oranında toplam ${c.reduce((a, r) => a + r.n, 0).toLocaleString('tr-TR')} maç oynatıldı; ayrıca eşit takımlarla 2.000 maçlık bir taraf testi yapıldı ve taraf avantajı çıkmadı.</p>
+    <p class="lead">Motor, güç farkı olan maçlarda Metrik dokümanındaki simülasyon eğrisini <b>en fazla ${maxDev.toFixed(1).replace('.', ',')} puan sapmayla</b> tutturuyor. ${c.length} farklı güç oranında toplam ${c.reduce((a, r) => a + r.n, 0).toLocaleString('tr-TR')} maç oynatıldı (motor 2.0, fiziksel top).</p>
     <div class="grid2">
       <div class="panel"><h3>Güç farkına göre sonuçlar</h3><div class="chart">${svg}</div>
         <div class="legend"><span><i style="background:${hm}"></i>Güçlü takımın galibiyeti</span><span><i style="background:${aw}"></i>Beraberlik</span><span>Noktalar: motor · kesik çizgi: hedef eğri</span></div></div>
@@ -4807,6 +4847,7 @@ function renderReport() {
       <thead><tr><th>Güç oranı</th><th>Maç</th><th>Motor G / B / M</th><th>Hedef G / B / M</th><th>Maç başı gol</th></tr></thead>
       <tbody>${c.map((r) => `<tr><td>${r.r.toFixed(2).replace('.', ',')}</td><td>${r.n}</td><td>%${r.w.toFixed(0)} / %${r.d.toFixed(0)} / %${r.l.toFixed(0)}</td><td>%${r.tw.toFixed(0)} / %${r.td.toFixed(0)} / %${r.tl.toFixed(0)}</td><td>${r.g.toFixed(2).replace('.', ',')}</td></tr>`).join('')}</tbody></table></div>
       <p class="note">Güç oranı 1,00 satırında iki takım tamamen eşittir; oradaki fark tesadüftür.</p></div>
+    <p class="note">Güç eğrisi ve maç istatistikleri motor 2.0 (fiziksel top, Dilim 0.4) ile ${c.reduce((a, r) => a + r.n, 0).toLocaleString('tr-TR')} maçta ölçüldü; kalibrasyon sürüyor. Aşağıdaki taktik dengesi ve formasyon tabloları motor 1 (v12) ölçümleridir, kalibrasyon bitince yeniden koşulacak.</p>
     <div class="panel"><h3>Taktik dengesi (seçenek havuzu testi)</h3>
       <p class="note">Her seçenek, diğer ayarları rastgele seçilmiş takımlarla, tamamen rastgele kurulmuş rakiplere karşı ${BALANCE.per} maç oynadı (toplam ${BALANCE.n.toLocaleString('tr-TR')} maç, güçler eşit). Sayı maç başı puan, parantez ortalamadan farkı. Bu örneklemde tesadüf payı yaklaşık ±0,11. Hedef: hiçbir seçenek bu payın belirgin dışında kalmasın. Denge önce mekaniklerle (ara pas yarışı, ofsayt, geçiş anı, yorgunluk), sonra Maç Motoru sekmesindeki taktik etkileşim tablosuyla sağlanır; tablo veri olarak tutulur ve canlı oyunda ayarlanabilir. Saldırgan ayarların sezon içi bedeli (ek yorgunluk) bu testte yoktur.</p>
       <div class="tblwrap"><table class="tbl"><thead><tr><th>Ayar</th><th colspan="5">Maç başı puan</th></tr></thead><tbody>
