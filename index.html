@@ -71,6 +71,7 @@ body.play { overflow: hidden; touch-action: none; overscroll-behavior: none; }
 body.play #pitch { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; border-radius: 0; z-index: 900; touch-action: none; }
 #exitPlay { position: fixed; top: max(8px, env(safe-area-inset-top, 0px)); left: max(10px, env(safe-area-inset-left, 0px)); z-index: 950; display: none; font: 600 13px/1 var(--font-body); color: var(--chalk); background: rgba(10,12,16,.7); border: 1px solid rgba(255,255,255,.2); border-radius: 8px; padding: 9px 12px; }
 body.play #exitPlay { display: block; }
+#sa { position: fixed; top: 0; left: 0; width: 0; height: 0; visibility: hidden; pointer-events: none; padding-top: env(safe-area-inset-top, 0px); padding-right: env(safe-area-inset-right, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); padding-left: env(safe-area-inset-left, 0px); }
 #rotate { position: fixed; inset: 0; z-index: 980; display: none; align-items: center; justify-content: center; text-align: center; background: var(--night); color: var(--chalk); font: 600 18px/1.4 var(--font-body); padding: 24px; }
 body.play.portrait #rotate { display: flex; }
 .playbox label { display: block; margin: 6px 0; }
@@ -183,13 +184,16 @@ label.chk { display: flex; flex-direction: row; gap: 8px; align-items: center; }
           <div class="log cm" id="cm" hidden></div>
         </div>
         <div class="panel playbox">
-          <h3>Oyna (Dilim 0: dokunmatik kontrol)</h3>
-          <label for="pAssistP">Pas yardımı<select id="pAssistP"><option value="2" selected>Tam</option><option value="1">Kısmi</option><option value="0">Kapalı</option></select></label>
-          <label for="pAssistS">Şut yardımı<select id="pAssistS"><option value="2" selected>Tam</option><option value="1">Kısmi</option><option value="0">Kapalı</option></select></label>
-          <label for="pMin">Maç süresi<select id="pMin"><option value="6">6 dakika</option><option value="10" selected>10 dakika</option><option value="15">15 dakika (online ölçek)</option></select></label>
+          <h3>Oyna (Dilim 0.4: fiziksel top)</h3>
+          <label for="pDiff">Zorluk (rakip bot)<select id="pDiff"><option value="1">Amatör</option><option value="2" selected>Yarı profesyonel</option><option value="3">Profesyonel</option><option value="4">Dünya klası</option><option value="5">Efsane</option></select></label>
+          <label for="pAssistP">Pas yardımı<select id="pAssistP"><option value="0" selected>Kapalı (top tam nişana)</option><option value="1">Kısmi</option><option value="2">Tam</option></select></label>
+          <label for="pAssistS">Şut yardımı<select id="pAssistS"><option value="1" selected>Kısmi</option><option value="0">Kapalı</option><option value="2">Tam</option></select></label>
+          <label for="pAuto">Oyuncu değiştirme<select id="pAuto"><option value="1" selected>Otomatik (topa en yakın)</option><option value="0">Elle</option></select></label>
+          <label for="pMin">Maç süresi (efektif)<select id="pMin"><option value="6">6 dakika</option><option value="10" selected>10 dakika</option><option value="15">15 dakika (online ölçek)</option></select></label>
           <label for="pCam">Kamera<select id="pCam"><option value="full" selected>Tam saha</option><option value="length">Tam boy</option><option value="near">Yakın</option></select></label>
+          <label for="pKeys">Klavye<select id="pKeys"><option value="arrows" selected>Ok tuşları + S pas · D şut · W ara · A orta · E sprint · Q değiştir</option><option value="wasd">WASD + J pas · K şut · L ara · I orta · Shift sprint · Boşluk değiştir</option></select></label>
           <div class="ctrl"><button class="btn prim" id="playBtn">Oynamaya başla (Kartal SK, Team play)</button></div>
-          <p class="keys">Telefon: sol yarıda parmağını bastığın yer joystick olur; sağda butonlar. Hücumda Pas / Ara pas / Şut (basılı tut = güç) / Sprint; savunmada Müdahale / Kaydır / Baskı (basılı tut) / Değiştir. Klavye: ok tuşları veya WASD; J pas-müdahale, L ara pas-baskı, K şut-kaydır, Shift sprint, Boşluk oyuncu değiştir, C kamera, Esc çık.</p>
+          <p class="keys">Telefon: sol yarıda parmağını bastığın yer joystick olur; dış halkaya kadar itince sprint. Sağ altta elmas butonlar: hücumda üst Ara, sağ Şut, sol Orta, alt Pas; savunmada üst Değiştir, sağ Kaydır, sol Müdahale, alt Baskı (basılı). Vuruş: butona bas, ok açılır; parmağı 1 cm sürükle = yön, yana kaydır = falso, basılı tut = güç; bırakınca vurur. Kısa dokunuş (Pas/Ara) koşu yönündeki arkadaşa hızlı pas. Klavyede yön tuşları nişandır; tuşu basılı tutmak güç. C kamera, Esc çık; gol sevincini dokunarak atla.</p>
         </div>
         <div class="panel">
           <h3>Takımlar</h3>
@@ -205,6 +209,7 @@ label.chk { display: flex; flex-direction: row; gap: 8px; align-items: center; }
   </section>
 </div>
 
+<div id="sa" aria-hidden="true"></div>
 <button id="exitPlay" type="button">Çık</button>
 <div id="rotate">Telefonu yatay çevir.<br><span style="font-weight:400;font-size:14px;color:var(--muted)">Oyun yatay oynanır; uygulamada yön kilitli olacak.</span></div>
 <script>
@@ -237,6 +242,9 @@ const P = {
     reactOpp: 0.4, // rakibin yeni vurulan topa tepki suresi (s)
     reactMate: 0.25, // hedeflenmemis takim arkadasinin tepki suresi
     tackleRate: 0.22, // temas mesafesinde mudahale denemesi (1/s), baskiyla artar
+    accel: 12, // oyuncu ivmesi (m/s2): durdugu yerden tam hiza ~0,6 s, 180 derece donus hiz kaybi
+    leadBase: 0.6, // top surerken topun ayaktan onde durusu (m) + hizla artan pay
+    leadSpeed: 0.09,
     tackleReach: 1.5, // mudahale icin azami mesafe (m)
     sepD: 2.0, // oyuncular arasi asgari mesafe (m); top sahibi-rakip haric
     offBallUrg: 0.65,
@@ -660,11 +668,24 @@ function face(p, dx, dy, w = 0.45) {
     p.hx = hx / n;
     p.hy = hy / n;
 }
-// top, tasiyanin onunde, baktigi yonde durur
-function ballAt(st, c) {
+// hareket: istenen hiz vektorune ivme siniriyla yaklasir (atalet ve donus bedeli); yeni konum ve hiz
+function moveToward(p, tx, ty, sp, dt, accel = P.accel) {
+    const dx = tx - p.x, dy = ty - p.y, d = hyp(dx, dy);
+    const vd = d > 0.01 ? Math.min(sp, d / dt) : 0;
+    const vdx = d > 0.01 ? (dx / d) * vd : 0, vdy = d > 0.01 ? (dy / d) * vd : 0;
+    const vx0 = p.vx ?? 0, vy0 = p.vy ?? 0;
+    const ax = vdx - vx0, ay = vdy - vy0, an = hyp(ax, ay);
+    const amax = accel * dt;
+    const k = an > amax ? amax / an : 1;
+    const vx = vx0 + ax * k, vy = vy0 + ay * k;
+    return [p.x + vx * dt, p.y + vy * dt, vx, vy];
+}
+// top, tasiyanin onunde, baktigi yonde durur; hizlandikca (ve sprintte) daha onde
+function ballAt(st, c, sprint = false) {
     const b = st.ball;
-    b.x = Math.min(L - 0.3, Math.max(0.3, c.x + c.hx * 0.9));
-    b.y = Math.min(W - 0.3, Math.max(0.3, c.y + c.hy * 0.9));
+    const lead = P.leadBase + P.leadSpeed * hyp(c.vx ?? 0, c.vy ?? 0) + (sprint ? 0.4 : 0);
+    b.x = Math.min(L - 0.3, Math.max(0.3, c.x + c.hx * lead));
+    b.y = Math.min(W - 0.3, Math.max(0.3, c.y + c.hy * lead));
     b.z = 0;
     b.vx = 0;
     b.vy = 0;
@@ -1035,8 +1056,7 @@ function updateAnchorsAndMove(st) {
                 const dy = ty0 - p.y;
                 const d = hyp(dx, dy);
                 if (d > 0.05) {
-                    const stp = Math.min(d, sp * dt);
-                    moves.set(p, [p.x + (dx / d) * stp, p.y + (dy / d) * stp]);
+                    moves.set(p, moveToward(p, tx0, ty0, sp, dt));
                     face(p, dx, dy, 0.4);
                 }
                 else
@@ -1242,26 +1262,21 @@ function updateAnchorsAndMove(st) {
                     urg = 0.8;
                 }
             }
-            const sp = p.speedBase * kf(p.k) * urg;
-            const dx = tx - p.x;
-            const dy = ty - p.y;
-            const d = hyp(dx, dy);
-            if (d > 0.01) {
-                const step = Math.min(d, sp * dt);
-                moves.set(p, [p.x + (dx / d) * step, p.y + (dy / d) * step]);
-            }
+            const sp = p.speedBase * kf(p.k) * urg * (p.injured ? 0.5 : 1);
+            moves.set(p, moveToward(p, tx, ty, sp, dt, p.pos === 'GK' ? P.accel * 2.5 : P.accel)); // kaleci patlayici
             face(p, st.ball.x - p.x, st.ball.y - p.y, 0.3);
         }
     }
-    for (const p of st.players) {
-        p.vx = 0;
-        p.vy = 0;
-    }
-    for (const [p, [x, y]] of moves) {
-        p.vx = (x - p.x) / dt;
-        p.vy = (y - p.y) / dt;
-        p.x = x;
-        p.y = y;
+    for (const p of st.players)
+        if (p !== carrier && !moves.has(p)) {
+            p.vx = 0;
+            p.vy = 0;
+        }
+    for (const [p, [x, y, vx, vy]] of moves) {
+        p.vx = vx;
+        p.vy = vy;
+        p.x = clamp(x, -1, L + 1);
+        p.y = clamp(y, -1, W + 1);
     }
 }
 // futbolcular birbirinin icine girmez
@@ -1540,14 +1555,16 @@ function step(st) {
     const dt = st.dt;
     st.t += dt;
     st.clock += dt;
-    // kondisyon
-    // saat fiziksel zamandan hizli akar; yorgunluk saate gore islenir
-    const dc = dt * P.clockRate;
+    // efektif sure: mac saati yalniz top oyundayken akar (duran top beklemesi, gol sevinci, olu top sayilmaz);
+    // saat fiziksel zamandan hizli akar; yorgunluk saate gore islenir (olu topta dinlenir)
+    const inPlay = !st.pending && !st.celebrate && st.t >= st.restartUntil;
+    const dc = inPlay ? dt * P.clockRate : 0;
     st.clock += dc - dt;
     st.hclock += dc;
+    const rest = inPlay ? 1 : 0.3;
     for (const p of st.players)
         if (!p.off)
-            p.k = Math.max(0, p.k - (p.kDrop * dc) / 60);
+            p.k = Math.max(0, p.k - (p.kDrop * dt * P.clockRate * rest) / 60);
     injuryRoll(st);
     if (st.owner)
         st.stats[st.owner.side].possTicks++;
@@ -1588,8 +1605,10 @@ function step(st) {
             ballContacts(st);
     }
     st.ballZ = st.ball.z;
-    // yari sonu: yoldaki top ve bekleyen duran top (penalti, korner, serbest vurus) tamamlanmadan yari bitmez
-    if (st.hclock >= st.halfEnd && !(ballMoving(st) && st.ball.kind === 'shot') && !(st.pending && st.pending.kind !== 'kickoff')) {
+    // yari sonu: 45:00'dan sonraki ilk olu topta (en gec 30 oyun saniyesi sonra); yoldaki sut ve bekleyen
+    // duran top (penalti, korner, serbest vurus) tamamlanmadan yari bitmez
+    const deadNow = !!st.pending || !!st.celebrate || st.t < st.restartUntil || !st.owner && !ballMoving(st) && false;
+    if (st.hclock >= st.halfEnd && (deadNow || st.hclock >= st.halfEnd + 30) && !(ballMoving(st) && st.ball.kind === 'shot') && !(st.pending && st.pending.kind !== 'kickoff')) {
         st.pending = null;
         st.celebrate = null;
         st.deadReason = '';
@@ -1616,7 +1635,7 @@ function step(st) {
             st.holdUntil = 0;
             st.lastTurnoverT = -99;
             st.lastRestartT = -99;
-            st.halfEnd = st.half >= 3 ? 15 * 60 : 45 * 60; // uzatma 89. dakikada o ana kadarki olaylardan belirlenir
+            st.halfEnd = st.half >= 3 ? 15 * 60 : 45 * 60; // efektif sure: uzatma dakikasi yok
             // devre arasi: kondisyon biraz toparlanir; bekleyen degisiklikler yapilir
             for (const p of st.players)
                 p.k = Math.min(100, p.k + (st.half >= 3 ? 2 : 4));
@@ -1631,11 +1650,6 @@ function step(st) {
             st.done = true;
         }
     }
-    if (st.half <= 2 && st.hclock >= 44 * 60 && st.halfEnd === 45 * 60) {
-        st.halfEnd = 45 * 60 + (st.half === 1 ? extraSeconds(st.extra[0], 1, 3) : extraSeconds(st.extra[1], 3, 7));
-    }
-    if (st.half >= 3 && st.hclock >= 14 * 60 && st.halfEnd === 15 * 60)
-        st.halfEnd = 15 * 60 + extraSeconds(st.extra[st.half - 1], 1, 2);
 }
 // penalti atislari: 5'er atis, esitlikte tek tek; animasyonsuz, olay olarak kaydedilir
 function shootout(st) {
@@ -1737,8 +1751,9 @@ function carrierAct(st) {
     const gkHolding = c.pos === 'GK' && cxf < 16.5 && Math.abs(cyf - 34) < 20.16;
     if (st.t >= st.restartUntil && !gkHolding) {
         const def = nearestOpp(st, c);
-        // mudahale yalniz temas mesafesinde denenir (zar yok, once yetismek gerekir); deneme sikligi saniye basina verilir
-        if (def && def.d < P.tackleReach && !def.p.injured && !(def.p.beatenUntil !== undefined && st.t < def.p.beatenUntil)) {
+        // mudahale yalniz temas mesafesinde denenir (zar yok, once yetismek gerekir); top ayaktan uzaktaysa (sprint) daha erken
+        const dBall = def ? hyp(def.p.x - st.ball.x, def.p.y - st.ball.y) : 99;
+        if (def && Math.min(def.d, dBall + 0.6) < P.tackleReach && !def.p.injured && !(def.p.beatenUntil !== undefined && st.t < def.p.beatenUntil)) {
             if (def.p.pos === 'GK') {
                 // kaleci ceza sahasinda topa cikar: alirsa elinde tutar, alamazsa gecilmistir
                 const [gxf, gyf] = toFrame(def.p.side, def.p.x, def.p.y);
@@ -1748,8 +1763,8 @@ function carrierAct(st) {
                         dbg('kaleci_aldi');
                         addFx(st, c.x, c.y, 'save');
                         say(st, 'claim', opp, def.p, c);
-                        giveBall(st, def.p, 2.5);
-                        deadTime(st, 2.5 + st.rng() * 1.5, 'Kaleci aldı');
+                        giveBall(st, def.p, 2.0);
+                        deadTime(st, 1.5 + st.rng() * 1.0, 'Kaleci aldı');
                         st.restartKind = 'gk';
                     }
                     else {
@@ -1976,12 +1991,12 @@ function aiDecide(st, c) {
     }
 }
 // ---------- Kullanici kontrolu: API ----------
-function setControl(st, side, mode, assistPass = 2, assistShot = 2) {
+function setControl(st, side, mode, assistPass = 0, assistShot = 1, opts = {}) {
     if (mode === 'none') {
         st.control[side] = null;
         return;
     }
-    st.control[side] = { mode: 'team', player: null, input: { mx: 0, my: 0, sprint: false, press: false }, actAt: -9, assistPass, assistShot, cooldown: 0, switchCd: 0, holdStart: 0, lastInputT: 0, duelUntil: new Map() };
+    st.control[side] = { mode: 'team', player: null, input: { mx: 0, my: 0, sprint: false, press: false }, actAt: -9, assistPass, assistShot, cooldown: 0, switchCd: 0, holdStart: 0, lastInputT: 0, duelUntil: new Map(), autoSwitch: opts.autoSwitch ?? true, manualUntil: -9, lastSwitchT: -9, kick: null };
     pickControlled(st, side);
 }
 function setInput(st, side, input) {
@@ -1989,12 +2004,14 @@ function setInput(st, side, input) {
     if (!ctl)
         return;
     const act = input.act;
-    ctl.input = { mx: input.mx, my: input.my, sprint: input.sprint, press: input.press, act: act ?? ctl.input.act, power: input.power ?? ctl.input.power };
+    ctl.input = { mx: input.mx, my: input.my, sprint: input.sprint, press: input.press, act: act ?? ctl.input.act, power: act ? input.power : ctl.input.power, ax: act ? input.ax : ctl.input.ax, ay: act ? input.ay : ctl.input.ay, curve: act ? input.curve : ctl.input.curve, tap: act ? input.tap : ctl.input.tap };
     if (act)
         ctl.actAt = st.t;
     if (act || hyp(input.mx, input.my) > 0.15)
         ctl.lastInputT = st.t;
 }
+function setAutoSwitch(st, side, on) { const ctl = st.control[side]; if (ctl)
+    ctl.autoSwitch = on; }
 function controlledPlayer(st, side) { return st.control[side]?.player ?? null; }
 // kontrol edilen futbolcu: topa sahipken tasiyici, pas ucustayken alici, savunmada topa en yakin saha oyuncusu
 function pickControlled(st, side, exclude) {
@@ -2037,17 +2054,53 @@ function userStep(st) {
         const b = st.ball;
         if (!cur || cur.off || (inPoss && st.owner !== cur) || (!st.owner && b.kicker && b.kicker.side === side && b.intended && b.intended.side === side && b.intended !== cur))
             pickControlled(st, side);
+        // otomatik gecis: savunmada (top bizde degil, bizim pasimiz yolda degil) topa en erken yetisecek oyuncuya;
+        // 0,5 s'de bir, belirgin fark varsa; elle degistirmeden sonra 1,5 s beklenir
+        const ourPass = !st.owner && b.kicker && b.kicker.side === side && b.intended && b.intended.side === side;
+        if (ctl.autoSwitch && !inPoss && !ourPass && ctl.player && st.t >= ctl.manualUntil && st.t - ctl.lastSwitchT >= 0.5 && st.t >= st.restartUntil && !st.pending) {
+            const pts = ballPath(st);
+            const curT = chaseTarget(ctl.player, pts, 0, playerSpeed(ctl.player)).t;
+            let best = null, bt = 1e9;
+            for (const q of liveTeam(st, side)) {
+                if (q.pos === 'GK' || q.injured || q === ctl.player)
+                    continue;
+                const c = chaseTarget(q, pts, 0, playerSpeed(q)).t;
+                if (c < bt) {
+                    bt = c;
+                    best = q;
+                }
+            }
+            if (best && bt < curT - 0.3) {
+                ctl.player = best;
+                ctl.lastSwitchT = st.t;
+            }
+        }
         // aksiyon tamponu: 0,3 s icinde uygulanamayan aksiyon duser
         if (inp.act && st.t - ctl.actAt > 0.3)
             inp.act = undefined;
         const p = ctl.player;
         if (!p || !inp.act)
             continue;
+        if (inp.act === 'skip') {
+            // gol sevinci / duran top beklemesi atlanir
+            inp.act = undefined;
+            if (st.celebrate) {
+                st.celebrate.until = st.t;
+            }
+            if (st.pending && st.pending.kind === 'kickoff' && st.pending.at > st.t + 1.5) {
+                st.pending.at = st.t + 1.5;
+                st.restartUntil = Math.min(st.restartUntil, st.t + 1.5);
+                st.holdUntil = Math.min(st.holdUntil, st.t + 1.5);
+            }
+            continue;
+        }
         if (inp.act === 'switch') {
             // savunmada ve top sahipsizken / rakip pasindayken: topa en yakin diger oyuncuya gecer
             if (!inPoss && ctl.switchCd <= 0) {
                 pickControlled(st, side, p);
                 ctl.switchCd = 0.2;
+                ctl.manualUntil = st.t + 1.5;
+                ctl.lastSwitchT = st.t;
                 if (ctl.player)
                     addFx(st, ctl.player.x, ctl.player.y, 'int');
             }
@@ -2114,14 +2167,98 @@ function userCarrier(st, c, ctl) {
         aiDecide(st, c);
         return;
     }
-    const act = inp.act;
-    if (act === 'pass' || act === 'through' || act === 'shoot') {
+    // vurus kuyrugu: yeni aksiyon gelince nisan yonu belirlenir, oyuncu o yone doner (180 derece 0,3 s), sonra vurur
+    let act = inp.act;
+    if (act === 'pass' || act === 'through' || act === 'shoot' || act === 'cross') {
         inp.act = undefined;
-        const ddx = hasDir ? dx : fwx, ddy = hasDir ? dy : fwy;
+        let ax0 = inp.ax ?? 0, ay0 = inp.ay ?? 0;
+        const an = hyp(ax0, ay0);
+        if (an > 0.1) {
+            ax0 /= an;
+            ay0 /= an;
+        }
+        else if (hasDir) {
+            ax0 = dx;
+            ay0 = dy;
+        }
+        else {
+            ax0 = c.hx;
+            ay0 = c.hy;
+        }
+        const turn = Math.acos(clamp(ax0 * c.hx + ay0 * c.hy, -1, 1)) / Math.PI; // 0..1
+        const delay = inp.tap ? Math.min(0.1, 0.3 * turn) : 0.3 * turn;
+        ctl.kick = { act, power: clamp(inp.power ?? 0.3, 0, 1), ax: ax0, ay: ay0, curve: clamp(inp.curve ?? 0, -1, 1), tap: !!inp.tap, at: st.t + delay };
+        act = undefined;
+    }
+    if (ctl.kick && st.t < ctl.kick.at - 1e-6) {
+        // donus: bakis nisana doner, top ayakta
+        face(c, ctl.kick.ax, ctl.kick.ay, 0.5);
+        ballAt(st, c);
+        st.holdUntil = st.t + 0.5;
+        return;
+    }
+    if (ctl.kick) {
+        const kk = ctl.kick;
+        ctl.kick = null;
+        c.hx = kk.ax;
+        c.hy = kk.ay;
+        ballAt(st, c);
+        const ddx = kk.ax, ddy = kk.ay;
         const rk = st.restartKind;
         st.restartKind = '';
         const noOff = rk === 'throw' || rk === 'goalkick' || rk === 'corner';
-        const power = clamp(inp.power ?? 0.3, 0, 1);
+        const power = kk.power;
+        const sw = kk.curve * 3.0; // falso: yana ivme (m/s2)
+        const actK = kk.act;
+        // kisa basis (bas-cek): kosu yonundeki +-25 derece koni icindeki takim arkadasina kismi yardimli hizli pas
+        if (kk.tap && (actK === 'pass' || actK === 'through') && !gkHands) {
+            let bestM = null, bv = -1e9;
+            for (const m of mates) {
+                const vx = m.x - c.x, vy = m.y - c.y, d = hyp(vx, vy) || 1;
+                if (d < 2.5 || d > 40 || (m.pos === 'GK' && toFrame(side, m.x, m.y)[0] > 20))
+                    continue;
+                const a = (vx * ddx + vy * ddy) / d;
+                if (a < Math.cos((25 * Math.PI) / 180))
+                    continue;
+                const v = a * 0.6 + passEval(st, c, m).p - d * 0.004;
+                if (v > bv) {
+                    bv = v;
+                    bestM = m;
+                }
+            }
+            if (bestM) {
+                dbg('upass_tap');
+                passTo(st, c, bestM, { air: actK === 'through' && hyp(bestM.x - c.x, bestM.y - c.y) > 22, noOff, kind: actK === 'through' ? 'through' : 'pass' });
+                return;
+            }
+            // koni bos: kosu yonunde kisa top
+            st.stats[side].passes++;
+            const bx = st.ball.x, by = st.ball.y;
+            kickBall(st, c, ddx, ddy, passV0(8), 0, 0, 'pass', { tx: bx + ddx * 8, ty: by + ddy * 8, intended: null, noOff });
+            return;
+        }
+        if (actK === 'cross' && !gkHands) {
+            // orta: nisan yonunde havadan top (guc mesafe); ceza sahasindaki en iyi kafaci hedeflenir, top nisana gider
+            const dist = 14 + 30 * power;
+            const ax = clamp(c.x + ddx * dist, 0.5, L - 0.5), ay = clamp(c.y + ddy * dist, 0.5, W - 0.5);
+            let best = null, bd = 1e9;
+            for (const m of mates) {
+                if (m.pos === 'GK')
+                    continue;
+                const d = hyp(m.x - ax, m.y - ay);
+                if (d < bd) {
+                    bd = d;
+                    best = m;
+                }
+            }
+            st.stats[side].passes++;
+            const bx = st.ball.x, by = st.ball.y, dxx = ax - bx, dyy = ay - by, dd = hyp(dxx, dyy) || 1;
+            const [v, vz] = lobV(dd, 0.55);
+            kickBall(st, c, dxx / dd, dyy / dd, v, vz, sw, 'cross', { tx: ax, ty: ay, intended: best, noOff });
+            dbg('uorta');
+            return;
+        }
+        const act = actK;
         if (act === 'shoot' && !gkHands) {
             const distGoal = hyp(105 - cxf, 34 - cyf);
             if (distGoal < 45) {
@@ -2131,7 +2268,7 @@ function userCarrier(st, c, ctl) {
                 // nisan: joystick yonu kale cizgisinde hangi noktaya bakiyor; yardim seviyesi kaleye dogru ceker
                 const [gx, gy] = fromFrame(side, 105, 34);
                 let aimY = 34;
-                if (hasDir) {
+                {
                     const tdx = gx - c.x, tdy = gy - c.y, tdn = hyp(tdx, tdy) || 1;
                     // yonun kaleye gore yanal bileseni (m), mesafeyle olceklenir
                     const lat = (ddx * -tdy / tdn + ddy * tdx / tdn) * distGoal * 0.5;
@@ -2143,7 +2280,7 @@ function userCarrier(st, c, ctl) {
                 const inGoal = clamp(aimY, 34 - 3.0, 34 + 3.0);
                 aimY = aimY + (inGoal - aimY) * pull;
                 const sigma = kickSigma(c, 'shot', P.shotSpeed, press) * [1.0, 0.85, 0.7][ctl.assistShot];
-                shootAt(st, c, m.xg, { power, aimY, sigma });
+                shootAt(st, c, m.xg, { power, aimY, sigma, sw });
                 dbg('usut');
                 return;
             }
@@ -2183,7 +2320,7 @@ function userCarrier(st, c, ctl) {
             st.stats[side].passes++;
             const bx = st.ball.x, by = st.ball.y, dxx = ax - bx, dyy = ay - by, dd = hyp(dxx, dyy) || 1;
             const tRun = runner ? rd / playerSpeed(runner) : 1.5;
-            kickBall(st, c, dxx / dd, dyy / dd, throughV0(dd, tRun), 0, 0, 'through', { tx: ax, ty: ay, intended: runner, noOff });
+            kickBall(st, c, dxx / dd, dyy / dd, throughV0(dd, tRun), 0, sw, 'through', { tx: ax, ty: ay, intended: runner, noOff });
             dbg('uara_bosluk');
             return;
         }
@@ -2234,7 +2371,7 @@ function userCarrier(st, c, ctl) {
             const d = hyp(bestM.x - c.x, bestM.y - c.y);
             const air = act !== 'pass' || (dist > 26 && d > 22);
             dbg('upass_player');
-            passTo(st, c, bestM, { air, noOff });
+            passTo(st, c, bestM, { air, noOff, sw });
             return;
         }
         // bosluga pas: top tam nisan noktasina; en yakin takim arkadasi kosar
@@ -2253,34 +2390,40 @@ function userCarrier(st, c, ctl) {
         dbg('upass_space');
         if (dist > 26) {
             const [v, vz] = lobV(dd, 0.42);
-            kickBall(st, c, dxx / dd, dyy / dd, v, vz, 0, 'pass', { tx: ax, ty: ay, intended: runner, noOff });
+            kickBall(st, c, dxx / dd, dyy / dd, v, vz, sw, 'pass', { tx: ax, ty: ay, intended: runner, noOff });
         }
         else
-            kickBall(st, c, dxx / dd, dyy / dd, passV0(dd), 0, 0, 'pass', { tx: ax, ty: ay, intended: runner, noOff });
+            kickBall(st, c, dxx / dd, dyy / dd, passV0(dd), 0, sw, 'pass', { tx: ax, ty: ay, intended: runner, noOff });
         return;
     }
     if (act)
         inp.act = undefined; // hucumda anlamsiz aksiyon (mudahale vb.)
     // duran top ve kaleci: top surulmez, oyuncu yerinde durur ve pas bekler
     if (mustPlay) {
+        c.vx = 0;
+        c.vy = 0;
         ballAt(st, c);
         st.holdUntil = st.t + 0.5;
         return;
     }
     if (!hasDir) {
+        c.vx = 0;
+        c.vy = 0;
         ballAt(st, c);
         st.holdUntil = st.t + 0.5;
         return;
     }
-    // top surme: joystick yonunde; sprint belirgin hizli ama top kontrolu gevser ve kondisyon yakar
-    const open = !st.players.some((o) => o.side !== side && !o.off && o.pos !== 'GK' && hyp(o.x - c.x, o.y - c.y) < 8);
-    const sp = c.speedBase * kf(c.k) * (inp.sprint ? (open ? 1.0 : 0.92) : (open ? 0.8 : 0.72)) * Math.min(1, mag);
+    // top surme: joystick yonunde; sprint (dis halka) belirgin hizli ama top one acilir ve kondisyon yakar
+    const sp = c.speedBase * kf(c.k) * (inp.sprint ? 1.0 : 0.72) * Math.min(1, mag);
     if (inp.sprint)
         c.k = Math.max(0, c.k - 0.05 * st.dt * 6);
-    c.x = clamp(c.x + dx * sp * st.dt, 0.5, L - 0.5);
-    c.y = clamp(c.y + dy * sp * st.dt, 0.5, W - 0.5);
+    const [nx, ny, vx, vy] = moveToward(c, c.x + dx * 4, c.y + dy * 4, sp, st.dt);
+    c.x = clamp(nx, 0.5, L - 0.5);
+    c.y = clamp(ny, 0.5, W - 0.5);
+    c.vx = vx;
+    c.vy = vy;
     face(c, dx, dy, 0.6);
-    ballAt(st, c);
+    ballAt(st, c, inp.sprint);
     st.dribbling = true;
     st.holdUntil = st.t + 0.5;
     // onundeki savunmaciya girer: birebir (motorun kurali), ayni savunmaciyla en sik 0,6 s'de bir; sprintte top kontrolu dusuk
@@ -2398,7 +2541,7 @@ function callOffside(st, c, m) {
     placeBall(st, taker.x, taker.y);
     st.owner = null;
     giveBall(st, taker, 1.2);
-    deadTime(st, 4 + st.rng() * 2, 'Ofsayt');
+    deadTime(st, 2.5 + st.rng() * 1, 'Ofsayt');
 }
 // ara pas: savunma arkasindaki bosluga, kosu yarisi + ofsayt riski
 function throughOptions(st, c, mates) {
@@ -2537,9 +2680,11 @@ function shieldMove(st, c) {
     if (def && def.d < 4) {
         // baski altinda: en bos yone kacar (demarke olmaya calisir)
         const [dx, dy] = openDirection(st, c, 3, 1.5);
-        const s = Math.min(1.5, c.speedBase * 0.45 * st.dt);
-        c.x = clamp(c.x + dx * s, 1, L - 1);
-        c.y = clamp(c.y + dy * s, 1, W - 1);
+        const [nx, ny, vx, vy] = moveToward(c, c.x + dx * 3, c.y + dy * 3, c.speedBase * 0.45, st.dt);
+        c.x = clamp(nx, 1, L - 1);
+        c.y = clamp(ny, 1, W - 1);
+        c.vx = vx;
+        c.vy = vy;
         face(c, dx, dy, 0.5); // topu savunmacidan uzak tarafta saklar
         ballAt(st, c);
     }
@@ -2565,10 +2710,16 @@ function dribbleMove(st, c, urg) {
     const dy = ty - c.y;
     const d = hyp(dx, dy);
     if (d > 0.01) {
-        const s = Math.min(d, sp * st.dt);
-        c.x += (dx / d) * s;
-        c.y += (dy / d) * s;
+        const [nx, ny, vx, vy] = moveToward(c, tx, ty, sp, st.dt);
+        c.x = clamp(nx, 0.5, L - 0.5);
+        c.y = clamp(ny, 0.5, W - 0.5);
+        c.vx = vx;
+        c.vy = vy;
         face(c, dx, dy, 0.6);
+    }
+    else {
+        c.vx = 0;
+        c.vy = 0;
     }
     ballAt(st, c);
 }
@@ -2659,11 +2810,11 @@ function passTo(st, c, m, opt = {}) {
     if (air) {
         const [v, vz] = lobV(d, cross ? 0.55 : 0.42);
         // falso: ortalar kaleye dogru kivrilir, uzun toplar hafif
-        const sw = cross ? (1.4 + st.rng() * 1.2) * (st.rng() < 0.5 ? 1 : -1) : (st.rng() - 0.5) * 0.8;
+        const sw = opt.sw !== undefined ? opt.sw : cross ? (1.4 + st.rng() * 1.2) * (st.rng() < 0.5 ? 1 : -1) : (st.rng() - 0.5) * 0.8;
         kickBall(st, c, dx / d, dy / d, v, vz, sw, kind, { tx, ty, intended: m, noOff: opt.noOff });
     }
     else
-        kickBall(st, c, dx / d, dy / d, passV0(d, opt.vEnd), 0, 0, kind, { tx, ty, intended: m, noOff: opt.noOff });
+        kickBall(st, c, dx / d, dy / d, passV0(d, opt.vEnd), 0, opt.sw ?? 0, kind, { tx, ty, intended: m, noOff: opt.noOff });
 }
 // ara pasin hizi: kosucunun varis zamanina gore, ama hedefe en fazla rahat kontrol hiziyla varacak kadar (top gerekirse bekler)
 function throughV0(d, tRun) {
@@ -2763,7 +2914,7 @@ function shootAt(st, c, xg, opt = {}) {
     const speed = opt.header ? 11 + st.rng() * 4 : opt.penalty ? 23 : opt.freekick ? 21 : clamp(P.shotSpeed + power * 6 + st.rng() * 2, 14, P.kickMax);
     // yukselme: kafa vurusu asagi, penalti alcak, serbest vurus barajin ustunden (ust falso ile duser), akan oyunda hata payi
     const vz = opt.header ? -0.3 + st.rng() * 1.2 : opt.penalty ? 0.8 + st.rng() * 1.2 : opt.freekick ? 7.2 + st.rng() * 0.8 : clamp(0.8 + power * 2.5 + gauss(st.rng) * 2.2, -0.2, 9);
-    const sw = opt.freekick ? (st.rng() < 0.5 ? 1 : -1) * (2.2 + st.rng() * 1.2) : (st.rng() - 0.5) * 0.8;
+    const sw = opt.sw !== undefined ? opt.sw : opt.freekick ? (st.rng() < 0.5 ? 1 : -1) * (2.2 + st.rng() * 1.2) : (st.rng() - 0.5) * 0.8;
     const kind = opt.penalty ? 'penalty' : opt.freekick ? 'freekick' : opt.header ? (opt.setPiece ? 'sp-header' : 'header') : 'open';
     kickBall(st, c, dx / d, dy / d, speed, vz, sw, 'shot', { tx, ty, shot: { xg, setPiece: !!opt.setPiece, kind, penalty: !!opt.penalty }, sigma: opt.sigma, dip: opt.freekick ? 3 : 0 });
     // isabet tahmini: top kale cizgisini kale agzinin icinden mi gececek (kaleci yalniz isabetli topa uzanir)
@@ -2824,7 +2975,7 @@ function moveBall(st) {
         placeBall(st, xc, yl < 1 ? 0.5 : W - 0.5);
         st.owner = null;
         const [txf0, tyf0] = toFrame(side, b.x, b.y);
-        const durT = 4 + st.rng() * 2.5;
+        const durT = 2.5 + st.rng() * 1.0;
         st.lastPossSide = side;
         st.pending = { kind: 'throw', side, at: st.t + durT, taker, spotX: txf0, spotY: tyf0 };
         deadTime(st, durT, 'Taç');
@@ -2856,7 +3007,7 @@ function moveBall(st) {
             st.events.push({ t: st.clock, type: 'miss', side: A, player: b.kicker.num, xg: b.shot.xg });
             dbg('sut_disari');
         }
-        const dur = 5 + st.rng() * 2;
+        const dur = 3 + st.rng() * 1.0;
         placeBall(st, xl < 1 ? 0.5 : L - 0.5, clamp(yc, 1, W - 1));
         st.owner = null;
         st.pending = { kind: 'goalkick', side: D, at: st.t + dur };
@@ -2893,11 +3044,11 @@ function goalScored(st, side, xl, yc) {
     b.offside = null;
     b.dip = 0;
     st.ballZ = b.z;
-    const dur = 10 + st.rng() * 3;
+    const dur = 8 + st.rng() * 1;
     st.owner = null;
     st.pending = { kind: 'kickoff', side: opp, at: st.t + dur };
     const cel = scorer ?? liveTeam(st, side).filter((p) => p.pos !== 'GK').reduce((bb, p) => (hyp(p.x - b.x, p.y - b.y) < hyp(bb.x - b.x, bb.y - b.y) ? p : bb));
-    st.celebrate = { side, scorer: cel, until: st.t + 6.5 };
+    st.celebrate = { side, scorer: cel, until: st.t + 6 };
     deadTime(st, dur, 'GOL');
 }
 // ---------- Topa temas: ilk yetisen alir ----------
@@ -3016,8 +3167,8 @@ function resolveContact(st, p, z, speed, dist) {
                 say(st, 'save', side, p, shooter);
                 st.keyUntil = st.t + 1.2;
                 if (speed < P.gkCatch && dist < 1.0 && !b.shot?.penalty) {
-                    giveBall(st, p, 2.5);
-                    deadTime(st, 2.5 + st.rng() * 1.5, 'Kurtarış');
+                    giveBall(st, p, 2.0);
+                    deadTime(st, 1.5 + st.rng() * 1.0, 'Kurtarış');
                     st.restartKind = 'gk';
                     dbg('kurtaris_tuttu');
                 }
@@ -3061,8 +3212,8 @@ function resolveContact(st, p, z, speed, dist) {
             addFx(st, p.x, p.y, 'save');
             if (b.kicker && kickerSide !== side)
                 say(st, 'claim', side, p, b.intended ?? b.kicker);
-            giveBall(st, p, 2.5);
-            deadTime(st, 2.5 + st.rng() * 1.5, 'Kaleci aldı');
+            giveBall(st, p, 2.0);
+            deadTime(st, 1.5 + st.rng() * 1.0, 'Kaleci aldı');
             st.restartKind = 'gk';
             dbg('kaleci_aldi_top');
             return;
@@ -3195,7 +3346,7 @@ function corner(st, side, nearY) {
     // kornerci: Oyun Kurucu, yoksa bayraga en yakin kanat/orta saha
     const pool = att.filter((p) => p.pos === 'W' || p.pos === 'CM' || p.pos === 'DM');
     const taker = (pool.find((p) => p.traits.includes('Oyun Kurucu')) ?? (pool.length ? pool : att).reduce((b, p) => (hyp(p.x - bx, p.y - by) < hyp(b.x - bx, b.y - by) ? p : b)));
-    const dur = 7 + st.rng() * 2;
+    const dur = 3.5 + st.rng() * 1.0;
     st.pending = { kind: 'corner', side, at: st.t + dur, taker, spotX: 104.4, spotY: flagY };
     deadTime(st, dur, 'Korner');
 }
@@ -3524,7 +3675,8 @@ function tackle(st, d, c, behind = false) {
         foul(st, d, c, cxf);
         return;
     }
-    if (st.rng() < duelWin(eg(d) * (d.traits.includes('Duvar') ? 1.1 : 1), eg(c) * Math.sqrt(dribbleSkill(c))) * (d.yellow ? 0.95 : 1) * (behind ? P.behindWin : 1)) {
+    const lead = hyp(st.ball.x - c.x, st.ball.y - c.y); // top ayaktan uzaktaysa (hizli surus / sprint) savunmaci avantajli
+    if (st.rng() < (duelWin(eg(d) * (d.traits.includes('Duvar') ? 1.1 : 1), eg(c) * Math.sqrt(dribbleSkill(c))) + Math.max(0, lead - 1.1) * 0.25) * (d.yellow ? 0.95 : 1) * (behind ? P.behindWin : 1)) {
         dbg('kayip_mudahale');
         addFx(st, c.x, c.y, 'clean');
         say(st, 'tackle', d.side, d, c);
@@ -3582,7 +3734,7 @@ function foul(st, d, c, cxf) {
         const [bx, by] = fromFrame(c.side, 94, 34);
         st.owner = null;
         placeBall(st, bx, by);
-        const dur = 8 + st.rng() * 2;
+        const dur = 5 + st.rng() * 1;
         st.pending = { kind: 'penalty', side: c.side, at: st.t + dur, taker };
         deadTime(st, dur, 'Penaltı');
         return;
@@ -3594,7 +3746,7 @@ function foul(st, d, c, cxf) {
         st.events.push({ t: st.clock, type: 'freekick', side: c.side, player: c.num });
         st.owner = null;
         placeBall(st, c.x, c.y);
-        const dur = 7 + st.rng() * 2;
+        const dur = 4 + st.rng() * 1;
         // uzak frikigi Bitirici, yoksa en guclu hucum oyuncusu kullanir (duran top gorevlileri)
         const fkCands = liveTeam(st, c.side).filter((p) => p.pos !== 'GK');
         const fkTaker = fkCands.reduce((b, p) => (p.traits.includes('Bitirici') && !b.traits.includes('Bitirici') ? p : !p.traits.includes('Bitirici') && b.traits.includes('Bitirici') ? b : eg(p) > eg(b) ? p : b), fkCands[0] ?? c);
@@ -3604,7 +3756,7 @@ function foul(st, d, c, cxf) {
     }
     // dolayli serbest vurus: rakip yarisahada baraj kurulur; ceza sahasina yakinsa top ceza sahasina atilir
     const wall = dist > 45 ? 0 : dist > 30 ? 2 : dist > 24 ? 3 : 4;
-    const dur = wall > 0 ? 6 + st.rng() * 2 : 4 + st.rng() * 2.5;
+    const dur = wall > 0 ? 3.5 + st.rng() * 1 : 2.5 + st.rng() * 1;
     st.owner = null;
     placeBall(st, c.x, c.y);
     st.pending = { kind: 'fk', side: c.side, at: st.t + dur, taker: c, spotX: xf, spotY: yf, wall };
@@ -3810,10 +3962,12 @@ for (const b of document.querySelectorAll('[data-sp]')) b.addEventListener('clic
 // Zaman: fizik gercek zamanli (1x'te ekranda 1 saniye = sahada 1 saniye), mac saati 6 kat hizli akar.
 // Deneme surumunde 1x %20 hizli oynar, mac yaklasik 12,5 dakika surer. 4x ve 16x yalniz izlemek icindir.
 const WATCH_SPEED = 1.39; // izleme: 1x %39 hizli (mac ~11 dk); motor adimi st.dt (0,1 s)
+const PLAY_DT = 0.1; // oynarken motor adimi (20 adim/s denemesi kalibrasyonla birlikte: gol sayisi farkli cikti)
 const isDead = () => st.t < st.restartUntil && !ballMoving(st);
 function frame(now) {
   const dtReal = Math.min(0.1, (now - last) / 1000);
   last = now;
+  if (PLAY.on && (cv.clientWidth !== lastW || cv.clientHeight !== lastH)) onResize();
   let alpha = 1;
   if (playing && !st.done) {
     acc += dtReal * (1 / st.dt) * (PLAY.on ? 1 : WATCH_SPEED * speed);
@@ -3908,7 +4062,7 @@ function draw(alpha, now = performance.now()) {
   for (const x of [11, 94, 52.5]) { ctx.beginPath(); ctx.arc(X(x), Y(34), s * 0.35, 0, Math.PI * 2); ctx.fill(); }
   // kaleler: ag ve direkler
   for (const [gx, dir] of [[0, -1], [105, 1]]) {
-    const x0 = dir < 0 ? X(gx - 2) : X(gx), w = 2 * s, y0 = Y(30.34), h = 7.32 * s;
+    const x0 = dir < 0 ? X(gx - 2.4) : X(gx), w = 2.4 * s, y0 = Y(30.34), h = 7.32 * s;
     ctx.fillStyle = 'rgba(255,255,255,.14)';
     ctx.fillRect(x0, y0, w, h);
     ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.lineWidth = 1;
@@ -3926,7 +4080,9 @@ function draw(alpha, now = performance.now()) {
 
   const cur = snapshot();
   // oyuna giren oyuncu (degisiklik) bir onceki karede yoktur: dogrudan yeni konum
-  const pos = (i) => { const pr = prev[i] ?? cur[i]; return [pr[0] + (cur[i][0] - pr[0]) * alpha, pr[1] + (cur[i][1] - pr[1]) * alpha, (pr[2] ?? 0) + ((cur[i][2] ?? 0) - (pr[2] ?? 0)) * alpha]; };
+  // kontrol edilen futbolcu bir adim oteye tahminle cizilir (girdi gecikmesi hissi azalir)
+  const cpi = PLAY.on ? st.players.indexOf(controlledPlayer(st, PLAY.side)) : -1;
+  const pos = (i) => { const pr = prev[i] ?? cur[i]; const a = i === cpi ? 1 + alpha * 0.5 : alpha; return [pr[0] + (cur[i][0] - pr[0]) * a, pr[1] + (cur[i][1] - pr[1]) * a, (pr[2] ?? 0) + ((cur[i][2] ?? 0) - (pr[2] ?? 0)) * alpha]; };
 
   if (document.getElementById('lines').checked && !PLAY.on) {
     for (const side of [0, 1]) {
@@ -3953,13 +4109,24 @@ function draw(alpha, now = performance.now()) {
     ctx.beginPath(); ctx.arc(X(x), Y(y), r, 0, Math.PI * 2);
     ctx.fillStyle = p.pos === 'GK' ? (p.side === 0 ? '#7a2622' : '#22406f') : st.teams[p.side].color;
     ctx.fill();
-    ctx.lineWidth = Math.max(1.5, s * 0.2) * (st.owner === p ? 2 : 1);
-    ctx.strokeStyle = st.owner === p ? '#ffffff' : 'rgba(255,255,255,.75)';
-    ctx.stroke();
+    // kondisyon halkasi: dairenin kenarinda, kalan kondisyon kadar yay; kontrol edilen oyuncuda vurus dolarken guc rengine doner
+    const lw = Math.max(1.5, s * 0.2) * (st.owner === p ? 2 : 1);
+    ctx.lineWidth = lw; ctx.strokeStyle = 'rgba(0,0,0,.35)';
+    ctx.beginPath(); ctx.arc(X(x), Y(y), r, 0, Math.PI * 2); ctx.stroke();
+    const ai0 = i === cpi && st.owner === p ? aimInfo(p) : null;
+    const frac = ai0 ? ai0.pw : p.k / 100;
+    ctx.strokeStyle = ai0 ? css('--flood') : p.k < 35 ? '#e5483f' : p.k < 55 ? css('--warn') : st.owner === p ? '#ffffff' : 'rgba(255,255,255,.8)';
+    ctx.beginPath(); ctx.arc(X(x), Y(y), r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * frac); ctx.stroke();
     ctx.fillStyle = '#fff';
     ctx.font = `600 ${Math.round(r * 1.05)}px ${css('--font-body')}`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(p.num, X(x), Y(y) + r * 0.05);
+    // isim: daire yeterince buyukse altta; telefonda Tam saha'da yalniz kontrol edilen oyuncu
+    if (r >= 11 && (!CAM.phone || CAM.mode === 'smart' || i === cpi)) {
+      ctx.font = `600 ${Math.round(r * 0.75)}px ${css('--font-body')}`;
+      ctx.lineWidth = Math.max(2, r * 0.25); ctx.strokeStyle = 'rgba(0,0,0,.55)'; ctx.lineJoin = 'round';
+      ctx.strokeText(p.name, X(x), Y(y) + r * 1.75); ctx.fillStyle = 'rgba(255,255,255,.92)'; ctx.fillText(p.name, X(x), Y(y) + r * 1.75);
+    }
     if (p.yellow > 0) {
       // sari kartli oyuncu: sag ustte kucuk kart
       const cw = Math.max(5, r * 0.75), ch = cw * 1.35;
@@ -4037,12 +4204,22 @@ function draw(alpha, now = performance.now()) {
   drawBanners(now, Wc, Hc, s, X, Y);
   if (CAM.overlay) drawPhoneOverlay(Wc, Hc, s, X, Y, ox, oy, pos);
 }
-// ---------- Oyna modu (Dilim 0): tam ekran, dokunmatik ve klavye kontrolu ----------
-const PLAY = { on: false, side: 0, camMode: 'full', minutes: 10 };
-const IN = { joyId: null, joyBase: null, mx: 0, my: 0, sprint: false, press: false, acts: [], shotDownAt: null, passDownAt: null, throughDownAt: null, keys: new Set(), ptrBtn: new Map(), shotPtr: null };
-const POWER_MS = { shoot: 900, pass: 600, through: 600 };
+// ---------- Oyna modu (Dilim 0.4): tam ekran, dokunmatik ve klavye kontrolu ----------
+// Sol yarida yuzen joystick (dis halka = sprint); sag altta elmas duzeninde dort baglamsal buton.
+// Hucum: ust Ara, sag Sut, sol Orta, alt Pas. Savunma: ust Degistir, sag Kaydir, sol Mudahale, alt Baski (basili).
+// Vurus: butona basinca nisan oku acilir; ilk 12 px surukleme yon, yana kayma falso, basili tutma guc; birakinca vurus.
+const PLAY = { on: false, side: 0, camMode: 'full', minutes: 10, keys: 'arrows', autoSwitch: true };
+const IN = { joyId: null, joyBase: null, mx: 0, my: 0, joyK: 0, press: false, acts: [], keys: new Set(), ptrBtn: new Map(), kick: null, kbKick: null };
+const POWER_MS = { shoot: 900, pass: 600, through: 600, cross: 700 };
 const powerOf = (t0, kind) => Math.min(1, (performance.now() - t0) / POWER_MS[kind]);
 const CAM_MODES = [['full', 'Tam saha', 65], ['length', 'Tam boy', 108], ['near', 'Yakın', 65]];
+const SA = { t: 0, r: 0, b: 0, l: 0 }; // guvenli alanlar (centik, ana sayfa cubugu)
+function readSafeArea() {
+  const el = document.getElementById('sa');
+  if (!el) return;
+  const cs = getComputedStyle(el);
+  SA.t = parseFloat(cs.paddingTop) || 0; SA.r = parseFloat(cs.paddingRight) || 0; SA.b = parseFloat(cs.paddingBottom) || 0; SA.l = parseFloat(cs.paddingLeft) || 0;
+}
 function applyCam(mode) {
   PLAY.camMode = mode;
   const m = CAM_MODES.find((c) => c[0] === mode) ?? CAM_MODES[0];
@@ -4050,82 +4227,104 @@ function applyCam(mode) {
   if (st) { CAM.cx = st.ball.x; CAM.cy = st.ball.y; }
 }
 function inPossession() { return PLAY.on && st && ((st.owner && st.owner.side === PLAY.side) || (!st.owner && st.ball.kicker && st.ball.kicker.side === PLAY.side && (st.ball.kind === 'pass' || st.ball.kind === 'through' || st.ball.kind === 'cross'))); }
-// kontrol gecmetrisi (CSS px): joystick solda yuzen, sagda 4 buton
+// kontrol geometrisi (CSS px): elmas buton kumesi sag altta basparmak yayinda
 function ctrlGeom() {
   const Wc = cv.clientWidth, Hc = cv.clientHeight, u = Math.max(0.8, Math.min(1.6, Wc / 852));
-  const r = 30 * u;
-  const bx = Wc - 150 * u, by = Hc - 62 * u;
+  const r = 30 * u, d = 56 * u;
+  const cx = Wc - SA.r - 112 * u, cy = Hc - SA.b - 100 * u;
   const atk = inPossession();
-  // uclu baglamsal (hucum sari / savunma mavi), Sprint ve Degistir sabit
   const btns = [
-    { id: 'pass', lab: atk ? 'Pas' : 'Müdahale', x: bx - 56 * u, y: by + 4 * u, r, ctx: true },
-    { id: 'shoot', lab: atk ? 'Şut' : 'Kaydır', x: bx + 56 * u, y: by + 4 * u, r, ctx: true },
-    { id: 'through', lab: atk ? 'Ara' : 'Baskı', x: bx, y: by - 52 * u, r, ctx: true },
-    { id: 'sprint', lab: 'Sprint', x: bx - 128 * u, y: by - 48 * u, r: r * 0.85, ctx: false },
-    { id: 'switch', lab: 'Değiştir', x: bx - 128 * u, y: by - 118 * u, r: r * 0.75, ctx: false },
+    { id: 'through', lab: atk ? 'Ara' : 'Değiştir', x: cx, y: cy - d, r, def: 'switch' },
+    { id: 'shoot', lab: atk ? 'Şut' : 'Kaydır', x: cx + d, y: cy, r, def: 'slide' },
+    { id: 'cross', lab: atk ? 'Orta' : 'Müdahale', x: cx - d, y: cy, r, def: 'tackle' },
+    { id: 'pass', lab: atk ? 'Pas' : 'Baskı', x: cx, y: cy + d, r, def: 'press' },
   ];
-  return { Wc, Hc, u, btns, atk, cam: { x: Wc - 60 * u, y: 24 * u, w: 100 * u, h: 30 * u } };
+  return { Wc, Hc, u, btns, atk, joyR: 44 * u, cam: { x: Wc - SA.r - 60 * u, y: SA.t + 24 * u, w: 100 * u, h: 30 * u } };
 }
 function hitBtn(x, y) {
   const g = ctrlGeom();
-  for (const b of g.btns) if (Math.hypot(x - b.x, y - b.y) <= b.r * 1.25) return b.id;
-  if (Math.abs(x - g.cam.x) < g.cam.w / 2 && Math.abs(y - g.cam.y) < g.cam.h / 2) return 'cam';
+  for (const b of g.btns) if (Math.hypot(x - b.x, y - b.y) <= b.r * 1.2) return b;
+  if (Math.abs(x - g.cam.x) < g.cam.w / 2 && Math.abs(y - g.cam.y) < g.cam.h / 2) return { id: 'cam' };
   return null;
 }
-function pressBtn(id, down, ptrId) {
-  const atk = inPossession();
-  if (id === 'cam') { if (down) { const i = CAM_MODES.findIndex((c) => c[0] === PLAY.camMode); applyCam(CAM_MODES[(i + 1) % CAM_MODES.length][0]); } return; }
-  if (id === 'sprint') { IN.sprint = down; return; }
-  if (id === 'switch') { if (down) IN.acts.push('switch'); return; }
-  if (atk) {
-    // pas ve ara pas: basili tutma suresi mesafe; birakinca cikar
-    if (id === 'pass') { if (down) IN.passDownAt = performance.now(); else if (IN.passDownAt !== null) { IN.acts.push({ act: 'pass', power: powerOf(IN.passDownAt, 'pass') }); IN.passDownAt = null; } }
-    else if (id === 'through') { if (down) IN.throughDownAt = performance.now(); else if (IN.throughDownAt !== null) { IN.acts.push({ act: 'through', power: powerOf(IN.throughDownAt, 'through') }); IN.throughDownAt = null; } }
-    else if (id === 'shoot') { if (down) { IN.shotDownAt = performance.now(); IN.shotPtr = ptrId; } else if (IN.shotDownAt !== null) { IN.acts.push({ act: 'shoot', power: powerOf(IN.shotDownAt, 'shoot') }); IN.shotDownAt = null; IN.shotPtr = null; } }
-  } else {
-    if (id === 'pass' && down) IN.acts.push('tackle');
-    else if (id === 'shoot' && down) IN.acts.push('slide');
-    else if (id === 'through') IN.press = down;
-    if (!down) { IN.shotDownAt = null; IN.passDownAt = null; IN.throughDownAt = null; }
+function cycleCam() { const i = CAM_MODES.findIndex((c) => c[0] === PLAY.camMode); applyCam(CAM_MODES[(i + 1) % CAM_MODES.length][0]); }
+// hucum butonu basildi: vurus jesti baslar (diger butonlar kilitlenir)
+function kickStart(id, ptrId, x, y) {
+  if (IN.kick) return;
+  IN.kick = { id, ptr: ptrId, t0: performance.now(), x0: x, y0: y, ax: 0, ay: 0, aimed: false, curve: 0 };
+}
+function kickMove(x, y) {
+  const k = IN.kick; if (!k) return;
+  const dx = x - k.x0, dy = y - k.y0, m = Math.hypot(dx, dy);
+  if (!k.aimed) { if (m >= 12) { k.aimed = true; k.ax = dx / m; k.ay = dy / m; } return; }
+  // nisan sabit; yana kayma falso (40 px = tam)
+  const perp = dx * -k.ay + dy * k.ax;
+  k.curve = Math.max(-1, Math.min(1, perp / 40));
+}
+function kickEnd() {
+  const k = IN.kick; if (!k) return;
+  IN.kick = null;
+  const held = performance.now() - k.t0;
+  IN.acts.push({ act: k.id, power: powerOf(k.t0, k.id), ax: k.aimed ? k.ax : 0, ay: k.aimed ? k.ay : 0, curve: k.curve, tap: held < 150 && !k.aimed });
+}
+function pressBtn(b, down, ptrId, x, y) {
+  if (b.id === 'cam') { if (down) cycleCam(); return; }
+  if (inPossession()) {
+    if (down) kickStart(b.id, ptrId, x, y);
+    else if (IN.kick && IN.kick.ptr === ptrId) kickEnd();
+    return;
   }
+  if (b.def === 'press') { IN.press = down; return; }
+  if (down) IN.acts.push(b.def);
+}
+function kbDir() {
+  const k = IN.keys, wasd = PLAY.keys === 'wasd';
+  let mx = (k.has('ArrowRight') || (wasd && k.has('KeyD')) ? 1 : 0) - (k.has('ArrowLeft') || (wasd && k.has('KeyA')) ? 1 : 0);
+  let my = (k.has('ArrowDown') || (wasd && k.has('KeyS')) ? 1 : 0) - (k.has('ArrowUp') || (wasd && k.has('KeyW')) ? 1 : 0);
+  const m = Math.hypot(mx, my); if (m > 1) { mx /= m; my /= m; }
+  return [mx, my];
 }
 function feedInput() {
-  // klavye joystick
-  let mx = IN.mx, my = IN.my;
-  if (IN.joyId === null) {
-    const k = IN.keys;
-    mx = (k.has('ArrowRight') || k.has('KeyD') ? 1 : 0) - (k.has('ArrowLeft') || k.has('KeyA') ? 1 : 0);
-    my = (k.has('ArrowDown') || k.has('KeyS') ? 1 : 0) - (k.has('ArrowUp') || k.has('KeyW') ? 1 : 0);
-    const m = Math.hypot(mx, my); if (m > 1) { mx /= m; my /= m; }
-  }
-  // dunya koordinatlarina: ekranda sag = +x (kamera saha yonunu cevirmez; ikinci yarida taraflar yer degistirir, kullanici hangi kaleye oynadigini gorur)
+  let mx = IN.mx, my = IN.my, sprint = IN.joyK >= 0.85;
+  if (IN.joyId === null) { [mx, my] = kbDir(); sprint = IN.keys.has(KB().sprint); }
   const a = IN.acts.shift();
-  const input = { mx, my, sprint: IN.sprint || IN.keys.has('ShiftLeft') || IN.keys.has('ShiftRight'), press: IN.press, act: a ? (typeof a === 'string' ? a : a.act) : undefined, power: a && typeof a !== 'string' ? a.power : undefined };
+  const input = { mx, my, sprint, press: IN.press, act: a ? (typeof a === 'string' ? a : a.act) : undefined, power: a && typeof a !== 'string' ? a.power : undefined, ax: a && typeof a !== 'string' ? a.ax : undefined, ay: a && typeof a !== 'string' ? a.ay : undefined, curve: a && typeof a !== 'string' ? a.curve : undefined, tap: a && typeof a !== 'string' ? a.tap : undefined };
   setInput(st, PLAY.side, input);
 }
 function onPtrDown(e) {
   if (!PLAY.on) return;
   e.preventDefault();
   const x = e.offsetX, y = e.offsetY;
-  const b = hitBtn(x, y);
   const capture = () => { try { cv.setPointerCapture(e.pointerId); } catch (_) { /* iOS Safari dokunmada yakalamayi reddedebilir */ } };
-  if (b) { IN.ptrBtn.set(e.pointerId, b); pressBtn(b, true, e.pointerId); capture(); return; }
-  if (x < cv.clientWidth * 0.5 && IN.joyId === null) { IN.joyId = e.pointerId; IN.joyBase = [x, y]; IN.mx = 0; IN.my = 0; capture(); }
+  if (st && st.celebrate) IN.acts.push('skip');
+  const b = hitBtn(x, y);
+  if (b) {
+    // vurus surerken diger butonlar kilitli
+    if (IN.kick && b.id !== 'cam') return;
+    IN.ptrBtn.set(e.pointerId, b); pressBtn(b, true, e.pointerId, x, y); capture(); return;
+  }
+  if (x < cv.clientWidth * 0.5 && IN.joyId === null) { IN.joyId = e.pointerId; IN.joyBase = [x, y]; IN.mx = 0; IN.my = 0; IN.joyK = 0; capture(); }
 }
 function onPtrMove(e) {
-  if (!PLAY.on || e.pointerId !== IN.joyId) return;
-  e.preventDefault();
-  const dx = e.offsetX - IN.joyBase[0], dy = e.offsetY - IN.joyBase[1];
-  const R = 44 * Math.max(0.8, Math.min(1.6, cv.clientWidth / 852));
-  const m = Math.hypot(dx, dy);
-  const k = Math.min(1, m / R);
-  IN.mx = m > 2 ? (dx / m) * k : 0; IN.my = m > 2 ? (dy / m) * k : 0;
+  if (!PLAY.on) return;
+  if (e.pointerId === IN.joyId) {
+    e.preventDefault();
+    const dx = e.offsetX - IN.joyBase[0], dy = e.offsetY - IN.joyBase[1];
+    const R = ctrlGeom().joyR;
+    const m = Math.hypot(dx, dy);
+    const k = Math.min(1, m / R);
+    IN.joyK = k;
+    IN.mx = m > 2 ? (dx / m) * Math.min(1, k / 0.85) : 0; IN.my = m > 2 ? (dy / m) * Math.min(1, k / 0.85) : 0;
+    return;
+  }
+  if (IN.kick && e.pointerId === IN.kick.ptr) { e.preventDefault(); kickMove(e.offsetX, e.offsetY); }
 }
 function onPtrUp(e) {
   if (!PLAY.on) return;
-  if (e.pointerId === IN.joyId) { IN.joyId = null; IN.joyBase = null; IN.mx = 0; IN.my = 0; }
+  if (e.pointerId === IN.joyId) { IN.joyId = null; IN.joyBase = null; IN.mx = 0; IN.my = 0; IN.joyK = 0; }
   const b = IN.ptrBtn.get(e.pointerId);
-  if (b) { IN.ptrBtn.delete(e.pointerId); pressBtn(b, false, e.pointerId); }
+  if (b) { IN.ptrBtn.delete(e.pointerId); pressBtn(b, false, e.pointerId, e.offsetX, e.offsetY); }
+  if (IN.kick && e.pointerId === IN.kick.ptr) kickEnd();
 }
 // iOS Safari: dokunma varsayilanlari (kaydirma, yakinlastirma, uzun basma buyutec) oyun modunda kapatilir
 for (const ev of ['touchstart', 'touchmove', 'touchend', 'touchcancel']) cv.addEventListener(ev, (e) => { if (PLAY.on) e.preventDefault(); }, { passive: false });
@@ -4134,35 +4333,57 @@ cv.addEventListener('pointermove', onPtrMove);
 cv.addEventListener('pointerup', onPtrUp);
 cv.addEventListener('pointercancel', onPtrUp);
 cv.addEventListener('contextmenu', (e) => { if (PLAY.on) e.preventDefault(); });
+// klavye semalari: ok tuslari (S pas, D sut, W ara, A orta, E sprint, Q degistir) ya da WASD (J pas, K sut, L ara, I orta, Shift sprint, Bosluk degistir)
+const KEYMAPS = {
+  arrows: { pass: 'KeyS', shoot: 'KeyD', through: 'KeyW', cross: 'KeyA', sprint: 'KeyE', switch: 'KeyQ', move: ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'] },
+  wasd: { pass: 'KeyJ', shoot: 'KeyK', through: 'KeyL', cross: 'KeyI', sprint: 'ShiftLeft', switch: 'Space', move: ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'] },
+};
+const KB = () => KEYMAPS[PLAY.keys] ?? KEYMAPS.arrows;
+const KB_DEF = { pass: 'press', shoot: 'slide', through: 'switch', cross: 'tackle' };
 addEventListener('keydown', (e) => {
   if (!PLAY.on) return;
-  if (e.repeat) { if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'ShiftLeft', 'ShiftRight'].includes(e.code)) e.preventDefault(); return; }
+  const kb = KB();
+  if (e.repeat) { if (kb.move.includes(e.code) || e.code === kb.sprint || e.code === 'Space') e.preventDefault(); return; }
   IN.keys.add(e.code);
+  if (st && st.celebrate && e.code !== 'Escape') IN.acts.push('skip');
   const atk = inPossession();
-  if (e.code === 'KeyJ') { if (atk) IN.passDownAt = performance.now(); else IN.acts.push('tackle'); }
-  else if (e.code === 'KeyL') { if (atk) IN.throughDownAt = performance.now(); else IN.press = true; }
-  else if (e.code === 'KeyK') { if (atk) IN.shotDownAt = performance.now(); else IN.acts.push('slide'); }
-  else if (e.code === 'Space') { IN.acts.push('switch'); e.preventDefault(); }
-  else if (e.code === 'KeyC') pressBtn('cam', true);
+  const act = Object.keys(KB_DEF).find((k) => kb[k] === e.code);
+  if (act) {
+    if (atk) { if (!IN.kbKick) IN.kbKick = { id: act, t0: performance.now() }; }
+    else if (KB_DEF[act] === 'press') IN.press = true;
+    else IN.acts.push(KB_DEF[act]);
+    e.preventDefault();
+  }
+  else if (e.code === kb.switch) { IN.acts.push('switch'); e.preventDefault(); }
+  else if (e.code === 'KeyC') cycleCam();
   else if (e.code === 'Escape') exitPlay();
-  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+  if (kb.move.includes(e.code) || e.code === 'Space') e.preventDefault();
 });
 addEventListener('keyup', (e) => {
   IN.keys.delete(e.code);
   if (!PLAY.on) return;
-  if (e.code === 'KeyL') { IN.press = false; if (IN.throughDownAt !== null) { IN.acts.push({ act: 'through', power: powerOf(IN.throughDownAt, 'through') }); IN.throughDownAt = null; } }
-  if (e.code === 'KeyJ' && IN.passDownAt !== null) { IN.acts.push({ act: 'pass', power: powerOf(IN.passDownAt, 'pass') }); IN.passDownAt = null; }
-  if (e.code === 'KeyK' && IN.shotDownAt !== null) { IN.acts.push({ act: 'shoot', power: powerOf(IN.shotDownAt, 'shoot') }); IN.shotDownAt = null; }
+  const kb = KB();
+  const act = Object.keys(KB_DEF).find((k) => kb[k] === e.code);
+  if (!act) return;
+  if (KB_DEF[act] === 'press') IN.press = false;
+  if (IN.kbKick && IN.kbKick.id === act) {
+    const held = performance.now() - IN.kbKick.t0;
+    const [mx, my] = kbDir();
+    IN.acts.push({ act, power: powerOf(IN.kbKick.t0, act), ax: mx, ay: my, curve: 0, tap: held < 150 });
+    IN.kbKick = null;
+  }
 });
 function startPlay() {
   readSetup();
-  PLAY.on = true; PLAY.side = 0; PLAY.minutes = +document.getElementById('pMin').value;
-  P.clockRate = 90 / PLAY.minutes; knockout = false;
+  PLAY.on = true; PLAY.side = 0; PLAY.minutes = +document.getElementById('pMin').value; PLAY.keys = document.getElementById('pKeys').value; PLAY.autoSwitch = document.getElementById('pAuto').value === '1';
+  P.clockRate = 90 / PLAY.minutes; P.dt = PLAY_DT; knockout = false;
+  // rakibin bot seviyesi (zorluk)
+  cfg[1].ai = +document.getElementById('pDiff').value;
   document.body.classList.add('play');
   CAM.phone = true; CAM.overlay = true;
   applyCam(document.getElementById('pCam').value);
   newMatch(seed);
-  setControl(st, 0, 'team', +document.getElementById('pAssistP').value, +document.getElementById('pAssistS').value);
+  setControl(st, 0, 'team', +document.getElementById('pAssistP').value, +document.getElementById('pAssistS').value, { autoSwitch: PLAY.autoSwitch });
   onResize();
   speed = 1;
 }
@@ -4171,26 +4392,47 @@ function exitPlay() {
   PLAY.on = false;
   document.body.classList.remove('play', 'portrait');
   CAM.phone = false; CAM.overlay = false; CAM.mode = 'full';
-  P.clockRate = 6;
-  IN.acts.length = 0; IN.sprint = false; IN.press = false; IN.joyId = null; IN.mx = 0; IN.my = 0; IN.shotDownAt = IN.passDownAt = IN.throughDownAt = null;
+  P.clockRate = 6; P.dt = 0.1;
+  IN.acts.length = 0; IN.press = false; IN.joyId = null; IN.mx = 0; IN.my = 0; IN.joyK = 0; IN.kick = null; IN.kbKick = null; IN.ptrBtn.clear();
   fitCanvas();
   newMatch(seed);
 }
+let lastW = 0, lastH = 0;
 function onResize() {
   if (PLAY.on) document.body.classList.toggle('portrait', innerHeight > innerWidth);
+  readSafeArea();
   fitCanvas();
+  lastW = cv.clientWidth; lastH = cv.clientHeight;
 }
 addEventListener('resize', onResize);
+addEventListener('orientationchange', () => { setTimeout(onResize, 50); setTimeout(onResize, 400); });
+if (window.visualViewport) visualViewport.addEventListener('resize', onResize);
 document.getElementById('playBtn').addEventListener('click', startPlay);
 document.getElementById('exitPlay').addEventListener('click', exitPlay);
 
-// oyna modu katmani: HUD, joystick ve butonlar, kontrol edilen futbolcu halkasi, ekran disi isaretler, radar
+// nisan oku: yon (surukleme > joystick/klavye > bakis), uzunluk guc, egri falso (motorun falso isaretiyle ayni yon)
+function aimInfo(cp) {
+  const k = IN.kick, kk = IN.kbKick;
+  if (!k && !kk) return null;
+  const id = k ? k.id : kk.id;
+  const pw = powerOf(k ? k.t0 : kk.t0, id);
+  let ax = 0, ay = 0;
+  if (k && k.aimed) { ax = k.ax; ay = k.ay; }
+  else {
+    const m = Math.hypot(IN.mx, IN.my);
+    if (IN.joyId !== null && m > 0.15) { ax = IN.mx / m; ay = IN.my / m; }
+    else { const [kx, ky] = kbDir(); const km = Math.hypot(kx, ky); if (km > 0) { ax = kx / km; ay = ky / km; } else { ax = cp.hx; ay = cp.hy; } }
+  }
+  const len = id === 'shoot' ? 10 + 25 * pw : id === 'through' ? 16 + 20 * pw : id === 'cross' ? 14 + 30 * pw : 8 + 32 * pw;
+  return { id, pw, ax, ay, len, curve: k ? k.curve : 0 };
+}
+
+// oyna modu katmani: HUD, joystick ve butonlar, kontrol edilen futbolcu halkasi, nisan oku, ekran disi isaretler, radar
 function drawPhoneOverlay(Wc, Hc, s, X, Y, ox, oy, pos) {
   const dpr = Wc / cv.clientWidth;
   const g = ctrlGeom();
   const u = g.u * dpr;
   ctx.save();
-  // kontrol edilen futbolcu: beyaz halka
   const cp = PLAY.on ? controlledPlayer(st, PLAY.side) : null;
   if (cp && !cp.off) {
     const i = st.players.indexOf(cp);
@@ -4202,19 +4444,18 @@ function drawPhoneOverlay(Wc, Hc, s, X, Y, ox, oy, pos) {
     ctx.beginPath(); ctx.arc(X(x), Y(y), r * 2.4, 0, Math.PI * 2); ctx.stroke();
   }
   // HUD
-  const hw = 300 * u, hh = 34 * u;
-  ctx.fillStyle = 'rgba(10,12,16,.78)'; ctx.fillRect(Wc / 2 - hw / 2, 8 * u, hw, hh);
+  const hw = 300 * u, hh = 34 * u, hy = SA.t * dpr + 8 * u;
+  ctx.fillStyle = 'rgba(10,12,16,.78)'; ctx.fillRect(Wc / 2 - hw / 2, hy, hw, hh);
   ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.font = `700 ${Math.round(18 * u)}px ${css('--font-body')}`;
   const base = [0, 45, 90, 105][st.half - 1] * 60, t = base + st.hclock;
   const mm = Math.floor(t / 60), ss = Math.floor(t % 60);
   const clk = st.done ? 'MS' : `${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
-  ctx.fillText(`${st.teams[0].short}  ${st.stats[0].goals} : ${st.stats[1].goals}  ${st.teams[1].short}   ${clk}`, Wc / 2, 8 * u + hh / 2);
-  // hucum yonu ipucu: kullanici takiminin kalesi hangi tarafta
+  ctx.fillText(`${st.teams[0].short}  ${st.stats[0].goals} : ${st.stats[1].goals}  ${st.teams[1].short}   ${clk}`, Wc / 2, hy + hh / 2);
   if (PLAY.on) {
-    const [gx] = (function () { const h = st.half % 2 === 0; return [h ? 0 : 105]; })();
+    const gx = st.half % 2 === 0 ? 0 : 105;
     ctx.font = `600 ${Math.round(11 * u)}px ${css('--font-body')}`; ctx.fillStyle = 'rgba(255,255,255,.75)';
-    ctx.fillText(gx > 50 ? 'hücum →' : '← hücum', Wc / 2, 8 * u + hh + 12 * u);
+    ctx.fillText(gx > 50 ? 'hücum →' : '← hücum', Wc / 2, hy + hh + 12 * u);
   }
   // kamera butonu
   const cm = g.cam;
@@ -4222,51 +4463,59 @@ function drawPhoneOverlay(Wc, Hc, s, X, Y, ox, oy, pos) {
   ctx.fillStyle = '#fff'; ctx.font = `600 ${Math.round(12 * u)}px ${css('--font-body')}`;
   ctx.fillText('Kam: ' + (CAM_MODES.find((c) => c[0] === PLAY.camMode) ?? CAM_MODES[0])[1], cm.x * dpr, cm.y * dpr);
   if (PLAY.on) {
-    // joystick (yuzen)
+    // joystick (yuzen); dis halka sprint
+    const jr = g.joyR * dpr;
     if (IN.joyBase) {
       const [jx, jy] = IN.joyBase;
-      ctx.globalAlpha = 0.3; ctx.fillStyle = '#fff';
-      ctx.beginPath(); ctx.arc(jx * dpr, jy * dpr, 52 * u, 0, Math.PI * 2); ctx.fill();
-      ctx.globalAlpha = 0.6; ctx.beginPath(); ctx.arc((jx + IN.mx * 44 * g.u) * dpr, (jy + IN.my * 44 * g.u) * dpr, 24 * u, 0, Math.PI * 2); ctx.fill();
+      const sprint = IN.joyK >= 0.85;
+      ctx.globalAlpha = 0.28; ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(jx * dpr, jy * dpr, jr * 1.15, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = sprint ? 0.9 : 0.35; ctx.strokeStyle = sprint ? css('--flood') : '#fff'; ctx.lineWidth = (sprint ? 4 : 2) * u;
+      ctx.beginPath(); ctx.arc(jx * dpr, jy * dpr, jr * 1.15, 0, Math.PI * 2); ctx.stroke();
+      const m = Math.hypot(IN.mx, IN.my) || 1;
+      const kx = jx + (m > 0 ? (IN.mx / m) * Math.min(1, IN.joyK) * g.joyR : 0), ky = jy + (m > 0 ? (IN.my / m) * Math.min(1, IN.joyK) * g.joyR : 0);
+      ctx.globalAlpha = 0.65; ctx.fillStyle = sprint ? css('--flood') : '#fff'; ctx.beginPath(); ctx.arc(kx * dpr, ky * dpr, 24 * u, 0, Math.PI * 2); ctx.fill();
     } else {
       ctx.globalAlpha = 0.14; ctx.fillStyle = '#fff';
-      ctx.beginPath(); ctx.arc(90 * u, Hc - 90 * u, 52 * u, 0, Math.PI * 2); ctx.fill();
-      ctx.globalAlpha = 0.5; ctx.font = `600 ${Math.round(11 * u)}px ${css('--font-body')}`; ctx.fillText('joystick', 90 * u, Hc - 90 * u);
+      ctx.beginPath(); ctx.arc((SA.l + 90) * u, Hc - (SA.b + 90) * u, jr * 1.15, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 0.5; ctx.font = `600 ${Math.round(11 * u)}px ${css('--font-body')}`; ctx.fillText('joystick', (SA.l + 90) * u, Hc - (SA.b + 90) * u);
     }
-    // nisan cizgisi: pas / ara pas / sut basiliyken joystick yonunde, uzunluk guce gore
-    if (cp && g.atk && st.owner === cp && (IN.passDownAt !== null || IN.throughDownAt !== null || IN.shotDownAt !== null)) {
+    // nisan oku: vurus butonu basiliyken, yalniz topa sahipken
+    const ai = cp && g.atk && st.owner === cp ? aimInfo(cp) : null;
+    if (ai) {
       const i = st.players.indexOf(cp);
       const [x, y] = pos(i);
-      const m = Math.hypot(IN.mx, IN.my);
-      const k = IN.keys; let kx = (k.has('ArrowRight') || k.has('KeyD') ? 1 : 0) - (k.has('ArrowLeft') || k.has('KeyA') ? 1 : 0), ky = (k.has('ArrowDown') || k.has('KeyS') ? 1 : 0) - (k.has('ArrowUp') || k.has('KeyW') ? 1 : 0);
-      const km = Math.hypot(kx, ky);
-      const ddx = m > 0.15 ? IN.mx / m : km > 0 ? kx / km : cp.hx, ddy = m > 0.15 ? IN.my / m : km > 0 ? ky / km : cp.hy;
-      const pw = IN.shotDownAt !== null ? powerOf(IN.shotDownAt, 'shoot') : IN.throughDownAt !== null ? powerOf(IN.throughDownAt, 'through') : powerOf(IN.passDownAt, 'pass');
-      const len = IN.shotDownAt !== null ? 10 + 25 * pw : IN.throughDownAt !== null ? 18 + 20 * pw : 8 + 32 * pw;
-      ctx.save(); ctx.globalAlpha = 0.7; ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(1.5, s * 0.18); ctx.setLineDash([s * 0.8, s * 0.6]);
-      ctx.beginPath(); ctx.moveTo(X(x), Y(y)); ctx.lineTo(X(x + ddx * len), Y(y + ddy * len)); ctx.stroke(); ctx.restore();
+      const x0 = X(x), y0 = Y(y);
+      const px = -ai.ay, py = ai.ax; // dik yon (falso)
+      const ex = x + ai.ax * ai.len, ey = y + ai.ay * ai.len;
+      const mx = (x + ex) / 2 + px * ai.curve * ai.len * 0.3, my = (y + ey) / 2 + py * ai.curve * ai.len * 0.3;
+      ctx.save(); ctx.globalAlpha = 0.85; ctx.strokeStyle = css('--flood'); ctx.lineWidth = Math.max(2, s * 0.22); ctx.setLineDash([s * 0.8, s * 0.6]); ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(x0, y0); ctx.quadraticCurveTo(X(mx), Y(my), X(ex), Y(ey)); ctx.stroke();
+      ctx.setLineDash([]);
+      // ok ucu
+      const tx = X(ex) - X(mx), ty = Y(ey) - Y(my), tn = Math.hypot(tx, ty) || 1, hx = tx / tn, hy2 = ty / tn, ah = Math.max(5, s * 0.9);
+      ctx.fillStyle = css('--flood');
+      ctx.beginPath(); ctx.moveTo(X(ex), Y(ey)); ctx.lineTo(X(ex) - hx * ah - hy2 * ah * 0.6, Y(ey) - hy2 * ah + hx * ah * 0.6); ctx.lineTo(X(ex) - hx * ah + hy2 * ah * 0.6, Y(ey) - hy2 * ah - hx * ah * 0.6); ctx.closePath(); ctx.fill();
+      ctx.restore();
     }
-    // butonlar
+    // butonlar: elmas; vurus surerken basili olan parlak, digerleri silik (kilitli)
     for (const b of g.btns) {
-      const held = b.id === 'pass' ? IN.passDownAt : b.id === 'through' ? IN.throughDownAt : b.id === 'shoot' ? IN.shotDownAt : null;
-      const down = [...IN.ptrBtn.values()].includes(b.id) || (b.id === 'sprint' && IN.sprint) || (b.id === 'through' && IN.press && !g.atk) || held !== null;
-      ctx.globalAlpha = down ? 0.7 : 0.38; ctx.fillStyle = b.ctx ? (g.atk ? '#f2d94e' : '#6fa8ff') : '#ffffff';
+      const heldKick = IN.kick && IN.kick.id === b.id;
+      const locked = IN.kick && !heldKick;
+      const down = heldKick || [...IN.ptrBtn.values()].some((q) => q.id === b.id) || (b.def === 'press' && IN.press && !g.atk) || (IN.kbKick && IN.kbKick.id === b.id);
+      ctx.globalAlpha = locked ? 0.14 : down ? 0.75 : 0.38; ctx.fillStyle = g.atk ? '#f2d94e' : '#6fa8ff';
       ctx.beginPath(); ctx.arc(b.x * dpr, b.y * dpr, b.r * dpr, 0, Math.PI * 2); ctx.fill();
-      ctx.globalAlpha = 0.95; ctx.fillStyle = '#111'; ctx.font = `700 ${Math.round((b.id === 'switch' ? 10.5 : 12) * u)}px ${css('--font-body')}`; ctx.fillText(b.lab, b.x * dpr, b.y * dpr);
-      if (held !== null && g.atk) {
-        const pw = powerOf(held, b.id);
-        ctx.globalAlpha = 1; ctx.strokeStyle = '#fff'; ctx.lineWidth = 4 * u;
-        ctx.beginPath(); ctx.arc(b.x * dpr, b.y * dpr, b.r * dpr + 5 * u, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * pw); ctx.stroke();
-      }
+      ctx.globalAlpha = locked ? 0.3 : 0.95; ctx.fillStyle = '#111'; ctx.font = `700 ${Math.round((b.lab.length > 6 ? 10.5 : 12) * u)}px ${css('--font-body')}`; ctx.fillText(b.lab, b.x * dpr, b.y * dpr);
     }
     ctx.globalAlpha = 1;
     // duran top / kaleci: pas zorunlu, geri sayim
     const ui = userCarrierInfo(st, PLAY.side);
     if (ui && ui.mustPlay) {
-      ctx.fillStyle = 'rgba(10,12,16,.7)'; ctx.fillRect(Wc / 2 - 110 * u, Hc - 44 * u, 220 * u, 30 * u);
+      ctx.fillStyle = 'rgba(10,12,16,.7)'; ctx.fillRect(Wc / 2 - 110 * u, Hc - (SA.b + 44) * u, 220 * u, 30 * u);
       ctx.fillStyle = '#fff'; ctx.font = `600 ${Math.round(13 * u)}px ${css('--font-body')}`;
-      ctx.fillText(`Pas ver · ${Math.ceil(ui.left)} sn sonra otomatik`, Wc / 2, Hc - 29 * u);
+      ctx.fillText(`Pas ver · ${Math.ceil(ui.left)} sn sonra otomatik`, Wc / 2, Hc - (SA.b + 29) * u);
     }
+    if (st.celebrate) { ctx.fillStyle = 'rgba(255,255,255,.7)'; ctx.font = `600 ${Math.round(12 * u)}px ${css('--font-body')}`; ctx.fillText('dokun: sevinci atla', Wc / 2, Hc - (SA.b + 24) * u); }
     if (st.done) { ctx.fillStyle = 'rgba(10,12,16,.75)'; ctx.fillRect(Wc / 2 - 150 * u, Hc / 2 - 24 * u, 300 * u, 48 * u); ctx.fillStyle = '#fff'; ctx.font = `700 ${Math.round(16 * u)}px ${css('--font-body')}`; ctx.fillText('Maç bitti · sol üstten çık', Wc / 2, Hc / 2); }
   }
   if (CAM.mode === 'smart') {
@@ -4286,7 +4535,7 @@ function drawPhoneOverlay(Wc, Hc, s, X, Y, ox, oy, pos) {
       ctx.fillText(p.num, cx - Math.cos(an) * 16 * u, cy - Math.sin(an) * 16 * u);
     });
     // radar (sol ust)
-    const rw = 110 * u, rh = rw * 68 / 105, rx = 70 * u, ry = 10 * u;
+    const rw = 110 * u, rh = rw * 68 / 105, rx = (SA.l + 70) * u, ry = (SA.t + 10) * u;
     ctx.fillStyle = 'rgba(10,12,16,.55)'; ctx.fillRect(rx - 3 * u, ry - 3 * u, rw + 6 * u, rh + 6 * u);
     ctx.fillStyle = 'rgba(60,120,60,.9)'; ctx.fillRect(rx, ry, rw, rh);
     ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 1; ctx.strokeRect(rx, ry, rw, rh);

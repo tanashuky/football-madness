@@ -1,6 +1,6 @@
 import { simulate, makeTeam, NAMES_B, P } from './engine.ts';
 const n = +(process.argv[2] ?? 150);
-for (const dt of [0.5, 0.1]) {
+for (const dt of [0.1, 0.05]) {
   P.dt = dt;
   let g = 0, sh = 0, fo = 0, pas = 0, pok = 0, sp = 0, co = 0, w0 = 0, w1 = 0, du = 0;
   for (let i = 0; i < n; i++) {
