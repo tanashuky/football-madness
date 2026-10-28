@@ -1,0 +1,1097 @@
+<title>Football Madness Prototip</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
+<style>
+/* Yerlesim: gece maci. Ustte skorbord seridi, solda saha, sagda (mobilde altta) kontrol ve istatistik paneli. */
+:root {
+  --night: #0e1512;      /* sayfa zemini: yesile kacan gece */
+  --stand: #17211d;      /* paneller: tribun golgesi */
+  --line: #2a3a33;       /* ince ayiricilar */
+  --chalk: #e9efe9;      /* ana metin: kirec beyazi */
+  --muted: #93a59b;      /* ikincil metin */
+  --grass: #2f6b3a;      /* saha */
+  --grass2: #2a6034;     /* saha seridi */
+  --flood: #f2d94e;      /* vurgu: projektor sarisi (top, canli) */
+  --home: #d2433d;       /* ev sahibi */
+  --away: #3b6fd6;       /* deplasman */
+  --good: #5fc38a;
+  --warn: #e0a63f;
+  --font-display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --font-body: "Barlow", "Segoe UI", system-ui, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { background: var(--night); color: var(--chalk); }
+body {
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.45;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 12px 32px;
+}
+.wrap { max-width: 1240px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.brand { font-family: var(--font-display); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; font-size: 18px; }
+.brand span { color: var(--flood); }
+.tabs { display: flex; gap: 4px; background: var(--stand); padding: 4px; border-radius: 8px; }
+.tabs button { font: 600 14px/1 var(--font-body); color: var(--muted); background: none; border: 0; padding: 9px 14px; border-radius: 6px; cursor: pointer; }
+.tabs button[aria-selected="true"] { background: var(--line); color: var(--chalk); }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--flood); outline-offset: 2px; }
+
+/* skorbord */
+.board { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; background: var(--stand); border-radius: 10px; padding: 10px 16px; font-family: var(--font-display); }
+.board .tm { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 20px; letter-spacing: .03em; text-transform: uppercase; min-width: 0; }
+.board .tm.b { justify-content: flex-end; }
+.board .tm i { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+.board .tm .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.score { display: flex; align-items: baseline; gap: 14px; font-variant-numeric: tabular-nums; }
+.score b { font-size: 38px; font-weight: 700; line-height: 1; }
+.score .clock { font-size: 15px; color: var(--flood); letter-spacing: .08em; min-width: 56px; text-align: center; }
+
+.main { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 14px; align-items: start; }
+@media (max-width: 900px) { .main { grid-template-columns: minmax(0, 1fr); } }
+.pitchbox { background: var(--stand); border-radius: 10px; padding: 10px; min-width: 0; }
+canvas { display: block; width: 100%; height: auto; border-radius: 6px; }
+body.play { overflow: hidden; touch-action: none; overscroll-behavior: none; }
+#pitch { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+body.play #pitch { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; border-radius: 0; z-index: 900; touch-action: none; }
+#exitPlay { position: fixed; top: max(8px, env(safe-area-inset-top, 0px)); left: max(10px, env(safe-area-inset-left, 0px)); z-index: 950; display: none; font: 600 13px/1 var(--font-body); color: var(--chalk); background: rgba(10,12,16,.7); border: 1px solid rgba(255,255,255,.2); border-radius: 8px; padding: 9px 12px; }
+body.play #exitPlay { display: block; }
+#rotate { position: fixed; inset: 0; z-index: 980; display: none; align-items: center; justify-content: center; text-align: center; background: var(--night); color: var(--chalk); font: 600 18px/1.4 var(--font-body); padding: 24px; }
+body.play.portrait #rotate { display: flex; }
+.playbox label { display: block; margin: 6px 0; }
+.playbox select { width: 100%; }
+.keys { color: var(--muted); font-size: 12px; line-height: 1.5; margin: 8px 0 0; }
+.ctrl { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+.btn { font: 600 14px/1 var(--font-body); color: var(--chalk); background: var(--line); border: 0; border-radius: 6px; padding: 10px 14px; cursor: pointer; }
+.btn.prim { background: var(--flood); color: #1b1a0c; }
+.seg { display: flex; background: var(--night); border-radius: 6px; padding: 3px; gap: 2px; }
+.seg button { font: 600 13px/1 var(--font-body); color: var(--muted); background: none; border: 0; padding: 7px 10px; border-radius: 4px; cursor: pointer; font-variant-numeric: tabular-nums; }
+label.chk { display: flex; flex-direction: row; gap: 8px; align-items: center; }
+.seg button[aria-pressed="true"] { background: var(--line); color: var(--chalk); }
+.chk { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; cursor: pointer; }
+.hint { color: var(--muted); font-size: 12.5px; margin-left: auto; }
+
+.side { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.panel { background: var(--stand); border-radius: 10px; padding: 14px; }
+.panel h3 { margin: 0 0 10px; font: 600 13px/1 var(--font-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.stat { display: grid; grid-template-columns: 44px 1fr 44px; gap: 8px; align-items: center; font-variant-numeric: tabular-nums; font-size: 14px; padding: 3px 0; }
+.stat .v { text-align: center; font-weight: 600; }
+.stat .lab { text-align: center; color: var(--muted); font-size: 12.5px; }
+.bar { grid-column: 1 / -1; height: 4px; border-radius: 2px; background: var(--away); overflow: hidden; margin-top: -2px; }
+.bar i { display: block; height: 100%; background: var(--home); }
+.tabs2 { display: flex; gap: 4px; margin-bottom: 10px; }
+.tab2 { font: inherit; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: none; border: 0; padding: 4px 8px; border-radius: 6px; cursor: pointer; }
+.tab2[aria-pressed="true"] { color: var(--chalk); background: var(--line); }
+.log.cm div { grid-template-columns: 34px 1fr; }
+.log.cm .hl { color: var(--chalk); font-weight: 600; }
+[hidden] { display: none !important; }
+.log { max-height: 220px; overflow-y: auto; font-size: 13.5px; display: flex; flex-direction: column; gap: 4px; }
+.log div { display: grid; grid-template-columns: 34px 1fr; gap: 6px; }
+.log .t { color: var(--muted); font-variant-numeric: tabular-nums; }
+.log .goal { color: var(--flood); font-weight: 600; }
+.setup { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+.setup .col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.setup .h { font-family: var(--font-display); font-weight: 600; font-size: 16px; text-transform: uppercase; letter-spacing: .04em; display: flex; align-items: center; gap: 6px; }
+.setup .h i { width: 10px; height: 10px; border-radius: 50%; }
+.setup label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); }
+.setup select, .setup input[type="range"] { width: 100%; font: 500 13px var(--font-body); color: var(--chalk); background: var(--night); border: 1px solid var(--line); border-radius: 5px; padding: 5px; }
+.setup output { color: var(--chalk); font-variant-numeric: tabular-nums; }
+
+/* test sekmesi */
+.report { display: flex; flex-direction: column; gap: 14px; }
+.report .lead { font-size: 17px; max-width: 70ch; }
+.report .lead b { color: var(--flood); font-weight: 600; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 900px) { .grid2 { grid-template-columns: minmax(0, 1fr); } }
+.chart { width: 100%; overflow-x: auto; }
+.chart svg { display: block; width: 100%; min-width: 320px; height: auto; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); margin-top: 6px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.tbl { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+.tbl th { text-align: left; font-weight: 500; color: var(--muted); font-size: 12.5px; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.tbl td { padding: 7px 8px; border-bottom: 1px solid var(--line); }
+.pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 10px; }
+.pill.ok { background: color-mix(in srgb, var(--good) 22%, transparent); color: var(--good); }
+.pill.wa { background: color-mix(in srgb, var(--warn) 22%, transparent); color: var(--warn); }
+.tblwrap { overflow-x: auto; }
+.note { color: var(--muted); font-size: 13.5px; max-width: 75ch; }
+@media (max-width: 520px) {
+  .board .tm { font-size: 16px; }
+  .score b { font-size: 30px; }
+  .setup { grid-template-columns: 1fr; }
+  .hint { margin-left: 0; width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <div class="top">
+    <div class="brand">Football <span>Madness</span> · prototip</div>
+    <div class="tabs" role="tablist">
+      <button role="tab" id="tab-izle" aria-selected="true" aria-controls="v-izle">Maçı izle</button>
+      <button role="tab" id="tab-test" aria-selected="false" aria-controls="v-test">Test sonuçları</button>
+    </div>
+  </div>
+
+  <section id="v-izle" role="tabpanel" aria-labelledby="tab-izle" style="display:flex;flex-direction:column;gap:14px">
+    <div class="board" aria-live="polite">
+      <div class="tm"><i style="background:var(--home)"></i><span class="nm" id="nA">Kartal SK</span></div>
+      <div class="score"><b id="gA">0</b><span class="clock" id="clk">00:00</span><b id="gB">0</b></div>
+      <div class="tm b"><span class="nm" id="nB">Liman FK</span><i style="background:var(--away)"></i></div>
+    </div>
+    <div class="main">
+      <div class="pitchbox">
+        <canvas id="pitch" width="1050" height="680" aria-label="Maçın üstten görünümü"></canvas>
+        <div class="ctrl">
+          <button class="btn prim" id="play">Duraklat</button>
+          <div class="seg" role="group" aria-label="Hız">
+            <button data-sp="1" aria-pressed="true" title="Deneme: gerçek hızın %39 üstü, maç yaklaşık 11 dakika sürer">1×</button>
+            <button data-sp="4" aria-pressed="false">4×</button>
+            <button data-sp="16" aria-pressed="false">16×</button>
+          </div>
+          <button class="btn" id="again">Yeni maç</button>
+          <label class="chk"><input type="checkbox" id="lines" checked> Taktik katmanı</label>
+          <label class="chk"><input type="checkbox" id="ko"> Kupa maçı (eşitlikte uzatma + penaltılar)</label>
+          <span class="hint" id="seedtxt">Maç #1</span>
+        </div>
+        <p class="note" style="margin:8px 2px 0">Zaman: Bu deneme sürümünde 1× gerçek hızın %39 üstünde oynar; maç yaklaşık 11 dakika sürer. Devre arasında takımlar taraf değiştirir. Sarı kartlı oyuncunun üstünde küçük bir kart görünür. Çemberler müdahaleleri gösterir: yeşil temiz müdahale, sarı faul, kırmızı kartlık sert müdahale. Küçük beyaz işaret pas arası kesme, beyaz patlama vuruş, parlama kurtarış.</p>
+      </div>
+      <div class="side">
+        <div class="panel">
+          <h3>Canlı istatistik</h3>
+          <div id="stats"></div>
+        </div>
+        <div class="panel">
+          <div class="tabs2"><button class="tab2" data-lt="log" aria-pressed="true">Maç olayları</button><button class="tab2" data-lt="cm" aria-pressed="false">Anlatım</button></div>
+          <div class="log" id="log"></div>
+          <div class="log cm" id="cm" hidden></div>
+        </div>
+        <div class="panel playbox">
+          <h3>Oyna (Dilim 0: dokunmatik kontrol)</h3>
+          <label for="pAssistP">Pas yardımı<select id="pAssistP"><option value="2" selected>Tam</option><option value="1">Kısmi</option><option value="0">Kapalı</option></select></label>
+          <label for="pAssistS">Şut yardımı<select id="pAssistS"><option value="2" selected>Tam</option><option value="1">Kısmi</option><option value="0">Kapalı</option></select></label>
+          <label for="pMin">Maç süresi<select id="pMin"><option value="6">6 dakika</option><option value="10" selected>10 dakika</option><option value="15">15 dakika (online ölçek)</option></select></label>
+          <label for="pCam">Kamera<select id="pCam"><option value="full" selected>Tam saha</option><option value="length">Tam boy</option><option value="near">Yakın</option></select></label>
+          <div class="ctrl"><button class="btn prim" id="playBtn">Oynamaya başla (Kartal SK, Team play)</button></div>
+          <p class="keys">Telefon: sol yarıda parmağını bastığın yer joystick olur; sağda butonlar. Hücumda Pas / Ara pas / Şut (basılı tut = güç) / Sprint; savunmada Müdahale / Kaydır / Baskı (basılı tut) / Değiştir. Klavye: ok tuşları veya WASD; J pas-müdahale, L ara pas-baskı, K şut-kaydır, Shift sprint, Boşluk oyuncu değiştir, C kamera, Esc çık.</p>
+        </div>
+        <div class="panel">
+          <h3>Takımlar</h3>
+          <div class="setup" id="setup"></div>
+          <div class="ctrl"><button class="btn" id="apply">Bu ayarlarla başlat</button></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="v-test" role="tabpanel" aria-labelledby="tab-test" hidden>
+    <div class="report" id="report"></div>
+  </section>
+</div>
+
+<button id="exitPlay" type="button">Çık</button>
+<div id="rotate">Telefonu yatay çevir.<br><span style="font-weight:400;font-size:14px;color:var(--muted)">Oyun yatay oynanır; uygulamada yön kilitli olacak.</span></div>
+<script>
+__ENGINE__
+</script>
+<script>
+const SUMMARY = __SUMMARY__;
+const BALANCE = __BALANCE__;
+const MATCHUP = __MATCHUP__;
+
+// ---------- Sekmeler ----------
+const tabs = [['tab-izle', 'v-izle', 'izle'], ['tab-test', 'v-test', 'test']];
+function showTab(key) {
+  for (const [tb, pn, k] of tabs) {
+    const on = k === key;
+    document.getElementById(tb).setAttribute('aria-selected', on);
+    document.getElementById(pn).hidden = !on;
+  }
+}
+for (const [tb, , k] of tabs) document.getElementById(tb).addEventListener('click', () => showTab(k));
+if (location.hash === '#test') showTab('test');
+
+// ---------- Takim ayarlari ----------
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const cfg = [
+  { name: 'Kartal SK', short: 'KSK', gg: 62, formation: '4-3-3', press: 1, line: 1, style: 1, tempo: 1, U: 60, T: 60, F: 60, M: 70, home: true },
+  { name: 'Liman FK', short: 'LFK', gg: 60, formation: '4-4-2', press: 1, line: 1, style: 1, tempo: 1, U: 60, T: 60, F: 60, M: 70, home: false },
+];
+const opts = {
+  press: ['Düşük pres', 'Orta pres', 'Yüksek pres'],
+  line: ['Derin savunma', 'Orta hat', 'Önde savunma'],
+  style: ['Kısa pas', 'Dengeli', 'Direkt oyun'],
+  tempo: ['Yavaş tempo', 'Normal tempo', 'Hızlı tempo'],
+  width: ['Dar', 'Normal', 'Geniş'],
+  compact: ['Kompakt', 'Normal', 'Açık'],
+  trap: ['Kapalı', 'Açık'],
+  fb: ['Savunmada kal', 'Dengeli', 'Bindir'],
+  cm: ['Geride kal', 'Dengeli', 'Ceza sahasına koş'],
+  wing: ['Çizgide kal', 'İçe kat'],
+  runs: ['Güvenli', 'Dengeli', 'Riskli (ofsayt sınırında)'],
+  spBox: ['3 kişi', '5 kişi', '7 kişi'],
+};
+const optLabels = { press: 'Pres', line: 'Savunma hattı', style: 'Oyun stili', tempo: 'Tempo', width: 'Genişlik', compact: 'Hatlar arası mesafe', trap: 'Ofsayt tuzağı', fb: 'Bekler', cm: 'Merkez orta saha', wing: 'Kanatlar', runs: 'Forvet koşuları', spBox: 'Duran topta ceza sahasına' };
+const optDefault = { press: 1, line: 1, style: 1, tempo: 1, width: 1, compact: 1, trap: 0, fb: 1, cm: 1, wing: 0, runs: 1, spBox: 1 };
+const mets = [['U', 'Takım uyumu'], ['T', 'Taktik kapasite'], ['F', 'Fiziksel kapasite'], ['M', 'Moral']];
+// bot zekâ seviyeleri (Maç Motoru sekmesi): karar hata payı çarpanı ve rakibi okuma doğruluğu; güç değerlerine dokunmaz
+// hata payi carpanlari onerilen degerler (dokumandaki x1,6..x0,7 olcumde fark yaratmadi; onay bekliyor)
+const AI_LEVELS = [
+  { n: 'Eşit (test, T/100 okuma)', ai: null },
+  { n: 'Amatör (hata ×3, okuma %30)', ai: { noiseMult: 3, readAcc: 0.3 } },
+  { n: 'Yarı profesyonel (×2, %45)', ai: { noiseMult: 2, readAcc: 0.45 } },
+  { n: 'Profesyonel (×1, %60)', ai: { noiseMult: 1, readAcc: 0.6 } },
+  { n: 'Dünya klası (×0,8, %75)', ai: { noiseMult: 0.8, readAcc: 0.75 } },
+  { n: 'Efsane (×0,6, %90)', ai: { noiseMult: 0.6, readAcc: 0.9 } },
+];
+// durum taktikleri: koşul tutunca yedek taktiğe geçiş (5 dk uyum cezası)
+const SIT_RULES = [
+  { n: 'Yok', s: null },
+  { n: "70'ten sonra öndeysen kapan (derin hat, düşük pres, 5-3-2)", s: [{ when: 'leading', fromMinute: 70, tactic: { line: 0, press: 0, tempo: 0 }, formation: '5-3-2' }] },
+  { n: "70'ten sonra gerideysen bastır (önde hat, yüksek pres, hızlı)", s: [{ when: 'trailing', fromMinute: 70, tactic: { line: 2, press: 2, tempo: 2, runs: 2 } }] },
+  { n: "60'tan sonra berabereysen risk al (bindiren bek, ceza sahasına orta saha)", s: [{ when: 'drawing', fromMinute: 60, tactic: { fb: 2, cm: 2, runs: 2 } }] },
+];
+function renderSetup() {
+  const root = document.getElementById('setup');
+  root.innerHTML = '';
+  cfg.forEach((c, i) => {
+    const col = document.createElement('div');
+    col.className = 'col';
+    const color = i === 0 ? 'var(--home)' : 'var(--away)';
+    let h = `<div class="h"><i style="background:${color}"></i>${c.name}</div>`;
+    h += `<label for="gg${i}">Futbolcu gücü (GG) <output id="ggo${i}">${c.gg}</output><input type="range" id="gg${i}" min="45" max="85" value="${c.gg}"></label>`;
+    h += `<label for="fm${i}">Formasyon<select id="fm${i}">${FORMATION_LIST.map((f) => `<option ${f === c.formation ? 'selected' : ''}>${f}</option>`).join('')}</select></label>`;
+    for (const k of Object.keys(opts)) h += `<label for="${k}${i}">${optLabels[k]}<select id="${k}${i}">${opts[k].map((o, j) => `<option value="${j}" ${j === (c[k] ?? optDefault[k]) ? 'selected' : ''}>${o}</option>`).join('')}</select></label>`;
+    for (const [k, lab] of mets) h += `<label for="${k}${i}">${lab} <output id="${k}o${i}">${c[k]}</output><input type="range" id="${k}${i}" min="20" max="100" value="${c[k]}"></label>`;
+    h += `<label class="chk" for="home${i}"><input type="checkbox" id="home${i}" ${c.home ? 'checked' : ''}> İç saha (stadyum 8, taraftar morali 85)</label>`;
+    h += `<label for="ai${i}">Zekâ (bot seviyesi)<select id="ai${i}">${AI_LEVELS.map((o, j) => `<option value="${j}" ${j === (c.ai ?? 0) ? 'selected' : ''}>${o.n}</option>`).join('')}</select></label>`;
+    h += `<label for="sit${i}">Durum taktiği<select id="sit${i}">${SIT_RULES.map((o, j) => `<option value="${j}" ${j === (c.sit ?? 0) ? 'selected' : ''}>${o.n}</option>`).join('')}</select></label>`;
+    col.innerHTML = h;
+    root.appendChild(col);
+    col.querySelector('#gg' + i).addEventListener('input', (e) => (col.querySelector('#ggo' + i).textContent = e.target.value));
+    for (const [k] of mets) col.querySelector('#' + k + i).addEventListener('input', (e) => (col.querySelector('#' + k + 'o' + i).textContent = e.target.value));
+    col.querySelector('#home' + i).addEventListener('change', (e) => { if (e.target.checked) { const o = document.getElementById('home' + (1 - i)); if (o) o.checked = false; } });
+  });
+}
+function readSetup() {
+  cfg.forEach((c, i) => {
+    c.gg = +document.getElementById('gg' + i).value;
+    c.formation = document.getElementById('fm' + i).value;
+    for (const k of Object.keys(opts)) c[k] = +document.getElementById(k + i).value;
+    for (const [k] of mets) c[k] = +document.getElementById(k + i).value;
+    c.home = document.getElementById('home' + i).checked;
+    c.ai = +document.getElementById('ai' + i).value;
+    c.sit = +document.getElementById('sit' + i).value;
+  });
+  knockout = document.getElementById('ko').checked;
+}
+function buildTeams() {
+  return cfg.map((c, i) =>
+    makeTeam(c.name, c.short, c.gg, { formation: c.formation, U: c.U, T: c.T, F: c.F, M: c.M, ...(c.home ? { home: true, stadium: 8, TM: 85 } : {}), ...(AI_LEVELS[c.ai ?? 0].ai ? { ai: AI_LEVELS[c.ai ?? 0].ai } : {}), ...(SIT_RULES[c.sit ?? 0].s ? { situational: SIT_RULES[c.sit ?? 0].s } : {}), tactic: Object.fromEntries(Object.keys(opts).map((k) => [k, c[k] ?? optDefault[k]])) }, i === 0 ? NAMES_A : NAMES_B, i === 0 ? css('--home') : css('--away'))
+  );
+}
+
+// ---------- Mac dongusu ----------
+let st, seed = 1, speed = 1, playing = true, acc = 0, prev = null, last = performance.now(), knockout = false;
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+function snapshot() { return st.players.map((p) => [p.x, p.y, 0]).concat([[st.ball.x, st.ball.y, st.ballZ]]); }
+function newMatch(s) {
+  seed = s;
+  const [a, b] = buildTeams();
+  st = createMatch(a, b, seed, { knockout });
+  prev = snapshot();
+  acc = 0;
+  logCount = 0;
+  evSeen = 0; lastDeadStart = -1; banners.length = 0;
+  document.getElementById('log').innerHTML = '';
+  document.getElementById('cm').innerHTML = '';
+  cmLog = 0; cmEv = 0; trail.length = 0;
+  document.getElementById('nA').textContent = a.name;
+  document.getElementById('nB').textContent = b.name;
+  document.getElementById('seedtxt').textContent = 'Maç #' + seed + ' · aynı numara her zaman aynı maçı oynatır';
+  setPlaying(true);
+  updateHud();
+}
+function setPlaying(v) { playing = v; document.getElementById('play').textContent = v ? 'Duraklat' : (st && st.done ? 'Bitti' : 'Devam'); }
+document.getElementById('play').addEventListener('click', () => { if (!st.done) setPlaying(!playing); });
+document.getElementById('again').addEventListener('click', () => newMatch(seed + 1));
+document.getElementById('apply').addEventListener('click', () => { readSetup(); newMatch(seed); });
+for (const b of document.querySelectorAll('[data-sp]')) b.addEventListener('click', () => {
+  speed = +b.dataset.sp;
+  for (const o of document.querySelectorAll('[data-sp]')) o.setAttribute('aria-pressed', o === b);
+});
+
+// Zaman: fizik gercek zamanli (1x'te ekranda 1 saniye = sahada 1 saniye), mac saati 6 kat hizli akar.
+// Deneme surumunde 1x %20 hizli oynar, mac yaklasik 12,5 dakika surer. 4x ve 16x yalniz izlemek icindir.
+const STEPS_PER_SEC = 2 * 1.39; // motor adimi 0,5 fiziksel saniye; deneme: 1x %39 hizli (mac ~11 dk)
+const isDead = () => st.t < st.restartUntil && !st.flight;
+function frame(now) {
+  const dtReal = Math.min(0.1, (now - last) / 1000);
+  last = now;
+  let alpha = 1;
+  if (playing && !st.done) {
+    acc += dtReal * (PLAY.on ? 1 / st.dt : STEPS_PER_SEC) * (PLAY.on ? 1 : speed);
+    let guard = 0;
+    while (acc >= 1 && !st.done && guard++ < 200) {
+      prev = snapshot();
+      if (PLAY.on) feedInput();
+      step(st);
+      acc -= 1;
+      watchEvents();
+    }
+    alpha = Math.min(1, acc);
+    if (st.done) setPlaying(false);
+    updateHud();
+  }
+  draw(playing && !reduce ? alpha : 1, now);
+  requestAnimationFrame(frame);
+}
+
+// ---------- Olay yazilari ----------
+// ekranin ortasinda buyuk cikip hizla solar; gol icin patlama
+const banners = [];
+const trail = [];
+let lastDeadStart = -1, evSeen = 0;
+function banner(text, kind, sub) { banners.push({ text, kind, sub, t0: performance.now() }); if (banners.length > 3) banners.shift(); }
+function watchEvents() {
+  for (; evSeen < st.events.length; evSeen++) {
+    const e = st.events[evSeen];
+    const tm = st.teams[e.side];
+    const pl = e.player ? st.players.find((p) => p.side === e.side && p.num === e.player) : null;
+    if (e.type === 'goal') banner('GOL!', 'goal', `${tm.short} · #${pl ? pl.num + ' ' + pl.name : ''}`);
+    else if (e.type === 'yellow') banner('SARI KART', 'yellow', `${tm.short} · #${e.player}`);
+    else if (e.type === 'red') banner('KIRMIZI KART', 'red', `${tm.short} · #${e.player}`);
+    else if (e.type === 'penalty') banner('PENALTI', 'info', tm.short);
+    else if (e.type === 'half') banner('DEVRE ARASI', 'info');
+    else if (e.type === 'end') banner('MAÇ SONU', 'info');
+  }
+  if (st.deadStart !== lastDeadStart && isDead() && st.deadReason && st.deadReason !== 'GOL' && st.deadReason !== 'Penaltı') {
+    banner(st.deadReason.toUpperCase(), 'info');
+  }
+  lastDeadStart = st.deadStart;
+}
+
+// ---------- Cizim ----------
+const cv = document.getElementById('pitch');
+const ctx = cv.getContext('2d');
+const PADX = 3.2, PADY = 2.2; // saha cevresi (m): kaleler ve kenar
+// kamera (telefon onizlemesi icin): 'full' tum saha, 'smart' topu izleyen kamera (w: gorunen genislik, m)
+const CAM = { mode: 'full', w: 65, cx: 52.5, cy: 34, phone: false, overlay: false };
+function fitCanvas() {
+  const w = cv.clientWidth;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  cv.width = Math.round(w * dpr);
+  cv.height = CAM.phone ? Math.round(cv.clientHeight * dpr) : Math.round((w * (68 + 2 * PADY)) / (105 + 2 * PADX) * dpr);
+}
+addEventListener('resize', fitCanvas);
+function draw(alpha, now = performance.now()) {
+  const Wc = cv.width, Hc = cv.height;
+  const PW = 105 + 2 * PADX, PH = 68 + 2 * PADY;
+  let s, ox, oy;
+  if (CAM.mode === 'smart') {
+    s = Wc / CAM.w;
+    const vh = Hc / s;
+    // hedef: top + hiz yonunde hafif onden bakis; yumusak takip
+    const tx = st.ball.x + (st.ball.vx ?? 0) * 0.6, ty = st.ball.y + (st.ball.vy ?? 0) * 0.6;
+    CAM.cx += (tx - CAM.cx) * 0.12; CAM.cy += (ty - CAM.cy) * 0.12;
+    ox = Math.max(-PADX, Math.min(105 + PADX - CAM.w, CAM.cx - CAM.w / 2));
+    oy = vh >= PH ? -PADY - (vh - PH) / 2 : Math.max(-PADY, Math.min(68 + PADY - vh, CAM.cy - vh / 2));
+  } else {
+    s = Math.min(Wc / PW, Hc / PH);
+    ox = -PADX - (Wc / s - PW) / 2; oy = -PADY - (Hc / s - PH) / 2;
+  }
+  const X = (x) => (x - ox) * s, Y = (y) => (y - oy) * s;
+  // zemin: saha disi koyu cim, saha icinde seritler
+  ctx.fillStyle = css('--grass2');
+  ctx.fillRect(0, 0, Wc, Hc);
+  ctx.fillStyle = 'rgba(0,0,0,.18)';
+  ctx.fillRect(0, 0, Wc, Hc);
+  const g1 = css('--grass'), g2 = css('--grass2');
+  for (let i = 0; i < 14; i++) { ctx.fillStyle = i % 2 ? g1 : g2; ctx.fillRect(X((i * 105) / 14), Y(0), (105 / 14) * s + 1, 68 * s); }
+  ctx.strokeStyle = 'rgba(255,255,255,.8)';
+  ctx.lineWidth = Math.max(1, s * 0.15);
+  const R = (x, y, w, h) => ctx.strokeRect(X(x), Y(y), w * s, h * s);
+  R(0, 0, 105, 68);
+  ctx.beginPath(); ctx.moveTo(X(52.5), Y(0)); ctx.lineTo(X(52.5), Y(68)); ctx.stroke();
+  ctx.beginPath(); ctx.arc(X(52.5), Y(34), 9.15 * s, 0, Math.PI * 2); ctx.stroke();
+  R(0, 13.84, 16.5, 40.32); R(88.5, 13.84, 16.5, 40.32); R(0, 24.84, 5.5, 18.32); R(99.5, 24.84, 5.5, 18.32);
+  ctx.beginPath(); ctx.arc(X(11), Y(34), 9.15 * s, -0.93, 0.93); ctx.stroke();
+  ctx.beginPath(); ctx.arc(X(94), Y(34), 9.15 * s, Math.PI - 0.93, Math.PI + 0.93); ctx.stroke();
+  for (const [cx, cy, a0] of [[0, 0, 0], [105, 0, Math.PI / 2], [105, 68, Math.PI], [0, 68, -Math.PI / 2]]) { ctx.beginPath(); ctx.arc(X(cx), Y(cy), 1 * s, a0, a0 + Math.PI / 2); ctx.stroke(); }
+  ctx.fillStyle = 'rgba(255,255,255,.85)';
+  for (const x of [11, 94, 52.5]) { ctx.beginPath(); ctx.arc(X(x), Y(34), s * 0.35, 0, Math.PI * 2); ctx.fill(); }
+  // kaleler: ag ve direkler
+  for (const [gx, dir] of [[0, -1], [105, 1]]) {
+    const x0 = dir < 0 ? X(gx - 2) : X(gx), w = 2 * s, y0 = Y(30.34), h = 7.32 * s;
+    ctx.fillStyle = 'rgba(255,255,255,.14)';
+    ctx.fillRect(x0, y0, w, h);
+    ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let k = 1; k < 7; k++) { ctx.moveTo(x0, y0 + (h * k) / 7); ctx.lineTo(x0 + w, y0 + (h * k) / 7); }
+    for (let k = 1; k < 3; k++) { ctx.moveTo(x0 + (w * k) / 3, y0); ctx.lineTo(x0 + (w * k) / 3, y0 + h); }
+    ctx.stroke();
+    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = Math.max(2, s * 0.32);
+    ctx.beginPath();
+    ctx.moveTo(X(gx), y0); ctx.lineTo(dir < 0 ? x0 : x0 + w, y0); ctx.lineTo(dir < 0 ? x0 : x0 + w, y0 + h); ctx.lineTo(X(gx), y0 + h);
+    ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    for (const py of [y0, y0 + h]) { ctx.beginPath(); ctx.arc(X(gx), py, Math.max(2, s * 0.3), 0, Math.PI * 2); ctx.fill(); }
+  }
+
+  const cur = snapshot();
+  // oyuna giren oyuncu (degisiklik) bir onceki karede yoktur: dogrudan yeni konum
+  const pos = (i) => { const pr = prev[i] ?? cur[i]; return [pr[0] + (cur[i][0] - pr[0]) * alpha, pr[1] + (cur[i][1] - pr[1]) * alpha, (pr[2] ?? 0) + ((cur[i][2] ?? 0) - (pr[2] ?? 0)) * alpha]; };
+
+  if (document.getElementById('lines').checked && !PLAY.on) {
+    for (const side of [0, 1]) {
+      const col = side === 0 ? css('--home') : css('--away');
+      ctx.strokeStyle = col; ctx.globalAlpha = 0.45; ctx.lineWidth = Math.max(1, s * 0.18);
+      const groups = [['CB', 'FB'], ['DM', 'CM'], ['W', 'ST']];
+      for (const g of groups) {
+        const pts = st.players.map((p, i) => [p, i]).filter(([p]) => p.side === side && !p.off && g.includes(p.pos)).map(([, i]) => pos(i)).sort((a, b) => a[1] - b[1]);
+        if (pts.length < 2) continue;
+        ctx.beginPath(); pts.forEach(([x, y], k) => (k ? ctx.lineTo(X(x), Y(y)) : ctx.moveTo(X(x), Y(y)))); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+  }
+  const r = Math.max(6, s * 1.0);
+  const order = st.players.map((p, i) => i).sort((a, b) => st.players[b].side - st.players[a].side);
+  order.forEach((i) => {
+    const p = st.players[i];
+    if (p.off) return;
+    const [x, y] = pos(i);
+    // bakis yonu: dairenin kenarinda kucuk bir isaret
+    ctx.beginPath(); ctx.arc(X(x) + p.hx * r * 0.95, Y(y) + p.hy * r * 0.95, Math.max(1.6, r * 0.22), 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.fill();
+    ctx.beginPath(); ctx.arc(X(x), Y(y), r, 0, Math.PI * 2);
+    ctx.fillStyle = p.pos === 'GK' ? (p.side === 0 ? '#7a2622' : '#22406f') : st.teams[p.side].color;
+    ctx.fill();
+    ctx.lineWidth = Math.max(1.5, s * 0.2) * (st.owner === p ? 2 : 1);
+    ctx.strokeStyle = st.owner === p ? '#ffffff' : 'rgba(255,255,255,.75)';
+    ctx.stroke();
+    ctx.fillStyle = '#fff';
+    ctx.font = `600 ${Math.round(r * 1.05)}px ${css('--font-body')}`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(p.num, X(x), Y(y) + r * 0.05);
+    if (p.yellow > 0) {
+      // sari kartli oyuncu: sag ustte kucuk kart
+      const cw = Math.max(5, r * 0.75), ch = cw * 1.35;
+      ctx.save(); ctx.translate(X(x) + r * 0.75, Y(y) - r * 0.85); ctx.rotate(0.2);
+      ctx.fillStyle = '#f6d32d'; ctx.strokeStyle = 'rgba(0,0,0,.55)'; ctx.lineWidth = 1;
+      ctx.fillRect(-cw / 2, -ch / 2, cw, ch); ctx.strokeRect(-cw / 2, -ch / 2, cw, ch);
+      ctx.restore();
+    }
+  });
+  // efektler: mudahale cemberleri (yesil/sari/kirmizi), kesme isareti, vurus patlamasi, kurtaris parlamasi, tac, nisan
+  for (const f of st.fx) {
+    const age = st.t - f.t; // fiziksel saniye
+    const life = { clean: 0.9, foul: 0.9, card: 0.9, int: 0.6, kick: 0.45, save: 0.6, throw: 0.8, aim: 0.7, skill: 0.7 }[f.kind] ?? 0.8;
+    if (age < -0.01 || age > life) continue;
+    const fx = X(f.x), fy = Y(f.y);
+    const fade = age < life * 0.4 ? 1 : 1 - (age - life * 0.4) / (life * 0.6);
+    ctx.save(); ctx.globalAlpha = Math.max(0, fade);
+    if (f.kind === 'clean' || f.kind === 'foul' || f.kind === 'card') {
+      ctx.strokeStyle = f.kind === 'clean' ? css('--good') : f.kind === 'foul' ? '#f6d32d' : '#e5483f';
+      ctx.lineWidth = Math.max(2.5, s * 0.4);
+      ctx.beginPath(); ctx.arc(fx, fy, r * (2.2 + age * 0.6), 0, Math.PI * 2); ctx.stroke();
+    } else if (f.kind === 'int') {
+      // pas arasi kesme: kucuk beyaz carpi
+      const k = r * 0.9; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = Math.max(2, s * 0.3);
+      ctx.beginPath(); ctx.moveTo(fx - k, fy - k); ctx.lineTo(fx + k, fy + k); ctx.moveTo(fx + k, fy - k); ctx.lineTo(fx - k, fy + k); ctx.stroke();
+    } else if (f.kind === 'kick') {
+      // vurus: ayaktan disa firlayan kisa cizgiler
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = Math.max(1.5, s * 0.25);
+      const d0 = r * (0.9 + age * 6), d1 = d0 + r * 1.1;
+      for (let i = 0; i < 8; i++) { const an = (i / 8) * Math.PI * 2 + 0.2; ctx.beginPath(); ctx.moveTo(fx + Math.cos(an) * d0, fy + Math.sin(an) * d0); ctx.lineTo(fx + Math.cos(an) * d1, fy + Math.sin(an) * d1); ctx.stroke(); }
+    } else if (f.kind === 'save') {
+      const g = ctx.createRadialGradient(fx, fy, 0, fx, fy, r * 3.2);
+      g.addColorStop(0, 'rgba(255,255,255,.95)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(fx, fy, r * 3.2, 0, Math.PI * 2); ctx.fill();
+    } else if (f.kind === 'throw') {
+      // tac: oyuncunun basi uzerinde iki kol
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = Math.max(2, s * 0.3); ctx.lineCap = 'round';
+      for (const sg of [-1, 1]) { ctx.beginPath(); ctx.moveTo(fx + sg * r * 0.6, fy - r * 0.6); ctx.lineTo(fx + sg * r * 0.9, fy - r * 2.1); ctx.stroke(); }
+    } else if (f.kind === 'skill') {
+      // calim: kucuk beyaz yay
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = Math.max(2, s * 0.3); ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.arc(fx, fy, r * (1.3 + age * 1.5), Math.PI * 1.1, Math.PI * 1.9); ctx.stroke();
+      ctx.beginPath(); ctx.arc(fx, fy, r * (1.3 + age * 1.5), Math.PI * 0.1, Math.PI * 0.9); ctx.stroke();
+    } else if (f.kind === 'aim') {
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = Math.max(1.5, s * 0.2); ctx.setLineDash([s * 0.6, s * 0.5]);
+      ctx.beginPath(); ctx.arc(fx, fy, r * (1.6 + Math.sin(age * 12) * 0.25), 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.restore();
+  }
+  // top izi: sut, orta ve uzun toplarda kisa sure kalan iz
+  const fl = st.flight;
+  const trailOn = fl && (fl.kind === 'shot' || fl.kind === 'cross' || (fl.air && Math.hypot(fl.toX - fl.fromX, fl.toY - fl.fromY) > 22));
+  const [tbx, tby, tbz] = pos(cur.length - 1);
+  if (trailOn) trail.push({ x: tbx, y: tby, z: tbz, t: now, shot: fl.kind === 'shot' });
+  while (trail.length && now - trail[0].t > 450) trail.shift();
+  if (trail.length > 1) {
+    ctx.save(); ctx.lineCap = 'round';
+    for (let i = 1; i < trail.length; i++) {
+      const q0 = trail[i - 1], q1 = trail[i];
+      const a0 = 1 - (now - q1.t) / 450;
+      ctx.globalAlpha = Math.max(0, a0) * (q1.shot ? 0.85 : 0.5);
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = Math.max(1.5, s * (q1.shot ? 0.45 : 0.25)) * a0;
+      ctx.beginPath(); ctx.moveTo(X(q0.x), Y(q0.y) - q0.z * s * 0.45); ctx.lineTo(X(q1.x), Y(q1.y) - q1.z * s * 0.45); ctx.stroke();
+    }
+    ctx.restore();
+  }
+  // top: yerde golge, havada yukselip buyur
+  const [bx, by, bz] = pos(cur.length - 1);
+  const br = Math.max(3.5, s * 0.55);
+  ctx.beginPath(); ctx.ellipse(X(bx), Y(by), br * (1 + bz * 0.05), br * 0.6 * (1 + bz * 0.05), 0, 0, Math.PI * 2);
+  ctx.fillStyle = `rgba(0,0,0,${Math.max(0.12, 0.35 - bz * 0.03)})`; ctx.fill();
+  const lift = bz * s * 0.45;
+  ctx.beginPath(); ctx.arc(X(bx), Y(by) - lift, br * (1 + bz * 0.13), 0, Math.PI * 2);
+  ctx.fillStyle = '#ffffff'; ctx.fill(); ctx.lineWidth = Math.max(1, s * 0.12); ctx.strokeStyle = '#111'; ctx.stroke();
+  drawBanners(now, Wc, Hc, s, X, Y);
+  if (CAM.overlay) drawPhoneOverlay(Wc, Hc, s, X, Y, ox, oy, pos);
+}
+// ---------- Oyna modu (Dilim 0): tam ekran, dokunmatik ve klavye kontrolu ----------
+const PLAY = { on: false, side: 0, camMode: 'full', minutes: 10 };
+const IN = { joyId: null, joyBase: null, mx: 0, my: 0, sprint: false, press: false, acts: [], shotDownAt: null, passDownAt: null, throughDownAt: null, keys: new Set(), ptrBtn: new Map(), shotPtr: null };
+const POWER_MS = { shoot: 900, pass: 600, through: 600 };
+const powerOf = (t0, kind) => Math.min(1, (performance.now() - t0) / POWER_MS[kind]);
+const CAM_MODES = [['full', 'Tam saha', 65], ['length', 'Tam boy', 108], ['near', 'Yakın', 65]];
+function applyCam(mode) {
+  PLAY.camMode = mode;
+  const m = CAM_MODES.find((c) => c[0] === mode) ?? CAM_MODES[0];
+  CAM.mode = mode === 'full' ? 'full' : 'smart'; CAM.w = m[2];
+  if (st) { CAM.cx = st.ball.x; CAM.cy = st.ball.y; }
+}
+function inPossession() { return PLAY.on && st && ((st.owner && st.owner.side === PLAY.side) || (st.flight && st.flight.receiver && st.flight.receiver.side === PLAY.side)); }
+// kontrol gecmetrisi (CSS px): joystick solda yuzen, sagda 4 buton
+function ctrlGeom() {
+  const Wc = cv.clientWidth, Hc = cv.clientHeight, u = Math.max(0.8, Math.min(1.6, Wc / 852));
+  const r = 30 * u;
+  const bx = Wc - 150 * u, by = Hc - 62 * u;
+  const atk = inPossession();
+  // uclu baglamsal (hucum sari / savunma mavi), Sprint ve Degistir sabit
+  const btns = [
+    { id: 'pass', lab: atk ? 'Pas' : 'Müdahale', x: bx - 56 * u, y: by + 4 * u, r, ctx: true },
+    { id: 'shoot', lab: atk ? 'Şut' : 'Kaydır', x: bx + 56 * u, y: by + 4 * u, r, ctx: true },
+    { id: 'through', lab: atk ? 'Ara' : 'Baskı', x: bx, y: by - 52 * u, r, ctx: true },
+    { id: 'sprint', lab: 'Sprint', x: bx - 128 * u, y: by - 48 * u, r: r * 0.85, ctx: false },
+    { id: 'switch', lab: 'Değiştir', x: bx - 128 * u, y: by - 118 * u, r: r * 0.75, ctx: false },
+  ];
+  return { Wc, Hc, u, btns, atk, cam: { x: Wc - 60 * u, y: 24 * u, w: 100 * u, h: 30 * u } };
+}
+function hitBtn(x, y) {
+  const g = ctrlGeom();
+  for (const b of g.btns) if (Math.hypot(x - b.x, y - b.y) <= b.r * 1.25) return b.id;
+  if (Math.abs(x - g.cam.x) < g.cam.w / 2 && Math.abs(y - g.cam.y) < g.cam.h / 2) return 'cam';
+  return null;
+}
+function pressBtn(id, down, ptrId) {
+  const atk = inPossession();
+  if (id === 'cam') { if (down) { const i = CAM_MODES.findIndex((c) => c[0] === PLAY.camMode); applyCam(CAM_MODES[(i + 1) % CAM_MODES.length][0]); } return; }
+  if (id === 'sprint') { IN.sprint = down; return; }
+  if (id === 'switch') { if (down) IN.acts.push('switch'); return; }
+  if (atk) {
+    // pas ve ara pas: basili tutma suresi mesafe; birakinca cikar
+    if (id === 'pass') { if (down) IN.passDownAt = performance.now(); else if (IN.passDownAt !== null) { IN.acts.push({ act: 'pass', power: powerOf(IN.passDownAt, 'pass') }); IN.passDownAt = null; } }
+    else if (id === 'through') { if (down) IN.throughDownAt = performance.now(); else if (IN.throughDownAt !== null) { IN.acts.push({ act: 'through', power: powerOf(IN.throughDownAt, 'through') }); IN.throughDownAt = null; } }
+    else if (id === 'shoot') { if (down) { IN.shotDownAt = performance.now(); IN.shotPtr = ptrId; } else if (IN.shotDownAt !== null) { IN.acts.push({ act: 'shoot', power: powerOf(IN.shotDownAt, 'shoot') }); IN.shotDownAt = null; IN.shotPtr = null; } }
+  } else {
+    if (id === 'pass' && down) IN.acts.push('tackle');
+    else if (id === 'shoot' && down) IN.acts.push('slide');
+    else if (id === 'through') IN.press = down;
+    if (!down) { IN.shotDownAt = null; IN.passDownAt = null; IN.throughDownAt = null; }
+  }
+}
+function feedInput() {
+  // klavye joystick
+  let mx = IN.mx, my = IN.my;
+  if (IN.joyId === null) {
+    const k = IN.keys;
+    mx = (k.has('ArrowRight') || k.has('KeyD') ? 1 : 0) - (k.has('ArrowLeft') || k.has('KeyA') ? 1 : 0);
+    my = (k.has('ArrowDown') || k.has('KeyS') ? 1 : 0) - (k.has('ArrowUp') || k.has('KeyW') ? 1 : 0);
+    const m = Math.hypot(mx, my); if (m > 1) { mx /= m; my /= m; }
+  }
+  // dunya koordinatlarina: ekranda sag = +x (kamera saha yonunu cevirmez; ikinci yarida taraflar yer degistirir, kullanici hangi kaleye oynadigini gorur)
+  const a = IN.acts.shift();
+  const input = { mx, my, sprint: IN.sprint || IN.keys.has('ShiftLeft') || IN.keys.has('ShiftRight'), press: IN.press, act: a ? (typeof a === 'string' ? a : a.act) : undefined, power: a && typeof a !== 'string' ? a.power : undefined };
+  setInput(st, PLAY.side, input);
+}
+function onPtrDown(e) {
+  if (!PLAY.on) return;
+  e.preventDefault();
+  const x = e.offsetX, y = e.offsetY;
+  const b = hitBtn(x, y);
+  const capture = () => { try { cv.setPointerCapture(e.pointerId); } catch (_) { /* iOS Safari dokunmada yakalamayi reddedebilir */ } };
+  if (b) { IN.ptrBtn.set(e.pointerId, b); pressBtn(b, true, e.pointerId); capture(); return; }
+  if (x < cv.clientWidth * 0.5 && IN.joyId === null) { IN.joyId = e.pointerId; IN.joyBase = [x, y]; IN.mx = 0; IN.my = 0; capture(); }
+}
+function onPtrMove(e) {
+  if (!PLAY.on || e.pointerId !== IN.joyId) return;
+  e.preventDefault();
+  const dx = e.offsetX - IN.joyBase[0], dy = e.offsetY - IN.joyBase[1];
+  const R = 44 * Math.max(0.8, Math.min(1.6, cv.clientWidth / 852));
+  const m = Math.hypot(dx, dy);
+  const k = Math.min(1, m / R);
+  IN.mx = m > 2 ? (dx / m) * k : 0; IN.my = m > 2 ? (dy / m) * k : 0;
+}
+function onPtrUp(e) {
+  if (!PLAY.on) return;
+  if (e.pointerId === IN.joyId) { IN.joyId = null; IN.joyBase = null; IN.mx = 0; IN.my = 0; }
+  const b = IN.ptrBtn.get(e.pointerId);
+  if (b) { IN.ptrBtn.delete(e.pointerId); pressBtn(b, false, e.pointerId); }
+}
+// iOS Safari: dokunma varsayilanlari (kaydirma, yakinlastirma, uzun basma buyutec) oyun modunda kapatilir
+for (const ev of ['touchstart', 'touchmove', 'touchend', 'touchcancel']) cv.addEventListener(ev, (e) => { if (PLAY.on) e.preventDefault(); }, { passive: false });
+cv.addEventListener('pointerdown', onPtrDown);
+cv.addEventListener('pointermove', onPtrMove);
+cv.addEventListener('pointerup', onPtrUp);
+cv.addEventListener('pointercancel', onPtrUp);
+cv.addEventListener('contextmenu', (e) => { if (PLAY.on) e.preventDefault(); });
+addEventListener('keydown', (e) => {
+  if (!PLAY.on) return;
+  if (e.repeat) { if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'ShiftLeft', 'ShiftRight'].includes(e.code)) e.preventDefault(); return; }
+  IN.keys.add(e.code);
+  const atk = inPossession();
+  if (e.code === 'KeyJ') { if (atk) IN.passDownAt = performance.now(); else IN.acts.push('tackle'); }
+  else if (e.code === 'KeyL') { if (atk) IN.throughDownAt = performance.now(); else IN.press = true; }
+  else if (e.code === 'KeyK') { if (atk) IN.shotDownAt = performance.now(); else IN.acts.push('slide'); }
+  else if (e.code === 'Space') { IN.acts.push('switch'); e.preventDefault(); }
+  else if (e.code === 'KeyC') pressBtn('cam', true);
+  else if (e.code === 'Escape') exitPlay();
+  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+});
+addEventListener('keyup', (e) => {
+  IN.keys.delete(e.code);
+  if (!PLAY.on) return;
+  if (e.code === 'KeyL') { IN.press = false; if (IN.throughDownAt !== null) { IN.acts.push({ act: 'through', power: powerOf(IN.throughDownAt, 'through') }); IN.throughDownAt = null; } }
+  if (e.code === 'KeyJ' && IN.passDownAt !== null) { IN.acts.push({ act: 'pass', power: powerOf(IN.passDownAt, 'pass') }); IN.passDownAt = null; }
+  if (e.code === 'KeyK' && IN.shotDownAt !== null) { IN.acts.push({ act: 'shoot', power: powerOf(IN.shotDownAt, 'shoot') }); IN.shotDownAt = null; }
+});
+function startPlay() {
+  readSetup();
+  PLAY.on = true; PLAY.side = 0; PLAY.minutes = +document.getElementById('pMin').value;
+  P.dt = 0.1; P.clockRate = 90 / PLAY.minutes; knockout = false;
+  document.body.classList.add('play');
+  CAM.phone = true; CAM.overlay = true;
+  applyCam(document.getElementById('pCam').value);
+  newMatch(seed);
+  setControl(st, 0, 'team', +document.getElementById('pAssistP').value, +document.getElementById('pAssistS').value);
+  onResize();
+  speed = 1;
+}
+function exitPlay() {
+  if (!PLAY.on) return;
+  PLAY.on = false;
+  document.body.classList.remove('play', 'portrait');
+  CAM.phone = false; CAM.overlay = false; CAM.mode = 'full';
+  P.dt = 0.5; P.clockRate = 6;
+  IN.acts.length = 0; IN.sprint = false; IN.press = false; IN.joyId = null; IN.mx = 0; IN.my = 0; IN.shotDownAt = IN.passDownAt = IN.throughDownAt = null;
+  fitCanvas();
+  newMatch(seed);
+}
+function onResize() {
+  if (PLAY.on) document.body.classList.toggle('portrait', innerHeight > innerWidth);
+  fitCanvas();
+}
+addEventListener('resize', onResize);
+document.getElementById('playBtn').addEventListener('click', startPlay);
+document.getElementById('exitPlay').addEventListener('click', exitPlay);
+
+// oyna modu katmani: HUD, joystick ve butonlar, kontrol edilen futbolcu halkasi, ekran disi isaretler, radar
+function drawPhoneOverlay(Wc, Hc, s, X, Y, ox, oy, pos) {
+  const dpr = Wc / cv.clientWidth;
+  const g = ctrlGeom();
+  const u = g.u * dpr;
+  ctx.save();
+  // kontrol edilen futbolcu: beyaz halka
+  const cp = PLAY.on ? controlledPlayer(st, PLAY.side) : null;
+  if (cp && !cp.off) {
+    const i = st.players.indexOf(cp);
+    const [x, y] = pos(i);
+    const r = Math.max(6, s * 1.0);
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(2, s * 0.25);
+    ctx.beginPath(); ctx.arc(X(x), Y(y), r * 1.9, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.lineWidth = Math.max(1, s * 0.12);
+    ctx.beginPath(); ctx.arc(X(x), Y(y), r * 2.4, 0, Math.PI * 2); ctx.stroke();
+  }
+  // HUD
+  const hw = 300 * u, hh = 34 * u;
+  ctx.fillStyle = 'rgba(10,12,16,.78)'; ctx.fillRect(Wc / 2 - hw / 2, 8 * u, hw, hh);
+  ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = `700 ${Math.round(18 * u)}px ${css('--font-body')}`;
+  const base = [0, 45, 90, 105][st.half - 1] * 60, t = base + st.hclock;
+  const mm = Math.floor(t / 60), ss = Math.floor(t % 60);
+  const clk = st.done ? 'MS' : `${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+  ctx.fillText(`${st.teams[0].short}  ${st.stats[0].goals} : ${st.stats[1].goals}  ${st.teams[1].short}   ${clk}`, Wc / 2, 8 * u + hh / 2);
+  // hucum yonu ipucu: kullanici takiminin kalesi hangi tarafta
+  if (PLAY.on) {
+    const [gx] = (function () { const h = st.half % 2 === 0; return [h ? 0 : 105]; })();
+    ctx.font = `600 ${Math.round(11 * u)}px ${css('--font-body')}`; ctx.fillStyle = 'rgba(255,255,255,.75)';
+    ctx.fillText(gx > 50 ? 'hücum →' : '← hücum', Wc / 2, 8 * u + hh + 12 * u);
+  }
+  // kamera butonu
+  const cm = g.cam;
+  ctx.fillStyle = 'rgba(10,12,16,.6)'; ctx.fillRect((cm.x - cm.w / 2) * dpr, (cm.y - cm.h / 2) * dpr, cm.w * dpr, cm.h * dpr);
+  ctx.fillStyle = '#fff'; ctx.font = `600 ${Math.round(12 * u)}px ${css('--font-body')}`;
+  ctx.fillText('Kam: ' + (CAM_MODES.find((c) => c[0] === PLAY.camMode) ?? CAM_MODES[0])[1], cm.x * dpr, cm.y * dpr);
+  if (PLAY.on) {
+    // joystick (yuzen)
+    if (IN.joyBase) {
+      const [jx, jy] = IN.joyBase;
+      ctx.globalAlpha = 0.3; ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(jx * dpr, jy * dpr, 52 * u, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 0.6; ctx.beginPath(); ctx.arc((jx + IN.mx * 44 * g.u) * dpr, (jy + IN.my * 44 * g.u) * dpr, 24 * u, 0, Math.PI * 2); ctx.fill();
+    } else {
+      ctx.globalAlpha = 0.14; ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(90 * u, Hc - 90 * u, 52 * u, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 0.5; ctx.font = `600 ${Math.round(11 * u)}px ${css('--font-body')}`; ctx.fillText('joystick', 90 * u, Hc - 90 * u);
+    }
+    // nisan cizgisi: pas / ara pas / sut basiliyken joystick yonunde, uzunluk guce gore
+    if (cp && g.atk && st.owner === cp && (IN.passDownAt !== null || IN.throughDownAt !== null || IN.shotDownAt !== null)) {
+      const i = st.players.indexOf(cp);
+      const [x, y] = pos(i);
+      const m = Math.hypot(IN.mx, IN.my);
+      const k = IN.keys; let kx = (k.has('ArrowRight') || k.has('KeyD') ? 1 : 0) - (k.has('ArrowLeft') || k.has('KeyA') ? 1 : 0), ky = (k.has('ArrowDown') || k.has('KeyS') ? 1 : 0) - (k.has('ArrowUp') || k.has('KeyW') ? 1 : 0);
+      const km = Math.hypot(kx, ky);
+      const ddx = m > 0.15 ? IN.mx / m : km > 0 ? kx / km : cp.hx, ddy = m > 0.15 ? IN.my / m : km > 0 ? ky / km : cp.hy;
+      const pw = IN.shotDownAt !== null ? powerOf(IN.shotDownAt, 'shoot') : IN.throughDownAt !== null ? powerOf(IN.throughDownAt, 'through') : powerOf(IN.passDownAt, 'pass');
+      const len = IN.shotDownAt !== null ? 10 + 25 * pw : IN.throughDownAt !== null ? 18 + 20 * pw : 8 + 32 * pw;
+      ctx.save(); ctx.globalAlpha = 0.7; ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(1.5, s * 0.18); ctx.setLineDash([s * 0.8, s * 0.6]);
+      ctx.beginPath(); ctx.moveTo(X(x), Y(y)); ctx.lineTo(X(x + ddx * len), Y(y + ddy * len)); ctx.stroke(); ctx.restore();
+    }
+    // butonlar
+    for (const b of g.btns) {
+      const held = b.id === 'pass' ? IN.passDownAt : b.id === 'through' ? IN.throughDownAt : b.id === 'shoot' ? IN.shotDownAt : null;
+      const down = [...IN.ptrBtn.values()].includes(b.id) || (b.id === 'sprint' && IN.sprint) || (b.id === 'through' && IN.press && !g.atk) || held !== null;
+      ctx.globalAlpha = down ? 0.7 : 0.38; ctx.fillStyle = b.ctx ? (g.atk ? '#f2d94e' : '#6fa8ff') : '#ffffff';
+      ctx.beginPath(); ctx.arc(b.x * dpr, b.y * dpr, b.r * dpr, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 0.95; ctx.fillStyle = '#111'; ctx.font = `700 ${Math.round((b.id === 'switch' ? 10.5 : 12) * u)}px ${css('--font-body')}`; ctx.fillText(b.lab, b.x * dpr, b.y * dpr);
+      if (held !== null && g.atk) {
+        const pw = powerOf(held, b.id);
+        ctx.globalAlpha = 1; ctx.strokeStyle = '#fff'; ctx.lineWidth = 4 * u;
+        ctx.beginPath(); ctx.arc(b.x * dpr, b.y * dpr, b.r * dpr + 5 * u, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * pw); ctx.stroke();
+      }
+    }
+    ctx.globalAlpha = 1;
+    // duran top / kaleci: pas zorunlu, geri sayim
+    const ui = userCarrierInfo(st, PLAY.side);
+    if (ui && ui.mustPlay) {
+      ctx.fillStyle = 'rgba(10,12,16,.7)'; ctx.fillRect(Wc / 2 - 110 * u, Hc - 44 * u, 220 * u, 30 * u);
+      ctx.fillStyle = '#fff'; ctx.font = `600 ${Math.round(13 * u)}px ${css('--font-body')}`;
+      ctx.fillText(`Pas ver · ${Math.ceil(ui.left)} sn sonra otomatik`, Wc / 2, Hc - 29 * u);
+    }
+    if (st.done) { ctx.fillStyle = 'rgba(10,12,16,.75)'; ctx.fillRect(Wc / 2 - 150 * u, Hc / 2 - 24 * u, 300 * u, 48 * u); ctx.fillStyle = '#fff'; ctx.font = `700 ${Math.round(16 * u)}px ${css('--font-body')}`; ctx.fillText('Maç bitti · sol üstten çık', Wc / 2, Hc / 2); }
+  }
+  if (CAM.mode === 'smart') {
+    // ekran disindaki takim arkadaslari (kullanici takimi): kenarda numarali isaret
+    const ins = 14 * u;
+    st.players.forEach((p, i) => {
+      if (p.side !== PLAY.side || p.off) return;
+      const [x, y] = pos(i);
+      const px = X(x), py = Y(y);
+      if (px >= 0 && px <= Wc && py >= 0 && py <= Hc) return;
+      const cx = Math.max(ins, Math.min(Wc - ins, px)), cy = Math.max(ins + 44 * u, Math.min(Hc - ins, py));
+      const an = Math.atan2(py - cy, px - cx);
+      ctx.save(); ctx.translate(cx, cy); ctx.rotate(an);
+      ctx.fillStyle = st.teams[PLAY.side].color; ctx.beginPath(); ctx.moveTo(12 * u, 0); ctx.lineTo(-6 * u, -9 * u); ctx.lineTo(-6 * u, 9 * u); ctx.closePath(); ctx.fill();
+      ctx.restore();
+      ctx.fillStyle = '#fff'; ctx.font = `700 ${Math.round(11 * u)}px ${css('--font-body')}`;
+      ctx.fillText(p.num, cx - Math.cos(an) * 16 * u, cy - Math.sin(an) * 16 * u);
+    });
+    // radar (sol ust)
+    const rw = 110 * u, rh = rw * 68 / 105, rx = 70 * u, ry = 10 * u;
+    ctx.fillStyle = 'rgba(10,12,16,.55)'; ctx.fillRect(rx - 3 * u, ry - 3 * u, rw + 6 * u, rh + 6 * u);
+    ctx.fillStyle = 'rgba(60,120,60,.9)'; ctx.fillRect(rx, ry, rw, rh);
+    ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 1; ctx.strokeRect(rx, ry, rw, rh);
+    ctx.beginPath(); ctx.moveTo(rx + rw / 2, ry); ctx.lineTo(rx + rw / 2, ry + rh); ctx.stroke();
+    ctx.strokeStyle = '#fff'; ctx.strokeRect(rx + Math.max(0, ox) / 105 * rw, ry + Math.max(0, oy) / 68 * rh, Math.min(105, CAM.w) / 105 * rw, Math.min(68, Hc / s) / 68 * rh);
+    st.players.forEach((p, i) => { if (p.off) return; const [x, y] = pos(i); ctx.fillStyle = st.teams[p.side].color; ctx.beginPath(); ctx.arc(rx + x / 105 * rw, ry + y / 68 * rh, 2.2 * u, 0, Math.PI * 2); ctx.fill(); });
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(rx + st.ball.x / 105 * rw, ry + st.ball.y / 68 * rh, 2 * u, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
+function drawBanners(now, Wc, Hc, s, X, Y) {
+  for (const b of banners) {
+    const age = (now - b.t0) / 1000;
+    const life = b.kind === 'goal' ? 2.2 : 1.1;
+    if (age > life) continue;
+    const k = age / life;
+    const cx = Wc / 2, cy = Hc / 2;
+    if (b.kind === 'goal') {
+      // patlama: donen isinlar, disa sacilan konfeti, buyuyup oturan yazi
+      const tcol = st.teams[st.events.filter((e) => e.type === 'goal').slice(-1)[0]?.side ?? 0].color;
+      ctx.save();
+      ctx.globalAlpha = 0.55 * (1 - k);
+      ctx.translate(cx, cy); ctx.rotate(age * 0.6);
+      for (let i = 0; i < 16; i++) {
+        ctx.rotate((Math.PI * 2) / 16);
+        ctx.fillStyle = i % 2 ? tcol : css('--flood');
+        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Wc * 0.9, -s * 2.2); ctx.lineTo(Wc * 0.9, s * 2.2); ctx.closePath(); ctx.fill();
+      }
+      ctx.restore();
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, 1 - k * 1.1);
+      for (let i = 0; i < 48; i++) {
+        const a = (i / 48) * Math.PI * 2 + (i % 3) * 0.2;
+        const dist = (age * (60 + (i % 7) * 18)) * s * 0.25;
+        ctx.fillStyle = i % 3 === 0 ? tcol : i % 3 === 1 ? css('--flood') : '#ffffff';
+        ctx.fillRect(cx + Math.cos(a) * dist, cy + Math.sin(a) * dist + age * age * s * 3, s * 0.8, s * 0.8);
+      }
+      ctx.restore();
+      const pop = age < 0.12 ? 1.15 - age : 1;
+      ctx.save();
+      ctx.globalAlpha = k < 0.8 ? 1 : (1 - k) / 0.2;
+      ctx.translate(cx, cy); ctx.scale(pop, pop);
+      ctx.font = `700 ${Math.round(s * 11)}px ${css('--font-display')}`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.lineWidth = s * 0.9; ctx.strokeStyle = '#1b1a0c'; ctx.strokeText(b.text, 0, 0);
+      ctx.fillStyle = css('--flood'); ctx.fillText(b.text, 0, 0);
+      if (b.sub) { ctx.font = `600 ${Math.round(s * 2.6)}px ${css('--font-body')}`; ctx.lineWidth = s * 0.4; ctx.strokeText(b.sub, 0, s * 7.5); ctx.fillStyle = '#ffffff'; ctx.fillText(b.sub, 0, s * 7.5); }
+      ctx.restore();
+      continue;
+    }
+    const col = b.kind === 'yellow' ? css('--flood') : b.kind === 'red' ? '#e5483f' : '#ffffff';
+    const sc = 1;
+    ctx.save();
+    ctx.globalAlpha = age < 0.8 ? 1 : Math.max(0, 1 - (age - 0.8) / 0.3);
+    ctx.translate(cx, cy); ctx.scale(sc, sc);
+    ctx.font = `700 ${Math.round(s * 6)}px ${css('--font-display')}`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.lineWidth = s * 0.6; ctx.strokeStyle = 'rgba(14,21,18,.85)'; ctx.strokeText(b.text, 0, 0);
+    ctx.fillStyle = col; ctx.fillText(b.text, 0, 0);
+    if (b.sub) { ctx.font = `600 ${Math.round(s * 2.2)}px ${css('--font-body')}`; ctx.lineWidth = s * 0.35; ctx.strokeText(b.sub, 0, s * 4.6); ctx.fillStyle = '#ffffff'; ctx.fillText(b.sub, 0, s * 4.6); }
+    ctx.restore();
+  }
+}
+
+// ---------- Panel ----------
+let logCount = 0, cmLog = 0, cmEv = 0;
+for (const b of document.querySelectorAll('[data-lt]')) b.addEventListener('click', () => {
+  for (const o of document.querySelectorAll('[data-lt]')) o.setAttribute('aria-pressed', o === b);
+  document.getElementById('log').hidden = b.dataset.lt !== 'log';
+  document.getElementById('cm').hidden = b.dataset.lt !== 'cm';
+});
+// ---------- Anlatim: motor kayitlarindan sablonla metin ----------
+const pick = (arr, t) => arr[Math.abs(Math.floor(t * 7.31)) % arr.length];
+function pname(side, num) { const p = st.players.find((q) => q.side === side && q.num === num); return p ? p.name : '#' + num; }
+// Turkce ek: unlu uyumu ve sert unsuz (fistikci sahap) kuralina gore
+function suf(name, type) {
+  const low = [...name.toLocaleLowerCase('tr')].map((ch) => ('çğıöşü'.includes(ch) ? ch : ch.normalize('NFD').replace(/[\u0300-\u036f]/g, ''))).join('').replace(/[^a-zçğıöşü]/g, '');
+  const vs = [...low].filter((ch) => 'aeıioöuü'.includes(ch));
+  const lv = vs.length ? vs[vs.length - 1] : 'e';
+  const back = 'aıou'.includes(lv);
+  const four = { a: 'ı', ı: 'ı', o: 'u', u: 'u', e: 'i', i: 'i', ö: 'ü', ü: 'ü' }[lv];
+  const last = low.slice(-1);
+  const endV = 'aeıioöuü'.includes(last);
+  const hard = 'fstkçşhp'.includes(last);
+  let s = '';
+  if (type === 'den') s = (hard ? 't' : 'd') + (back ? 'an' : 'en');
+  else if (type === 'in') s = (endV ? 'n' : '') + four + 'n';
+  else if (type === 'i') s = (endV ? 'y' : '') + four;
+  else if (type === 'e') s = (endV ? 'y' : '') + (back ? 'a' : 'e');
+  return name + "'" + s;
+}
+function cmText(x) {
+  const a = x.a !== undefined ? pname(x.s, x.a) : '';
+  const b = x.b !== undefined ? pname(x.bs ?? x.s, x.b) : '';
+  const c = x.c !== undefined ? pname(x.s === 0 ? 1 : 0, x.c) : '';
+  const A = `<b>${a}</b>`, B = `<b>${b}</b>`;
+  const As = (t) => `<b>${suf(a, t)}</b>`, Bs = (t) => `<b>${suf(b, t)}</b>`;
+  switch (x.k) {
+    case 'tackle': return pick([`${A}, ${Bs('den')} topu temiz bir müdahaleyle aldı.`, `${A} zamanlamayı tutturdu, top artık onda.`, `${A} kayarak girdi ve topu kazandı.`], x.t);
+    case 'evade': return pick([`${A}, ${Bs('in')} müdahalesinden sıyrıldı.`, `${B} müdahaleye girdi ama ${A} topu bırakmadı.`], x.t);
+    case 'dribble': if (x.gk) return `${A} kaleci ${Bs('i')} de geçti!`; return pick([`${A}, ${Bs('i')} çalımla geçti.`, `${A}, ${Bs('i')} yerinde bıraktı!`, `${A} bire birde ${Bs('den')} sıyrıldı.`], x.t);
+    case 'intercept': return pick([`${A}, ${Bs('in')} pasını kesti.`, `${A} pas arasına girdi.`, `${Bs('in')} pası ${As('e')} takıldı.`], x.t);
+    case 'through': return pick([`${As('in')} ara pası ${Bs('i')} savunmanın arkasına soktu!`, `${A} boşluğa topu bıraktı, ${B} koşuyu yaptı.`], x.t);
+    case 'lob': return pick([`${A} topu <b>${suf(c, 'in')}</b> üzerinden aşırdı, ${B} buluştu.`, `${As('den')} <b>${suf(c, 'in')}</b> üstünden ${Bs('e')} havadan pas.`], x.t);
+    case 'long': return pick([`${As('den')} ${Bs('e')} uzun top.`, `${A} oyunu ${Bs('e')} doğru değiştirdi.`], x.t);
+    case 'cross': return pick([`${As('in')} ortası ${B} ile buluştu.`, `${A} ceza sahasına ortaladı, ${B} topla buluştu.`], x.t);
+    case 'save': return pick([`Kaleci ${A} uzandı, ${Bs('in')} şutunu çıkardı!`, `${A} gole izin vermedi.`, `${B} şansını denedi, ${A} kurtardı.`], x.t);
+    case 'block': return pick([`${A} kendini ${Bs('in')} şutunun önüne attı.`, `${Bs('in')} şutu ${As('e')} çarptı.`], x.t);
+    case 'claim': if (x.gk) return pick([`Kaleci ${A} çıkıp topu ${Bs('den')} önce aldı.`, `${B} kaleciyle karşı karşıya kalmak istedi, ${A} erken çıkıp aldı.`], x.t); return pick([`${A} koşuyu kazandı, ${Bs('in')} önüne geçti.`, `${B} boşluğa koştu ama ${A} önce davrandı.`], x.t);
+    case 'sub': return `<span class="hl">Değişiklik:</span> ${B} çıktı, ${A} girdi.`;
+    case 'injury': return `<span class="hl">${a}</span> sakatlandı, oyun durdu.`;
+    case 'throw': return `${A} taç atışını kullanıyor.`;
+    case 'cornerkick': return `${A} kornerde topun başında.`;
+    case 'fk': return pick([`${A} serbest vuruşta topun başında...`, `${A} serbest vuruşu kullanıyor.`], x.t);
+    default: return '';
+  }
+}
+function evCm(e) {
+  const tm = st.teams[e.side];
+  const pl = e.player ? pname(e.side, e.player) : '';
+  switch (e.type) {
+    case 'goal': return `<span class="goal">GOL! ${tm.short} · ${pl}</span>`;
+    case 'miss': return e.text === 'blok' ? '' : pick([`${suf(pl, 'in')} şutu az farkla dışarıda.`, `${pl} vurdu, top auta çıktı.`], e.t);
+    case 'foul': return `${pl} faul yaptı.`;
+    case 'yellow': return `<span class="hl">Sarı kart:</span> ${pl} (${tm.short}).`;
+    case 'red': return `<span class="hl">Kırmızı kart:</span> ${pl} oyun dışında!`;
+    case 'penalty': return `<span class="hl">Penaltı!</span> ${tm.short} lehine.`;
+    case 'offside': return `${pl} ofsaytta. Bayrak kalktı.`;
+    case 'corner': return `${tm.short} korner kazandı.`;
+    case 'half': return e.t >= 90 * 60 ? '<span class="hl">Uzatmanın ilk yarısı bitti.</span>' : '<span class="hl">İlk yarı sona erdi.</span>';
+    case 'extra': return '<span class="hl">90 dakika eşitlikle bitti, uzatmaya gidiliyor.</span>';
+    case 'tactic': return `<span class="hl">${tm.short} taktik değiştirdi${e.text ? ' (' + e.text + ')' : ''}.</span> 5 dakika uyum süresi.`;
+    case 'adjust': return `${tm.short} rakibi okudu: ${adjText(e)}.`;
+    case 'shootout': return `Penaltı: ${pl} ${e.text === 'goal' ? '<b>gol!</b>' : 'kaçırdı.'}`;
+    case 'end': return st.shootout ? `<span class="hl">Maç sona erdi. Penaltılar ${st.shootout[0]}–${st.shootout[1]}.</span>` : '<span class="hl">Maç sona erdi.</span>';
+    default: return '';
+  }
+}
+function cmRow(t, html, pen = false) {
+  if (!html) return;
+  const d = document.createElement('div');
+  d.innerHTML = `<span class="t">${pen ? 'pen' : Math.floor(t / 60) + 1 + "'"}</span><span>${html}</span>`;
+  document.getElementById('cm').prepend(d);
+}
+function renderCm() {
+  // kayitlar ve olaylar zaman sirasinda birlestirilir
+  while (cmLog < st.log.length || cmEv < st.events.length) {
+    const L = st.log[cmLog], E = st.events[cmEv];
+    if (E && (!L || E.t <= L.t)) { cmRow(E.t, evCm(E), E.type === 'shootout'); cmEv++; }
+    else { cmRow(L.t, cmText(L)); cmLog++; }
+  }
+  const el = document.getElementById('cm');
+  while (el.childElementCount > 150) el.lastElementChild.remove();
+}
+const evText = { goal: 'GOL', yellow: 'Sarı kart', red: 'Kırmızı kart', penalty: 'Penaltı', offside: 'Ofsayt', corner: 'Korner', half: 'Devre arası', end: 'Maç sonu', save: 'Kurtarış', sub: 'Değişiklik', injury: 'Sakatlık', tactic: 'Taktik değişikliği', adjust: 'Rakibi okudu', extra: 'Uzatma', shootout: 'Penaltı atışı' };
+const adjText = (e) => {
+  const dg = e.player ? st.players.find((p) => p.side !== e.side && p.num === e.player) : null;
+  const nm = dg ? '#' + dg.num + ' ' + dg.name : 'tehlikeli oyuncu';
+  return e.text === 'left' ? 'sol kanadı kapattı' : e.text === 'right' ? 'sağ kanadı kapattı' : e.text === 'line' ? `hızlı forvet ${suf(nm, 'e')} karşı hat geri çekildi` : `${suf(nm, 'i')} sıkı markaja aldı`;
+};
+function updateHud() {
+  const [a, b] = st.stats;
+  document.getElementById('gA').textContent = a.goals;
+  document.getElementById('gB').textContent = b.goals;
+  const half = st.half;
+  const base = [0, 45, 90, 105][half - 1] * 60;
+  const t = base + st.hclock;
+  const mm = Math.floor(t / 60), ss = Math.floor(t % 60);
+  const extraMin = [45, 90, 105, 120][half - 1];
+  const so = st.shootout ? ` · pen ${st.shootout[0]}–${st.shootout[1]}` : '';
+  document.getElementById('clk').textContent = st.done ? 'MS' + so : (mm >= extraMin ? `${extraMin}+${mm - extraMin + 1}'` : `${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`) + (half >= 3 ? ' uz.' : '');
+  const pt = a.possTicks + b.possTicks || 1;
+  const rows = [
+    ['Topa sahip olma', Math.round((100 * a.possTicks) / pt) + '%', Math.round((100 * b.possTicks) / pt) + '%', a.possTicks / pt],
+    ['Şut', a.shots, b.shots], ['İsabetli şut', a.onTarget, b.onTarget], ['Gol beklentisi (xG)', a.xg.toFixed(2), b.xg.toFixed(2)],
+    ['Pas isabeti', a.passes ? Math.round((100 * a.passesOk) / a.passes) + '%' : '-', b.passes ? Math.round((100 * b.passesOk) / b.passes) + '%' : '-'],
+    ['Faul', a.fouls, b.fouls], ['Ofsayt', a.offsides, b.offsides], ['Korner', a.corners, b.corners], ['Sarı / kırmızı', a.yellows + ' / ' + a.reds, b.yellows + ' / ' + b.reds],
+  ];
+  document.getElementById('stats').innerHTML = rows.map((r) => `<div class="stat"><span class="v">${r[1]}</span><span class="lab">${r[0]}</span><span class="v">${r[2]}</span>${r[3] !== undefined ? `<div class="bar"><i style="width:${(r[3] * 100).toFixed(0)}%"></i></div>` : ''}</div>`).join('');
+  renderCm();
+  const log = document.getElementById('log');
+  const evs = st.events.filter((e) => evText[e.type] && e.type !== 'save' && !(e.type === 'corner'));
+  while (logCount < evs.length) {
+    const e = evs[logCount++];
+    const team = st.teams[e.side];
+    const pl = e.player && e.type !== 'adjust' ? st.players.find((p) => p.side === e.side && p.num === e.player) : null;
+    const d = document.createElement('div');
+    const min = Math.min(Math.floor(e.t / 60) + 1, e.t >= 45 * 60 ? 999 : 999);
+    const pl2 = e.player2 ? st.players.find((p) => p.side === e.side && p.num === e.player2) : null;
+    d.innerHTML = `<span class="t">${e.type === 'shootout' ? 'pen' : Math.floor(e.t / 60) + 1 + "'"}</span><span class="${e.type === 'goal' ? 'goal' : ''}">${e.type === 'half' && e.t > 90 * 60 ? 'Uzatma devresi' : evText[e.type]}${e.type === 'half' || e.type === 'end' || e.type === 'extra' ? '' : ' · ' + team.short}${pl ? ' · #' + pl.num + ' ' + pl.name : ''}${pl2 ? ` <span style="color:var(--muted);font-weight:400">(çıkan #${pl2.num} ${pl2.name}${e.text === 'gk' ? ', kaleci girdi' : e.text === 'injury' ? ', sakatlık' : ''})</span>` : ''}${e.type === 'goal' && e.xg ? ` <span style="color:var(--muted);font-weight:400">(xG ${e.xg.toFixed(2)})</span>` : ''}${e.type === 'adjust' ? ` <span style="color:var(--muted);font-weight:400">(${adjText(e)})</span>` : e.type === 'tactic' ? ` <span style="color:var(--muted);font-weight:400">(${e.text ? e.text + ', ' : ''}5 dk uyum)</span>` : e.type === 'shootout' ? ` <span style="color:var(--muted);font-weight:400">(${e.text === 'goal' ? 'gol' : 'kaçırdı'})</span>` : ''}</span>`;
+    log.prepend(d);
+  }
+}
+
+// ---------- Test raporu ----------
+function renderReport() {
+  const S = SUMMARY;
+  const el = document.getElementById('report');
+  const c = S.curve;
+  const W = 640, H = 300, L = 46, R = 20, T = 18, B = 40;
+  const xs = c.map((r) => r.r);
+  const x = (v) => L + ((v - 1) / 0.5) * (W - L - R);
+  const y = (v) => T + (1 - v / 100) * (H - T - B);
+  const fg = css('--chalk'), mu = css('--muted'), ln = css('--line'), fl = css('--flood'), aw = css('--away'), hm = css('--home');
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Güç oranına göre galibiyet ve beraberlik oranları, motor ve hedef">`;
+  for (let v = 0; v <= 100; v += 20) svg += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="${ln}"/><text x="${L - 8}" y="${y(v) + 4}" fill="${mu}" font-size="11" text-anchor="end">%${v}</text>`;
+  for (const v of xs) svg += `<text x="${x(v)}" y="${H - B + 18}" fill="${mu}" font-size="11" text-anchor="middle">${v.toFixed(2).replace('.', ',')}</text>`;
+  svg += `<text x="${(L + W - R) / 2}" y="${H - 6}" fill="${mu}" font-size="11" text-anchor="middle">Güç oranı (güçlü / zayıf takım)</text>`;
+  const series = [['tw', 'w', hm, 'Güçlü takımın galibiyeti'], ['td', 'd', aw, 'Beraberlik']];
+  for (const [tk, mk, col] of series) {
+    svg += `<polyline fill="none" stroke="${col}" stroke-width="2" stroke-dasharray="5 4" opacity=".8" points="${c.map((r) => x(r.r) + ',' + y(r[tk])).join(' ')}"/>`;
+    for (const r of c) svg += `<circle cx="${x(r.r)}" cy="${y(r[mk])}" r="4.5" fill="${col}" stroke="${fg}" stroke-width="1"><title>${r.r}: motor %${r[mk].toFixed(1)}, hedef %${r[tk].toFixed(1)}</title></circle>`;
+  }
+  svg += `</svg>`;
+
+  const dist = S.dist, n = S.n_eq;
+  const keys = Object.keys(dist).map(Number).sort((a, b) => a - b);
+  const maxK = Math.max(...keys, 7);
+  const pois = (l, k) => { let f = 1; for (let i = 2; i <= k; i++) f *= i; return (Math.exp(-l) * Math.pow(l, k)) / f; };
+  const W2 = 640, H2 = 260, L2 = 40, B2 = 36, T2 = 14;
+  const bw = (W2 - L2 - 20) / (maxK + 1);
+  const ymax = 32;
+  const y2 = (v) => T2 + (1 - v / ymax) * (H2 - T2 - B2);
+  let svg2 = `<svg viewBox="0 0 ${W2} ${H2}" role="img" aria-label="Eşit maçlarda toplam gol dağılımı">`;
+  for (let v = 0; v <= 30; v += 10) svg2 += `<line x1="${L2}" x2="${W2 - 20}" y1="${y2(v)}" y2="${y2(v)}" stroke="${ln}"/><text x="${L2 - 8}" y="${y2(v) + 4}" fill="${mu}" font-size="11" text-anchor="end">%${v}</text>`;
+  for (let k = 0; k <= maxK; k++) {
+    const v = (100 * (dist[k] || 0)) / n;
+    const x0 = L2 + k * bw + bw * 0.18;
+    svg2 += `<rect x="${x0}" y="${y2(v)}" width="${bw * 0.64}" height="${y2(0) - y2(v)}" fill="${hm}" rx="2"><title>${k} gol: %${v.toFixed(1)}</title></rect>`;
+    const pv = 100 * pois(2.5, k);
+    svg2 += `<line x1="${x0 - 2}" x2="${x0 + bw * 0.64 + 2}" y1="${y2(pv)}" y2="${y2(pv)}" stroke="${fl}" stroke-width="2.5"/>`;
+    svg2 += `<text x="${x0 + bw * 0.32}" y="${H2 - B2 + 16}" fill="${mu}" font-size="11" text-anchor="middle">${k}</text>`;
+  }
+  svg2 += `<text x="${(L2 + W2 - 20) / 2}" y="${H2 - 4}" fill="${mu}" font-size="11" text-anchor="middle">Maçtaki toplam gol</text></svg>`;
+
+  const tm = S.team;
+  const sh5 = (100 * keys.filter((k) => k >= 5).reduce((a, k) => a + dist[k], 0)) / n;
+  const sh0 = (100 * (dist[0] || 0)) / n;
+  const sh7 = (100 * keys.filter((k) => k >= 7).reduce((a, k) => a + dist[k], 0)) / n;
+  const g = c[0].g;
+  const rowsT = [
+    ['Maç başı toplam gol', g.toFixed(2).replace('.', ','), '2,5', Math.abs(g - 2.5) < 0.15],
+    ['Golsüz maçlar', '%' + sh0.toFixed(1).replace('.', ','), '%7–9', sh0 >= 5.5 && sh0 <= 9.5],
+    ['5 ve daha fazla gollü maçlar', '%' + sh5.toFixed(1).replace('.', ','), 'en fazla %11', sh5 <= 11, 'Ortalaması 2,5 olan rastgele dağılımda beklenen oran yaklaşık %11'],
+    ['7 ve daha fazla gollü maçlar', '%' + sh7.toFixed(1).replace('.', ','), 'en fazla %1', sh7 <= 1.5],
+    ['Duran toptan gelen gol payı', '%' + tm.sp.toFixed(0), '%25–30', tm.sp >= 24 && tm.sp <= 31],
+    ['Takım başına şut', tm.shots.toFixed(1).replace('.', ','), '8–10', tm.shots >= 7.5 && tm.shots <= 10.5, 'Uzak şutlar da çekilir; 15 dakikalık maçta gerçek bir 90 dakikanın yaklaşık altıda biri kadar futbol oynanır'],
+    ['Şutların gole dönme oranı', '%' + ((100 * g) / 2 / tm.shots).toFixed(0), '%12–15', (g / 2) / tm.shots >= 0.11 && (g / 2) / tm.shots <= 0.16, 'Gerçek futbolda %10–11; kısa maçta biraz yüksek tutuldu'],
+    ['Takım xG ile gol farkı', (tm.xg - g / 2).toFixed(2).replace('.', ','), '±0,1', Math.abs(tm.xg - g / 2) < 0.12, 'xG artık modelin gerçek gol olasılığı: uzun vadede gole eşit olmalı'],
+    ['Takım başına korner', tm.corners.toFixed(1).replace('.', ','), '2–3', tm.corners >= 1.8 && tm.corners <= 3.2],
+    ['Takım başına ofsayt', tm.offsides.toFixed(2).replace('.', ','), '0,3–0,8', tm.offsides >= 0.25 && tm.offsides <= 0.85, 'Ofsayt tuzağı ve riskli forvet koşuları ofsayt sayısını artırır; taç ve auttan ofsayt olmaz'],
+    ['Takım başına faul', tm.fouls.toFixed(1).replace('.', ','), '2–3', tm.fouls >= 1.8 && tm.fouls <= 3.2],
+    ['Pas isabeti', '%' + tm.passpct.toFixed(0), '%80–85 (gerçek futbol)', tm.passpct >= 78 && tm.passpct <= 87],
+    ['Takım başına sarı / kırmızı', tm.yel.toFixed(2).replace('.', ',') + ' / ' + tm.red.toFixed(2).replace('.', ','), '0,3 / 0,02', Math.abs(tm.yel - 0.3) < 0.15 && tm.red < 0.05],
+  ];
+  const maxDev = Math.max(...c.slice(1).map((r) => Math.max(Math.abs(r.w - r.tw), Math.abs(r.d - r.td), Math.abs(r.l - r.tl))));
+  el.innerHTML = `
+    <p class="lead">Motor, güç farkı olan maçlarda Metrik dokümanındaki simülasyon eğrisini <b>en fazla ${maxDev.toFixed(1).replace('.', ',')} puan sapmayla</b> tutturuyor. ${c.length} farklı güç oranında toplam ${c.reduce((a, r) => a + r.n, 0).toLocaleString('tr-TR')} maç oynatıldı; ayrıca eşit takımlarla 2.000 maçlık bir taraf testi yapıldı ve taraf avantajı çıkmadı.</p>
+    <div class="grid2">
+      <div class="panel"><h3>Güç farkına göre sonuçlar</h3><div class="chart">${svg}</div>
+        <div class="legend"><span><i style="background:${hm}"></i>Güçlü takımın galibiyeti</span><span><i style="background:${aw}"></i>Beraberlik</span><span>Noktalar: motor · kesik çizgi: hedef eğri</span></div></div>
+      <div class="panel"><h3>Eşit maçlarda gol dağılımı (${n} maç)</h3><div class="chart">${svg2}</div>
+        <div class="legend"><span><i style="background:${hm}"></i>Motor</span><span><i style="background:${fl}"></i>Ortalaması 2,5 olan rastgele (Poisson) dağılım</span></div></div>
+    </div>
+    <div class="panel"><h3>Maç istatistikleri ve hedefler</h3><div class="tblwrap"><table class="tbl">
+      <thead><tr><th>Ölçü</th><th>Motor</th><th>Hedef</th><th>Durum</th></tr></thead>
+      <tbody>${rowsT.map((r) => `<tr><td>${r[0]}${r[4] ? `<div class="note">${r[4]}</div>` : ''}</td><td>${r[1]}</td><td>${r[2]}</td><td><span class="pill ${r[3] ? 'ok' : 'wa'}">${r[3] ? 'Hedefte' : 'Ayar gerekli'}</span></td></tr>`).join('')}</tbody></table></div></div>
+    <div class="panel"><h3>Güç oranı tablosu</h3><div class="tblwrap"><table class="tbl">
+      <thead><tr><th>Güç oranı</th><th>Maç</th><th>Motor G / B / M</th><th>Hedef G / B / M</th><th>Maç başı gol</th></tr></thead>
+      <tbody>${c.map((r) => `<tr><td>${r.r.toFixed(2).replace('.', ',')}</td><td>${r.n}</td><td>%${r.w.toFixed(0)} / %${r.d.toFixed(0)} / %${r.l.toFixed(0)}</td><td>%${r.tw.toFixed(0)} / %${r.td.toFixed(0)} / %${r.tl.toFixed(0)}</td><td>${r.g.toFixed(2).replace('.', ',')}</td></tr>`).join('')}</tbody></table></div>
+      <p class="note">Güç oranı 1,00 satırında iki takım tamamen eşittir; oradaki fark tesadüftür.</p></div>
+    <div class="panel"><h3>Taktik dengesi (seçenek havuzu testi)</h3>
+      <p class="note">Her seçenek, diğer ayarları rastgele seçilmiş takımlarla, tamamen rastgele kurulmuş rakiplere karşı ${BALANCE.per} maç oynadı (toplam ${BALANCE.n.toLocaleString('tr-TR')} maç, güçler eşit). Sayı maç başı puan, parantez ortalamadan farkı. Bu örneklemde tesadüf payı yaklaşık ±0,11. Hedef: hiçbir seçenek bu payın belirgin dışında kalmasın. Denge önce mekaniklerle (ara pas yarışı, ofsayt, geçiş anı, yorgunluk), sonra Maç Motoru sekmesindeki taktik etkileşim tablosuyla sağlanır; tablo veri olarak tutulur ve canlı oyunda ayarlanabilir. Saldırgan ayarların sezon içi bedeli (ek yorgunluk) bu testte yoktur.</p>
+      <div class="tblwrap"><table class="tbl"><thead><tr><th>Ayar</th><th colspan="5">Maç başı puan</th></tr></thead><tbody>
+      ${BALANCE.dims.map((d) => `<tr><td>${d.lab}</td>${d.vals.map((v) => { const df = v.ppg - BALANCE.mean; const bad = Math.abs(df) > 0.15; return `<td>${v.n}: <b>${v.ppg.toFixed(2).replace('.', ',')}</b> <span class="pill ${bad ? 'wa' : 'ok'}">${df >= 0 ? '+' : '−'}${Math.abs(df).toFixed(2).replace('.', ',')}</span></td>`; }).join('')}${'<td></td>'.repeat(5 - d.vals.length)}</tr>`).join('')}
+      </tbody></table></div></div>
+    <div class="panel"><h3>Formasyon eşleşmeleri</h3>
+      <p class="note">Her ikili, diğer ayarları rastgele seçilmiş takımlarla 200 maç oynadı. Sayılar maç başı puan. Taş-kağıt-makas: her formasyon iki formasyonu yener, ikisine yenilir. Örneğin 5'li savunma kanat ortalarına ve iki forvete karşı güçlü, kalabalık orta sahaya karşı zayıftır. Eşleşme kuralları veri olarak tutulur ve canlı oyunda ayarlanabilir.</p>
+      <div class="tblwrap"><table class="tbl"><thead><tr><th>Eşleşme</th><th>Puanlar</th><th>Üstün</th></tr></thead><tbody>
+      ${MATCHUP.map((m) => `<tr><td>${m.a} – ${m.b}</td><td>${m.pa.toFixed(2).replace('.', ',')} – ${m.pb.toFixed(2).replace('.', ',')}</td><td>${Math.abs(m.pa - m.pb) < 0.2 ? 'Dengeli' : m.pa > m.pb ? m.a : m.b}</td></tr>`).join('')}
+      </tbody></table></div></div>`;
+}
+
+renderSetup();
+fitCanvas();
+newMatch(1);
+renderReport();
+requestAnimationFrame((t) => { last = t; frame(t); });
+</script>
