@@ -226,6 +226,7 @@ export interface MatchState {
   dribbling: boolean; // tasiyici top surme karari verdi: sonraki adimlarda ayni hizla surer (adim suresinden bagimsiz)
   control: [ControlState | null, ControlState | null]; // kullanici kontrolu (Team play), taraf basina
   contest: { x: number; y: number; until: number; a: PState; b: PState } | null; // yaklasan sahipsiz top mucadelesi (ekran isareti)
+  takerKind: string; // restartTaker'in duran top turu ('throw' ise top elle atilir)
   restartTaker: PState | null; // duran topu kullanacak oyuncu: vurusundan sonra baskasi dokunana kadar topa dokunamaz (ikinci dokunus yasagi)
   gkFeet: boolean; // kaleci topu geri pastan aldi: ayakla oynar, elle tutmaz (mudahaleye acik)
   nextDec: number; // tasiyicinin bir sonraki karar ani (fiziksel s): kararlar en sik 0,5 s'de bir (adim suresinden bagimsiz)
@@ -682,6 +683,7 @@ export function createMatch(a0: TeamIn, b0: TeamIn, seed: number, opts?: { knock
     control: [null, null],
     contest: null,
     restartTaker: null,
+    takerKind: '',
     gkFeet: false,
     nextDec: 0,
     lastThird: [false, false],
@@ -814,6 +816,7 @@ function kickoff(st: MatchState, side: 0 | 1) {
   st.lastPossSide = side;
   st.restartKind = 'kickoff';
   st.restartTaker = best;
+  st.takerKind = 'kickoff';
   st.gkFeet = false;
   st.holdUntil = st.t + 1.0;
   st.restartUntil = st.t + 1.0;
@@ -1632,7 +1635,7 @@ function giveBall(st: MatchState, p: PState, hold: number) {
   st.dribbling = false;
   st.nextDec = st.t + 0.5;
   st.gkFeet = false;
-  if (st.restartTaker && st.restartTaker !== p) st.restartTaker = null;
+  if (st.restartTaker && st.restartTaker !== p) { st.restartTaker = null; st.takerKind = ''; }
   const ctlG = st.control[p.side];
   if (ctlG) ctlG.holdStart = st.t;
   const b = st.ball;
@@ -1704,6 +1707,7 @@ function carrierAct(st: MatchState) {
   if (ctlC && ctlC.player === c) { userCarrier(st, c, ctlC); return; }
   // ilk dokunus / tutma: baski varsa topu korur, yogun baskida hizli birakir
   const quick = press > 0.8 && st.t >= st.holdUntil - 0.8;
+  if (st.restartTaker === c && st.t < st.holdUntil) { c.vx = 0; c.vy = 0; ballAt(st, c); return; } // duran top: yerinde, top surulmez
   if ((st.t < st.holdUntil && !quick) || st.t < st.nextDec - 1e-6) {
     if (st.dribbling) dribbleMove(st, c, 1);
     else shieldMove(st, c);
@@ -2401,6 +2405,7 @@ function callOffside(st: MatchState, c: PState, m: PState) {
   giveBall(st, taker, 1.2);
   deadTime(st, 2.5 + st.rng() * 1, 'Ofsayt');
   st.restartTaker = taker;
+  st.takerKind = '';
 }
 // ara pas: savunma arkasindaki bosluga, kosu yarisi + ofsayt riski
 function throughOptions(st: MatchState, c: PState, mates: PState[]) {
@@ -2611,7 +2616,18 @@ function kickBall(st: MatchState, p: PState, dx: number, dy: number, speed: numb
   b.gkTried = false;
   // ikinci dokunus yasagi: duran topu kullanan baskasi dokunana kadar topa dokunamaz (Kural 8, 13, 15, 16, 17)
   b.noTouch = st.restartTaker === p ? p : null;
+  if (b.noTouch && st.takerKind === 'throw') {
+    // tac: top elle, bas ustunden atilir; en cok ~25 m, hafif yukselen
+    b.z = 2.0;
+    const sp0 = hyp(b.vx, b.vy);
+    const cap = Math.min(sp0, 15);
+    if (sp0 > 0.01) { b.vx *= cap / sp0; b.vy *= cap / sp0; }
+    b.vz = Math.max(b.vz, 1.5);
+    if (b.kind === 'cross' || b.kind === 'shot') b.kind = 'pass';
+    dbg('tac_atildi');
+  }
   st.restartTaker = null;
+  st.takerKind = '';
   // ofsayt: vurus aninda cizginin otesindeki takim arkadaslari (tac, aut ve kornerden ofsayt olmaz)
   b.offside = null;
   if ((kind === 'pass' || kind === 'through' || kind === 'cross') && !o.noOff) {
@@ -3235,6 +3251,7 @@ function execSetPieceCross(st: MatchState, pd: Pending, headerP: number) {
   st.pending = null;
   st.restartKind = '';
   st.restartTaker = taker;
+  st.takerKind = '';
   kickBall(st, taker, dx / d, dy / d, v, vz, sw, 'cross', { tx, ty, intended: header, noOff: true, sigma: kickSigma(taker, 'cross', v, 0) * (0.9 - 0.1 * headerP) });
 }
 
@@ -3247,6 +3264,13 @@ function aerial(p: PState): number {
 function setPieceTarget(st: MatchState, p: PState): [number, number, number] | null {
   const pd = st.pending;
   const cel = st.celebrate;
+  // santra vurulana kadar herkes yerinde: kendi yarisinda, orta yuvarlagin disinda (Kural 8)
+  if (!pd && st.restartKind === 'kickoff' && st.restartTaker && st.owner === st.restartTaker && p !== st.restartTaker) {
+    if (p.pos === 'GK') { const [x, y] = fromFrame(p.side, 4, 34); return [x, y, 0.4]; }
+    const [kx, ky] = kickoffSpot(p.ax * 0.92, p.ay);
+    const [x, y] = fromFrame(p.side, kx, ky);
+    return [x, y, 0.5];
+  }
   if (cel && st.t < cel.until && p.side === cel.side && p.pos !== 'GK') {
     const sc = cel.scorer;
     const [sxf, syf] = toFrame(sc.side, sc.x, sc.y);
@@ -3278,7 +3302,7 @@ function setPieceTarget(st: MatchState, p: PState): [number, number, number] | n
     }
     const [kx, ky] = kickoffSpot(p.ax * 0.92, p.ay);
     const [x, y] = fromFrame(p.side, kx, ky);
-    return [x, y, 0.5];
+    return [x, y, 0.75];
   }
   if (pd.kind === 'corner') {
     if (atk) {
@@ -3456,6 +3480,7 @@ function execPending(st: MatchState, pd: Pending) {
     const [, gy] = fromFrame(pd.side, 104.4, guessY);
     const pGoal = clamp(P.penaltyP * (keeper ? Math.exp(P.shotSlope * Math.log(eg(taker) / eg(keeper))) : 1), 0.4, 0.95);
     st.restartTaker = taker;
+    st.takerKind = '';
     shootAt(st, taker, pGoal, { penalty: true, setPiece: true, aimY: cornerY, sigma: 0.035 });
     st.ball.pkY = gy;
     return;
@@ -3468,6 +3493,7 @@ function execPending(st: MatchState, pd: Pending) {
     giveBall(st, keeper, 1.5);
     st.gkFeet = true; // aut: kaleci topu yerden vurur
     st.restartTaker = keeper;
+    st.takerKind = '';
     return;
   }
   if (pd.kind === 'throw') {
@@ -3475,8 +3501,9 @@ function execPending(st: MatchState, pd: Pending) {
     const [bx, by] = fromFrame(pd.side, pd.spotX!, pd.spotY!);
     taker.x = bx;
     taker.y = by;
-    giveBall(st, taker, 0.3);
+    giveBall(st, taker, 0.6);
     st.restartTaker = taker;
+    st.takerKind = 'throw';
     return;
   }
   if (pd.kind === 'fk') {
@@ -3493,6 +3520,7 @@ function execPending(st: MatchState, pd: Pending) {
     }
     giveBall(st, taker, 0.8);
     st.restartTaker = taker;
+    st.takerKind = '';
     return;
   }
   if (pd.kind === 'fkshot') {
@@ -3504,6 +3532,7 @@ function execPending(st: MatchState, pd: Pending) {
     st.keyUntil = st.t + 2;
     say(st, 'fk', pd.side, taker);
     st.restartTaker = taker;
+    st.takerKind = '';
     shootAt(st, taker, pd.xg ?? P.fkP, { freekick: true, setPiece: true });
   }
 }
