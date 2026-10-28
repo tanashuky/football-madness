@@ -182,7 +182,7 @@ label.chk { display: flex; flex-direction: row; gap: 8px; align-items: center; }
           <label for="pCam">Kamera<select id="pCam"><option value="full" selected>Tam saha</option><option value="length">Tam boy</option><option value="near">Yakın</option></select></label>
           <label for="pKeys">Klavye<select id="pKeys"><option value="arrows" selected>Ok tuşları + S pas · D şut · W ara · A orta · E sprint · Q değiştir</option><option value="wasd">WASD + J pas · K şut · L ara · I orta · Shift sprint · Boşluk değiştir</option></select></label>
           <div class="ctrl"><button class="btn prim" id="playBtn">Oynamaya başla (Kartal SK, Team play)</button></div>
-          <p class="keys">Telefon: sol yarıda parmağını bastığın yer joystick olur; dış halkaya kadar itince sprint. Sağ altta elmas butonlar: hücumda üst Ara, sağ Şut, sol Orta, alt Pas; savunmada üst Değiştir, sağ Kaydır, sol Müdahale, alt Baskı (basılı). Vuruş: butona basınca oyuncunun üstünde topun gerçek yolu belirir; parmağınla yolu çiz: yön = sürükleme yönü, kavis = izin bükülmesi, güç = basılı tutma; bırakınca vurur (ne görüyorsan o). Kısa dokunuş (Pas/Ara) koşu yönündeki arkadaşa hızlı pas. Top sana gelirken Pas/Şut'a basarsan gelişine vurur (⚡); joystick ilk dokunuş yönüdür. Sahipsiz topta rakiple aynı anda yetişiyorsan iki yay belirir: o anda Müdahale/Kaydır bas (erken basan atmış olur). Klavyede yön tuşları nişandır; tuşu basılı tutmak güç. C kamera, Esc çık; gol sevincini dokunarak atla.</p>
+          <p class="keys">Telefon: sol yarıda parmağını bastığın yer joystick olur; dış halkaya kadar itince sprint. Sağ altta elmas butonlar: hücumda üst Ara, sağ Şut, sol Orta, alt Pas; savunmada üst Değiştir, sağ Kaydır, sol Müdahale, alt Baskı (basılı). Vuruş: butona basınca oyuncunun üstünde topun gerçek yolu belirir; parmağınla yolu çiz: yön = sürükleme yönü, kavis = izin bükülmesi, güç = basılı tutma; bırakınca vurur (ne görüyorsan o). Kısa dokunuş (0,2 s altı, sürüklemeden) nişan açmaz: Pas/Ara joystick yönündeki arkadaşa tek pas, Şut joystick yönüne düz şut. Pas ve Ara her zaman yerden, Orta her zaman havadan. Top sana gelirken Pas/Şut'a basarsan gelişine vurur (⚡); joystick ilk dokunuş yönüdür. Sahipsiz topta rakiple aynı anda yetişiyorsan iki yay belirir: o anda Müdahale/Kaydır bas (erken basan atmış olur). Klavyede yön tuşları nişandır; tuşu basılı tutmak güç. C kamera, Esc çık; gol sevincini dokunarak atla.</p>
         </div>
         <div class="panel">
           <h3>Takımlar</h3>
@@ -388,6 +388,8 @@ function watchEvents() {
 const cv = document.getElementById('pitch');
 const ctx = cv.getContext('2d');
 const PADX = 3.2, PADY = 2.2; // saha cevresi (m): kaleler ve kenar
+// skor seridi + 'hucum' ipucu yuksekligi (canvas pikseli): drawPhoneOverlay ile ayni olculer
+function hudReserve(Wc) { const dpr = Wc / cv.clientWidth; const u = Math.max(0.8, Math.min(1.6, cv.clientWidth / 852)) * dpr; return SA.t * dpr + 8 * u + 34 * u + 20 * u; }
 // kamera (telefon onizlemesi icin): 'full' tum saha, 'smart' topu izleyen kamera (w: gorunen genislik, m)
 const CAM = { mode: 'full', w: 65, cx: 52.5, cy: 34, phone: false, overlay: false };
 function fitCanvas() {
@@ -403,15 +405,19 @@ function draw(alpha, now = performance.now()) {
   let s, ox, oy;
   if (CAM.mode === 'smart') {
     s = Wc / CAM.w;
-    const vh = Hc / s;
+    const top0 = PLAY.on ? hudReserve(Wc) : 0;
+    const vh = (Hc - top0) / s;
     // hedef: top + hiz yonunde hafif onden bakis; yumusak takip
     const tx = st.ball.x + (st.ball.vx ?? 0) * 0.6, ty = st.ball.y + (st.ball.vy ?? 0) * 0.6;
     CAM.cx += (tx - CAM.cx) * 0.12; CAM.cy += (ty - CAM.cy) * 0.12;
     ox = Math.max(-PADX, Math.min(105 + PADX - CAM.w, CAM.cx - CAM.w / 2));
-    oy = vh >= PH ? -PADY - (vh - PH) / 2 : Math.max(-PADY, Math.min(68 + PADY - vh, CAM.cy - vh / 2));
+    oy = (vh >= PH ? -PADY - (vh - PH) / 2 : Math.max(-PADY, Math.min(68 + PADY - vh, CAM.cy - vh / 2))) - top0 / s;
   } else {
-    s = Math.min(Wc / PW, Hc / PH);
-    ox = -PADX - (Wc / s - PW) / 2; oy = -PADY - (Hc / s - PH) / 2;
+    // oynama modunda ust skor seridinin altindaki alana sigdirilir (saha skorbordun altinda kalmaz)
+    const top = PLAY.on ? hudReserve(Wc) : 0;
+    const Hv = Hc - top;
+    s = Math.min(Wc / PW, Hv / PH);
+    ox = -PADX - (Wc / s - PW) / 2; oy = -PADY - (Hv / s - PH) / 2 - top / s;
   }
   const X = (x) => (x - ox) * s, Y = (y) => (y - oy) * s;
   // zemin: saha disi koyu cim, saha icinde seritler
@@ -585,6 +591,8 @@ const PLAY = { on: false, side: 0, camMode: 'full', minutes: 10, keys: 'arrows',
 const IN = { joyId: null, joyBase: null, mx: 0, my: 0, joyK: 0, press: false, acts: [], keys: new Set(), ptrBtn: new Map(), kick: null, kbKick: null };
 const POWER_MS = { shoot: 900, pass: 600, through: 600, cross: 700 };
 const powerOf = (t0, kind) => Math.min(1, (performance.now() - t0) / POWER_MS[kind]);
+const TAP_MS = 200; // bundan kisa ve surukelenmeyen basis tek vurus (nisan acilmaz)
+const TAP_POWER = { pass: 0.3, through: 0.4, shoot: 0.55, cross: 0.5 };
 const CAM_MODES = [['full', 'Tam saha', 65], ['length', 'Tam boy', 108], ['near', 'Yakın', 65]];
 const SA = { t: 0, r: 0, b: 0, l: 0 }; // guvenli alanlar (centik, ana sayfa cubugu)
 function readSafeArea() {
@@ -633,7 +641,7 @@ function kickMove(x, y) {
   const last = tr[tr.length - 1];
   if (Math.hypot(x - last[0], y - last[1]) >= 2) tr.push([x, y]);
   const dx = x - k.x0, dy = y - k.y0, m = Math.hypot(dx, dy);
-  if (m < 8) return; // ilk 8 px: henuz yon yok
+  if (m < 14) return; // ilk 14 px: basparmagin dogal kaymasi, henuz yon yok (kisa dokunus tek pas kalir)
   k.aimed = true; k.ax = dx / m; k.ay = dy / m;
   // bukulme: izin kirise gore (dik eksende) ortalama sapmasi / kiris uzunlugu; kirisin %40'inda tam falso
   let sum = 0, cnt = 0;
@@ -649,7 +657,9 @@ function kickEnd() {
   const k = IN.kick; if (!k) return;
   IN.kick = null;
   const held = performance.now() - k.t0;
-  IN.acts.push({ act: k.id, power: powerOf(k.t0, k.id), ax: k.aimed ? k.ax : 0, ay: k.aimed ? k.ay : 0, curve: k.aimed ? k.curve : 0, tap: held < 150 && !k.aimed });
+  const tap = held < TAP_MS && !k.aimed;
+  // kisa dokunus: joystick yonune tek vurus (sut ve ortada orta guc)
+  IN.acts.push({ act: k.id, power: tap ? TAP_POWER[k.id] : powerOf(k.t0, k.id), ax: k.aimed ? k.ax : 0, ay: k.aimed ? k.ay : 0, curve: k.aimed ? k.curve : 0, tap });
 }
 function pressBtn(b, down, ptrId, x, y) {
   if (b.id === 'cam') { if (down) cycleCam(); return; }
@@ -753,7 +763,8 @@ addEventListener('keyup', (e) => {
   if (IN.kbKick && IN.kbKick.id === act) {
     const held = performance.now() - IN.kbKick.t0;
     const [mx, my] = kbDir();
-    IN.acts.push({ act, power: powerOf(IN.kbKick.t0, act), ax: mx, ay: my, curve: 0, tap: held < 150 });
+    const tap = held < TAP_MS;
+    IN.acts.push({ act, power: tap ? TAP_POWER[act] : powerOf(IN.kbKick.t0, act), ax: mx, ay: my, curve: 0, tap });
     IN.kbKick = null;
   }
 });
@@ -799,7 +810,9 @@ function aimInfo(cp) {
   const k = IN.kick, kk = IN.kbKick;
   if (!k && !kk) return null;
   const id = k ? k.id : kk.id;
-  const pw = powerOf(k ? k.t0 : kk.t0, id);
+  const t0 = k ? k.t0 : kk.t0;
+  if (!(k && k.aimed) && performance.now() - t0 < TAP_MS) return null; // kisa dokunusta nisan acilmaz
+  const pw = powerOf(t0, id);
   let ax = 0, ay = 0;
   if (k && k.aimed) { ax = k.ax; ay = k.ay; }
   else {
