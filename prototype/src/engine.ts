@@ -49,7 +49,7 @@ export interface TeamIn {
   mainTactic?: TacticIn; // ana taktik (doktrin): maca ozel taktik bundan sapiyorsa taktik kapasite verimi duser
   mainFormation?: Formation;
   specialTraining?: boolean; // maca ozel taktik antrenmani yapildi: doktrin bedeli yariya iner
-  ai?: { noiseMult: number; readAcc?: number }; // bot zekasi: karar hata payi carpani, rakibi okuma dogrulugu (Mac Motoru sekmesi)
+  ai?: { noiseMult: number; readAcc?: number; react?: number; timing?: number }; // bot zekasi: karar hata payi carpani, rakibi okuma dogrulugu, topa tepki suresi (s), mucadele zamanlamasi (pencereyi tutturma orani)
   situational?: { when: 'leading' | 'trailing' | 'drawing' | 'any'; fromMinute: number; tactic?: Partial<TacticIn>; formation?: Formation }[]; // durum taktikleri
 }
 
@@ -186,6 +186,8 @@ export interface ControlState {
   manualUntil: number; // elle degistirmeden sonra otomatik gecis bu ana kadar bekler
   lastSwitchT: number;
   kick: { act: UserAct; power: number; ax: number; ay: number; curve: number; tap: boolean; at: number } | null; // donus bedeli bekleyen vurus
+  pre: { act: UserAct; power: number; ax: number; ay: number; curve: number; tap: boolean; t: number } | null; // gelisine vurus: top gelmeden verilen vurus niyeti
+  press50: { kind: 'tackle' | 'slide'; t: number; spent: boolean } | null; // sahipsiz top mucadelesi icin zamanlanmis mudahale basisi
 }
 export interface MatchState {
   teams: [TeamIn, TeamIn];
@@ -222,6 +224,7 @@ export interface MatchState {
   zoneEntries: [number[], number[]]; // hucum ucuncu bolgeye girisler bolgeye gore (sol/orta/sag) - baskin atak yonu bundan okunur
   dribbling: boolean; // tasiyici top surme karari verdi: sonraki adimlarda ayni hizla surer (adim suresinden bagimsiz)
   control: [ControlState | null, ControlState | null]; // kullanici kontrolu (Team play), taraf basina
+  contest: { x: number; y: number; until: number; a: PState; b: PState } | null; // yaklasan sahipsiz top mucadelesi (ekran isareti)
   nextDec: number; // tasiyicinin bir sonraki karar ani (fiziksel s): kararlar en sik 0,5 s'de bir (adim suresinden bagimsiz)
   lastThird: [boolean, boolean]; // top sahibi takim su an hucum ucuncu bolgede mi
   playerXg: [Record<number, number>, Record<number, number>];
@@ -268,6 +271,15 @@ export const P = {
   reactMate: 0.25, // hedeflenmemis takim arkadasinin tepki suresi
   tackleRate: 0.22, // temas mesafesinde mudahale denemesi (1/s), baskiyla artar
   accel: 12, // oyuncu ivmesi (m/s2): durdugu yerden tam hiza ~0,6 s, 180 derece donus hiz kaybi
+  sprintDrain: 0.12, // sprintte (insan ve bot) saniye basina kondisyon kaybi
+  contestWin: 0.25, // sahipsiz top mucadelesi penceresi (s): bu kadar yakin yetisenler mucadele eder
+  contestLate: 0.8, // pencere icinde gec kalanin agirlik kaybi (penceren sonunda)
+  contestTackle: 1.25, // pencerede Mudahale basanin agirlik carpani
+  contestSlide: 1.4, // pencerede Kaydir basanin agirlik carpani (faul riski yuksek)
+  contestSlope: 1.35, // agirlik oraninin etkisi (ln oran carpani)
+  gkOutRange: 22, // kaleci birebirde tasiyici bu kadar yakinsa cikar (m)
+  gkOutK: 0.4, // cikis mesafesi = tasiyici mesafesi x bu
+  gkOutMax: 8, // en cok bu kadar acilir (m)
   leadBase: 0.6, // top surerken topun ayaktan onde durusu (m) + hizla artan pay
   leadSpeed: 0.09,
   tackleReach: 1.5, // mudahale icin azami mesafe (m)
@@ -665,6 +677,7 @@ export function createMatch(a0: TeamIn, b0: TeamIn, seed: number, opts?: { knock
     zoneEntries: [[0, 0, 0], [0, 0, 0]],
     dribbling: false,
     control: [null, null],
+    contest: null,
     nextDec: 0,
     lastThird: [false, false],
     playerXg: [{}, {}],
@@ -922,7 +935,7 @@ function reactOf(st: MatchState, p: PState): number {
   if (!b.kicker) return 0;
   if (p === b.intended) return 0;
   if (p.side === b.kicker.side) return P.reactMate;
-  return P.reactOpp + (b.kickT - st.lastTurnoverT < P.transWin ? P.transReact : 0) + (st.teams[p.side].tactic.trap ? 0 : 0);
+  return (st.teams[p.side].ai?.react ?? P.reactOpp) + (b.kickT - st.lastTurnoverT < P.transWin ? P.transReact : 0);
 }
 
 // ---------- Takim sekli ----------
@@ -935,27 +948,45 @@ function updateAnchorsAndMove(st: MatchState) {
   // sahipsiz / yolda top: her takimdan topa en erken yetisebilecek oyuncular topa kosar (hedeflenen alici her zaman)
   const chase = new Map<PState, { x: number; y: number; t: number }>();
   const loose = !carrier && !st.pending && !st.celebrate && st.t >= st.restartUntil;
+  st.contest = st.contest && st.t < st.contest.until ? st.contest : null;
   if (loose) {
     const pts = ballPath(st);
     const b = st.ball;
     const toGoal = b.kind === 'shot';
+    const lists: { p: PState; c: { x: number; y: number; t: number } }[][] = [[], []];
+    const gks: ({ p: PState; c: { x: number; y: number; t: number } } | null)[] = [null, null];
     for (let s = 0 as 0 | 1; s < 2; s = (s + 1) as 0 | 1) {
-      const cands: { p: PState; c: { x: number; y: number; t: number } }[] = [];
       const ownKick = !!b.kicker && b.kicker.side === s;
       for (const q of liveTeam(st, s)) {
         if (q.injured) continue;
         const c = chaseTarget(q, pts, reactOf(st, q), playerSpeed(q), ownKick ? P.ctrlSpeed - 1 : 99);
         if (q.pos === 'GK') {
-          // kaleci yalniz kendi ceza sahasina dusecek topa cikar; sut ona dogruysa ayri kural (asagida)
+          // kaleci yalniz kendi ceza sahasina dusecek topa, acik farkla once yetisecekse cikar (asagida karar); suta ayri kural
           const [cxf, cyf] = toFrame(s, c.x, c.y);
-          if (!(cxf < 16.5 && Math.abs(cyf - 34) < 20.16) || toGoal) continue;
+          if (cxf < 16.5 && Math.abs(cyf - 34) < 20.16 && !toGoal) gks[s] = { p: q, c };
+          continue;
         }
-        cands.push({ p: q, c });
+        lists[s].push({ p: q, c });
       }
-      cands.sort((a, b2) => a.c.t - b2.c.t);
+      lists[s].sort((a, b2) => a.c.t - b2.c.t);
+    }
+    for (let s = 0 as 0 | 1; s < 2; s = (s + 1) as 0 | 1) {
+      const cands = lists[s];
+      const oppBest = lists[1 - s].length ? lists[1 - s][0].c.t : 9;
+      const g = gks[s];
+      // kaleci: rakipten en az 0,3 s once ve takim arkadasindan once yetisecekse cikar
+      if (g && g.c.t + 0.3 < oppBest && (!cands.length || g.c.t < cands[0].c.t)) chase.set(g.p, g.c);
       const n = b.kicker && b.kicker.side === s ? 1 : 2;
       for (let i = 0; i < Math.min(n, cands.length); i++) chase.set(cands[i].p, cands[i].c);
       if (b.intended && b.intended.side === s && !b.intended.off && !chase.has(b.intended)) chase.set(b.intended, chaseTarget(b.intended, pts, 0, playerSpeed(b.intended), P.ctrlSpeed - 1));
+    }
+    // yaklasan mucadele isareti: iki takimin en erken yetisecekleri pencere icindeyse (ekran icin)
+    if (lists[0].length && lists[1].length) {
+      const a = lists[0][0], c2 = lists[1][0];
+      if (Math.abs(a.c.t - c2.c.t) <= P.contestWin && Math.min(a.c.t, c2.c.t) <= 0.7) {
+        const first = a.c.t <= c2.c.t ? a : c2;
+        st.contest = { x: first.c.x, y: first.c.y, until: st.t + 0.3, a: a.p, b: c2.p };
+      }
     }
   }
   (st as any)._chase = chase;
@@ -992,14 +1023,15 @@ function updateAnchorsAndMove(st: MatchState) {
     }
     // kaleciyle karsi karsiya: kaleci cikar (onunde kendi savunmacisi yoksa)
     let gkOut: [number, number] | null = null;
-    if (!inPoss && carrier && bxf < 30) {
+    if (!inPoss && carrier && bxf < P.gkOutRange) {
       const [, cyfA] = [0, byf];
       const blocked = live.some((q) => {
         if (q.pos === 'GK') return false;
         const [qxf, qyf] = toFrame(s, q.x, q.y);
         return qxf < bxf + 0.5 && Math.abs(qyf - cyfA) < 5 + (bxf - qxf) * 0.4;
       });
-      if (!blocked) gkOut = fromFrame(s, Math.min(bxf - 1.5, 13), byf + (34 - byf) * 0.35);
+      // birebir: taşıyıcıya oranli ve en cok 8 m aciya kapatir, cizgisinden kopmaz
+      if (!blocked) gkOut = fromFrame(s, Math.min(bxf * P.gkOutK, P.gkOutMax), byf + (34 - byf) * 0.35);
     }
     // kendi ucuncu bolgesinde 1-2 savunmaci top ile kale arasina girer (derin blokta 2)
     const coverMap = new Map<PState, [number, number]>();
@@ -1173,9 +1205,9 @@ function updateAnchorsAndMove(st: MatchState) {
             urg = 1;
           } else {
             tx = p.x + (inp.mx / mag) * 6 * k; ty = p.y + (inp.my / mag) * 6 * k;
-            urg = (inp.sprint ? 1.0 : 0.78) * k;
+            urg = (inp.sprint ? 1.0 : 0.72) * k;
           }
-          if (inp.sprint) p.k = Math.max(0, p.k - 0.03 * st.dt * 6);
+          if (inp.sprint) p.k = Math.max(0, p.k - P.sprintDrain * st.dt);
         }
       }
       // yarisi kaybeden savunmaci kisa sure yavas
@@ -1193,6 +1225,7 @@ function updateAnchorsAndMove(st: MatchState) {
         }
       }
       const sp = p.speedBase * kf(p.k) * urg * (p.injured ? 0.5 : 1);
+      if (urg >= 0.98 && p.pos !== 'GK' && !(ctl && ctl.player === p)) p.k = Math.max(0, p.k - P.sprintDrain * dt); // botun tam hiz kosusu da kondisyon yakar
       moves.set(p, moveToward(p, tx, ty, sp, dt, p.pos === 'GK' ? P.accel * 2.5 : P.accel)); // kaleci patlayici
       face(p, st.ball.x - p.x, st.ball.y - p.y, 0.3);
     }
@@ -1814,7 +1847,7 @@ function aiDecide(st: MatchState, c: PState) {
 // ---------- Kullanici kontrolu: API ----------
 export function setControl(st: MatchState, side: 0 | 1, mode: 'none' | 'team', assistPass: 0 | 1 | 2 = 0, assistShot: 0 | 1 | 2 = 1, opts: { autoSwitch?: boolean } = {}) {
   if (mode === 'none') { st.control[side] = null; return; }
-  st.control[side] = { mode: 'team', player: null, input: { mx: 0, my: 0, sprint: false, press: false }, actAt: -9, assistPass, assistShot, cooldown: 0, switchCd: 0, holdStart: 0, lastInputT: 0, duelUntil: new Map(), autoSwitch: opts.autoSwitch ?? true, manualUntil: -9, lastSwitchT: -9, kick: null };
+  st.control[side] = { mode: 'team', player: null, input: { mx: 0, my: 0, sprint: false, press: false }, actAt: -9, assistPass, assistShot, cooldown: 0, switchCd: 0, holdStart: 0, lastInputT: 0, duelUntil: new Map(), autoSwitch: opts.autoSwitch ?? true, manualUntil: -9, lastSwitchT: -9, kick: null, pre: null, press50: null };
   pickControlled(st, side);
 }
 export function setInput(st: MatchState, side: 0 | 1, input: UserInput) {
@@ -1885,16 +1918,34 @@ function userStep(st: MatchState) {
     }
     if (inPoss) continue; // hucum aksiyonlari userCarrier'da
     const c = st.owner;
-    if ((inp.act === 'tackle' || inp.act === 'slide') && ctl.cooldown <= 0) {
+    // gelisine vurus: top bizde degilken verilen pas/sut/orta niyeti saklanir; top gelince ilk dokunusta uygulanir (2,5 s icinde)
+    if (inp.act === 'pass' || inp.act === 'through' || inp.act === 'shoot' || inp.act === 'cross') {
+      let ax0 = inp.ax ?? 0, ay0 = inp.ay ?? 0;
+      const an = hyp(ax0, ay0);
+      if (an > 0.1) { ax0 /= an; ay0 /= an; }
+      else { const mg = hyp(inp.mx, inp.my); if (mg > 0.15) { ax0 = inp.mx / mg; ay0 = inp.my / mg; } else { ax0 = p.hx; ay0 = p.hy; } }
+      ctl.pre = { act: inp.act, power: clamp(inp.power ?? 0.3, 0, 1), ax: ax0, ay: ay0, curve: clamp(inp.curve ?? 0, -1, 1), tap: !!inp.tap, t: st.t };
       inp.act = undefined;
-      if (!c || c.side === side || st.t < st.restartUntil || p.injured) continue;
+      continue;
+    }
+    if ((inp.act === 'tackle' || inp.act === 'slide') && ctl.cooldown <= 0) {
+      const kindT: 'tackle' | 'slide' = inp.act;
+      inp.act = undefined;
+      if (p.injured || st.t < st.restartUntil) continue;
+      if (!c) {
+        // sahipsiz top: mudahale basisi mucadele penceresi icin zamanlanir; pencere gelmezse oyuncu atmis olur (0,3 s sonra tokezler)
+        ctl.press50 = { kind: kindT, t: st.t, spent: false };
+        ctl.cooldown = kindT === 'slide' ? 1.2 : 0.8;
+        continue;
+      }
+      if (c.side === side) continue;
       const d = hyp(c.x - p.x, c.y - p.y);
       const [cxf] = toFrame(c.side, c.x, c.y);
       const behind = toFrame(c.side, p.x, p.y)[0] < cxf + 0.3;
       const gkHolding = c.pos === 'GK' && cxf < 16.5;
       if (gkHolding) continue;
-      if (inp.act === 'tackle' && d < 2.2) { ctl.cooldown = 0.8; tackle(st, p, c, behind); }
-      else if (inp.act === 'slide' && d < 4.0) {
+      if (kindT === 'tackle' && d < 2.2) { ctl.cooldown = 0.8; tackle(st, p, c, behind); }
+      else if (kindT === 'slide' && d < 4.0) {
         // kayarak mudahale: uzaktan yetisir, daha cok faul; iskalarsa kisa sure yerde
         ctl.cooldown = 1.2;
         const ux = (c.x - p.x) / Math.max(0.1, d), uy = (c.y - p.y) / Math.max(0.1, d);
@@ -1902,6 +1953,16 @@ function userStep(st: MatchState) {
         tackle(st, p, c, true);
         if (st.owner === c) p.beatenUntil = st.t + 0.8;
       } else { ctl.cooldown = 0.4; p.beatenUntil = st.t + 0.3; }
+    }
+  }
+  // niyetlerin suresi: gelisine vurus 2,5 s, mucadele basisi 0,3 s (pencere gelmediyse tokezleme)
+  for (const side of [0, 1] as const) {
+    const ctl = st.control[side];
+    if (!ctl) continue;
+    if (ctl.pre && (st.t - ctl.pre.t > 4 || (st.owner && st.owner.side !== side))) { dbg(st.t - ctl.pre.t > 4 ? 'pre_dustu_sure' : 'pre_dustu_rakip'); ctl.pre = null; }
+    if (ctl.press50 && !ctl.press50.spent && st.t - ctl.press50.t > 0.3) {
+      ctl.press50 = null;
+      if (ctl.player) { ctl.player.beatenUntil = st.t + 0.3; dbg('erken_mudahale'); }
     }
   }
 }
@@ -1931,6 +1992,12 @@ function userCarrier(st: MatchState, c: PState, ctl: ControlState) {
     aiDecide(st, c);
     return;
   }
+  // gelisine vurus niyeti top bizdeyken hala duruyorsa (alici kontrol edilen degildi): hemen vurur
+  if (ctl.pre && !ctl.kick) {
+    const pre = ctl.pre; ctl.pre = null;
+    ctl.kick = { act: pre.act, power: pre.power, ax: pre.ax, ay: pre.ay, curve: pre.curve, tap: pre.tap, at: st.t };
+    inp.act = undefined;
+  }
   // vurus kuyrugu: yeni aksiyon gelince nisan yonu belirlenir, oyuncu o yone doner (180 derece 0,3 s), sonra vurur
   let act = inp.act;
   if (act === 'pass' || act === 'through' || act === 'shoot' || act === 'cross') {
@@ -1957,134 +2024,9 @@ function userCarrier(st: MatchState, c: PState, ctl: ControlState) {
     ctl.kick = null;
     c.hx = kk.ax; c.hy = kk.ay;
     ballAt(st, c);
-    const ddx = kk.ax, ddy = kk.ay;
     const rk = st.restartKind; st.restartKind = '';
-    const noOff = rk === 'throw' || rk === 'goalkick' || rk === 'corner';
-    const power = kk.power;
-    const sw = kk.curve * 3.0; // falso: yana ivme (m/s2)
-    const actK = kk.act;
-    // kisa basis (bas-cek): kosu yonundeki +-25 derece koni icindeki takim arkadasina kismi yardimli hizli pas
-    if (kk.tap && (actK === 'pass' || actK === 'through') && !gkHands) {
-      let bestM: PState | null = null, bv = -1e9;
-      for (const m of mates) {
-        const vx = m.x - c.x, vy = m.y - c.y, d = hyp(vx, vy) || 1;
-        if (d < 2.5 || d > 40 || (m.pos === 'GK' && toFrame(side, m.x, m.y)[0] > 20)) continue;
-        const a = (vx * ddx + vy * ddy) / d;
-        if (a < Math.cos((25 * Math.PI) / 180)) continue;
-        const v = a * 0.6 + passEval(st, c, m).p - d * 0.004;
-        if (v > bv) { bv = v; bestM = m; }
-      }
-      if (bestM) { dbg('upass_tap'); passTo(st, c, bestM, { air: actK === 'through' && hyp(bestM.x - c.x, bestM.y - c.y) > 22, noOff, kind: actK === 'through' ? 'through' : 'pass' }); return; }
-      // koni bos: kosu yonunde kisa top
-      st.stats[side].passes++;
-      const bx = st.ball.x, by = st.ball.y;
-      kickBall(st, c, ddx, ddy, passV0(8), 0, 0, 'pass', { tx: bx + ddx * 8, ty: by + ddy * 8, intended: null, noOff });
-      return;
-    }
-    if (actK === 'cross' && !gkHands) {
-      // orta: nisan yonunde havadan top (guc mesafe); ceza sahasindaki en iyi kafaci hedeflenir, top nisana gider
-      const dist = 14 + 30 * power;
-      const ax = clamp(c.x + ddx * dist, 0.5, L - 0.5), ay = clamp(c.y + ddy * dist, 0.5, W - 0.5);
-      let best: PState | null = null, bd = 1e9;
-      for (const m of mates) { if (m.pos === 'GK') continue; const d = hyp(m.x - ax, m.y - ay); if (d < bd) { bd = d; best = m; } }
-      st.stats[side].passes++;
-      const bx = st.ball.x, by = st.ball.y, dxx = ax - bx, dyy = ay - by, dd = hyp(dxx, dyy) || 1;
-      const [v, vz] = lobV(dd, 0.55);
-      kickBall(st, c, dxx / dd, dyy / dd, v, vz, sw, 'cross', { tx: ax, ty: ay, intended: best, noOff });
-      dbg('uorta');
-      return;
-    }
-    const act = actK;
-    if (act === 'shoot' && !gkHands) {
-      const distGoal = hyp(105 - cxf, 34 - cyf);
-      if (distGoal < 45) {
-        const oneOnOne = cxf > 72 && !st.players.some((o) => { if (o.side === side || o.off || o.pos === 'GK') return false; const [oxf, oyf] = toFrame(side, o.x, o.y); return oxf > cxf - 0.5 && Math.abs(oyf - cyf) < 5 + (oxf - cxf) * 0.4 && hyp(o.x - c.x, o.y - c.y) < 14; });
-        const m = shotModel(st, c, cxf, cyf, press, oneOnOne);
-        // nisan: joystick yonu kale cizgisinde hangi noktaya bakiyor; yardim seviyesi kaleye dogru ceker
-        const [gx, gy] = fromFrame(side, 105, 34);
-        let aimY = 34;
-        {
-          const tdx = gx - c.x, tdy = gy - c.y, tdn = hyp(tdx, tdy) || 1;
-          // yonun kaleye gore yanal bileseni (m), mesafeyle olceklenir
-          const lat = (ddx * -tdy / tdn + ddy * tdx / tdn) * distGoal * 0.5;
-          const [, ayf] = toFrame(side, gx - tdy / tdn * lat, gy + tdx / tdn * lat);
-          aimY = clamp(ayf, 34 - 5, 34 + 5);
-        }
-        // yardim: Tam -> kose icine ceker, Kismi -> yarisi; guc: sut hizi ve yukselme (asiri guc ustten gider)
-        const pull = [0, 0.5, 1][ctl.assistShot];
-        const inGoal = clamp(aimY, 34 - 3.0, 34 + 3.0);
-        aimY = aimY + (inGoal - aimY) * pull;
-        const sigma = kickSigma(c, 'shot', P.shotSpeed, press) * [1.0, 0.85, 0.7][ctl.assistShot];
-        shootAt(st, c, m.xg, { power, aimY, sigma, sw });
-        dbg('usut');
-        return;
-      }
-      // uzak mesafeden sut: ileri uzun top gibi davranir (asagida yonlu pas)
-    }
-    // ara pas: yonde en uygun kosucu (yardim) ya da dogrudan yonun onundeki bosluga
-    if (act === 'through') {
-      const opts = throughOptions(st, c, mates);
-      let best: (typeof opts)[number] | null = null, bv = -1e9;
-      for (const o of opts) { const vx = o.m.x - c.x, vy = o.m.y - c.y, d = hyp(vx, vy) || 1; const a = (vx * ddx + vy * ddy) / d; const v = (ctl.assistPass === 2 ? o.path * o.race * 2 : ctl.assistPass === 1 ? o.path * o.race : 0.3) + a; if (a > (ctl.assistPass === 0 ? 0.75 : 0.3) && v > bv) { bv = v; best = o; } }
-      if (best) { throughTo(st, c, best, noOff); dbg('uara_kosucu'); return; }
-      // kosucu yoksa: yon boyunca bosluga sert top; en yakin takim arkadasi kosar (hedeflenen alici)
-      const dist = 16 + 20 * power;
-      const ax = clamp(c.x + ddx * dist, 0.5, L - 0.5), ay = clamp(c.y + ddy * dist, 0.5, W - 0.5);
-      let runner: PState | null = null, rd = 1e9;
-      for (const m of mates) { if (m.pos === 'GK') continue; const d = hyp(m.x - ax, m.y - ay); if (d < rd) { rd = d; runner = m; } }
-      st.stats[side].passes++;
-      const bx = st.ball.x, by = st.ball.y, dxx = ax - bx, dyy = ay - by, dd = hyp(dxx, dyy) || 1;
-      const tRun = runner ? rd / playerSpeed(runner) : 1.5;
-      kickBall(st, c, dxx / dd, dyy / dd, throughV0(dd, tRun), 0, sw, 'through', { tx: ax, ty: ay, intended: runner, noOff });
-      dbg('uara_bosluk');
-      return;
-    }
-    // yonlu pas: hedef nokta joystick yonunde, mesafe basili tutma suresinden; yardim seviyesi yone yakin takim
-    // arkadasina ceker (koni), yardimsizda top tam nisan noktasina gider
-    const dist = 8 + 32 * power;
-    const ax = clamp(c.x + ddx * dist, 0.5, L - 0.5), ay = clamp(c.y + ddy * dist, 0.5, W - 0.5);
-    const tol = [1.2, 5.5, 8][ctl.assistPass];
-    let bestM: PState | null = null, bestV = -1e9;
-    for (const m of mates) {
-      const vx = m.x - c.x, vy = m.y - c.y, d = hyp(vx, vy);
-      if (d < 2.5 || d > dist + 14) continue;
-      const along = (vx * ddx + vy * ddy);
-      if (along < 2) continue;
-      const perp = Math.abs(vx * ddy - vy * ddx);
-      if (perp > tol + along * (ctl.assistPass === 0 ? 0.04 : 0.12)) continue;
-      if (m.pos === 'GK' && toFrame(side, m.x, m.y)[0] > 20) continue;
-      const dd = hyp(m.x - ax, m.y - ay);
-      // yardimsiz: nisana en yakin; yardimli: nisana yakinlik + pasin guvenligi (kesilme riski)
-      const v = ctl.assistPass === 0 ? -dd : -dd * 0.04 + passEval(st, c, m).p * [0, 0.8, 1.2][ctl.assistPass];
-      if (v > bestV) { bestV = v; bestM = m; }
-    }
-    if (!bestM && ctl.assistPass === 2) {
-      // tam yardim: koni bossa yone en yakin takim arkadasina gider (acemi bosluga atmaz)
-      let bv = -1e9;
-      for (const m of mates) {
-        const vx = m.x - c.x, vy = m.y - c.y, d = hyp(vx, vy) || 1;
-        if (d < 2.5 || d > 50 || (m.pos === 'GK' && toFrame(side, m.x, m.y)[0] > 20)) continue;
-        const a = (vx * ddx + vy * ddy) / d;
-        if (a < 0.1) continue;
-        const v = a + passEval(st, c, m).p * 0.5;
-        if (v > bv) { bv = v; bestM = m; }
-      }
-    }
-    if (bestM) {
-      const d = hyp(bestM.x - c.x, bestM.y - c.y);
-      const air = act !== 'pass' || (dist > 26 && d > 22);
-      dbg('upass_player');
-      passTo(st, c, bestM, { air, noOff, sw });
-      return;
-    }
-    // bosluga pas: top tam nisan noktasina; en yakin takim arkadasi kosar
-    let runner: PState | null = null, rd = 1e9;
-    for (const m of mates) { if (m.pos === 'GK') continue; const d = hyp(m.x - ax, m.y - ay); if (d < rd) { rd = d; runner = m; } }
-    st.stats[side].passes++;
-    const bx = st.ball.x, by = st.ball.y, dxx = ax - bx, dyy = ay - by, dd = hyp(dxx, dyy) || 1;
-    dbg('upass_space');
-    if (dist > 26) { const [v, vz] = lobV(dd, 0.42); kickBall(st, c, dxx / dd, dyy / dd, v, vz, sw, 'pass', { tx: ax, ty: ay, intended: runner, noOff }); }
-    else kickBall(st, c, dxx / dd, dyy / dd, passV0(dd), 0, sw, 'pass', { tx: ax, ty: ay, intended: runner, noOff });
+    const plan = planKick(st, c, ctl, kk, rk, press);
+    if (plan) execKick(st, c, plan);
     return;
   }
   if (act) inp.act = undefined; // hucumda anlamsiz aksiyon (mudahale vb.)
@@ -2092,8 +2034,8 @@ function userCarrier(st: MatchState, c: PState, ctl: ControlState) {
   if (mustPlay) { c.vx = 0; c.vy = 0; ballAt(st, c); st.holdUntil = st.t + 0.5; return; }
   if (!hasDir) { c.vx = 0; c.vy = 0; ballAt(st, c); st.holdUntil = st.t + 0.5; return; }
   // top surme: joystick yonunde; sprint (dis halka) belirgin hizli ama top one acilir ve kondisyon yakar
-  const sp = c.speedBase * kf(c.k) * (inp.sprint ? 1.0 : 0.72) * Math.min(1, mag);
-  if (inp.sprint) c.k = Math.max(0, c.k - 0.05 * st.dt * 6);
+  const sp = c.speedBase * kf(c.k) * (inp.sprint ? 1.0 : 0.66) * Math.min(1, mag);
+  if (inp.sprint) c.k = Math.max(0, c.k - P.sprintDrain * st.dt);
   const [nx, ny, vx, vy] = moveToward(c, c.x + dx * 4, c.y + dy * 4, sp, st.dt);
   c.x = clamp(nx, 0.5, L - 0.5); c.y = clamp(ny, 0.5, W - 0.5); c.vx = vx; c.vy = vy;
   face(c, dx, dy, 0.6);
@@ -2124,6 +2066,230 @@ function userCarrier(st: MatchState, c: PState, ctl: ControlState) {
     say(st, 'dribble', side, c, o.p);
     break;
   }
+}
+// ---------- Kullanici vurusu: plan (yan etkisiz) + uygulama; ekran ayni plani onizleme icin kullanir ----------
+export interface KickPlan {
+  kind: BallKind; // 'pass' | 'through' | 'cross' | 'shot'
+  dx: number; dy: number; // topun cikis yonu (birim, dunya)
+  speed: number; vz: number; sw: number; // nominal (gurultusuz) hiz, yukselme, falso
+  tx: number; ty: number; intended: PState | null;
+  noOff: boolean;
+  shot?: { xg: number; sigma: number; power: number };
+  tag: string;
+}
+type KickReq = { act: UserAct; power: number; ax: number; ay: number; curve: number; tap: boolean };
+function planKick(st: MatchState, c: PState, ctl: ControlState, kk: KickReq, rk: string, press: number): KickPlan | null {
+  const side = c.side;
+  const [cxf, cyf] = toFrame(side, c.x, c.y);
+  const gkHands = c.pos === 'GK' && cxf < 16.5 && Math.abs(cyf - 34) < 20.16;
+  const mates = liveTeam(st, side).filter((p) => p !== c);
+  const ddx = kk.ax, ddy = kk.ay;
+  const noOff = rk === 'throw' || rk === 'goalkick' || rk === 'corner';
+  const power = kk.power;
+  const b = st.ball;
+  const bx = b.x, by = b.y;
+  const toward = (tx: number, ty: number) => { const dxx = tx - bx, dyy = ty - by, dd = hyp(dxx, dyy) || 1; return [dxx / dd, dyy / dd, dd] as [number, number, number]; };
+  const actK = kk.act;
+  // falso: pasta 3, sutta 7 m/s2 (sut kisa surede kaleye vardigi icin daha sert kivrilmali)
+  const sw = kk.curve * (actK === 'shoot' ? 7.0 : 3.0);
+  // kisa basis (bas-cek): kosu yonundeki +-25 derece koni icindeki takim arkadasina kismi yardimli hizli pas
+  if (kk.tap && (actK === 'pass' || actK === 'through') && !gkHands) {
+    let bestM: PState | null = null, bv = -1e9;
+    for (const m of mates) {
+      const vx = m.x - c.x, vy = m.y - c.y, d = hyp(vx, vy) || 1;
+      if (d < 2.5 || d > 40 || (m.pos === 'GK' && toFrame(side, m.x, m.y)[0] > 20)) continue;
+      const a = (vx * ddx + vy * ddy) / d;
+      if (a < Math.cos((25 * Math.PI) / 180)) continue;
+      const v = a * 0.6 + passEval(st, c, m).p - d * 0.004;
+      if (v > bv) { bv = v; bestM = m; }
+    }
+    if (bestM) return passPlan(st, c, bestM, actK === 'through' ? 'through' : 'pass', actK === 'through' && hyp(bestM.x - c.x, bestM.y - c.y) > 22, 0, noOff, 'upass_tap');
+    const [dx, dy] = toward(bx + ddx * 8, by + ddy * 8);
+    return { kind: 'pass', dx, dy, speed: passV0(8), vz: 0, sw: 0, tx: bx + ddx * 8, ty: by + ddy * 8, intended: null, noOff, tag: 'upass_tap_bos' };
+  }
+  if (actK === 'cross' && !gkHands) {
+    // orta: nisan yonunde havadan top (guc mesafe); en yakin takim arkadasi hedeflenir, top nisana gider
+    const dist = 14 + 30 * power;
+    const ax = clamp(c.x + ddx * dist, 0.5, L - 0.5), ay = clamp(c.y + ddy * dist, 0.5, W - 0.5);
+    let best: PState | null = null, bd = 1e9;
+    for (const m of mates) { if (m.pos === 'GK') continue; const d = hyp(m.x - ax, m.y - ay); if (d < bd) { bd = d; best = m; } }
+    const [dx, dy, dd] = toward(ax, ay);
+    const [v, vz] = lobV(dd, 0.55);
+    return { kind: 'cross', dx, dy, speed: v, vz, sw, tx: ax, ty: ay, intended: best, noOff, tag: 'uorta' };
+  }
+  if (actK === 'shoot' && !gkHands) {
+    const distGoal = hyp(105 - cxf, 34 - cyf);
+    if (distGoal < 45) {
+      const oneOnOne = cxf > 72 && !st.players.some((o) => { if (o.side === side || o.off || o.pos === 'GK') return false; const [oxf, oyf] = toFrame(side, o.x, o.y); return oxf > cxf - 0.5 && Math.abs(oyf - cyf) < 5 + (oxf - cxf) * 0.4 && hyp(o.x - c.x, o.y - c.y) < 14; });
+      const m = shotModel(st, c, cxf, cyf, press, oneOnOne);
+      // nisan: yonun kale cizgisindeki izdusumu; yardim seviyesi kaleye dogru ceker
+      const [gx, gy] = fromFrame(side, 105, 34);
+      const tdx = gx - c.x, tdy = gy - c.y, tdn = hyp(tdx, tdy) || 1;
+      const lat = ((ddx * -tdy) / tdn + (ddy * tdx) / tdn) * distGoal * 0.5;
+      const [, ayf] = toFrame(side, gx - (tdy / tdn) * lat, gy + (tdx / tdn) * lat);
+      let aimY = clamp(ayf, 34 - 5, 34 + 5);
+      const pull = [0, 0.5, 1][ctl.assistShot];
+      const inGoal = clamp(aimY, 34 - 3.0, 34 + 3.0);
+      aimY = aimY + (inGoal - aimY) * pull;
+      const sigma = kickSigma(c, 'shot', P.shotSpeed, press) * [1.0, 0.85, 0.7][ctl.assistShot];
+      const [tx, ty] = fromFrame(side, 105.3, aimY);
+      const [dx, dy] = toward(tx, ty);
+      const speed = clamp(P.shotSpeed + power * 6 + 1, 14, P.kickMax);
+      const vz = clamp(0.8 + power * 2.5, -0.2, 9);
+      return { kind: 'shot', dx, dy, speed, vz, sw, tx, ty, intended: null, noOff, shot: { xg: m.xg, sigma, power }, tag: 'usut' };
+    }
+    // uzak mesafeden sut: ileri uzun top gibi davranir (asagida yonlu pas)
+  }
+  if (actK === 'through') {
+    const opts = throughOptions(st, c, mates);
+    let best: (typeof opts)[number] | null = null, bv = -1e9;
+    for (const o of opts) { const vx = o.m.x - c.x, vy = o.m.y - c.y, d = hyp(vx, vy) || 1; const a = (vx * ddx + vy * ddy) / d; const v = (ctl.assistPass === 2 ? o.path * o.race * 2 : ctl.assistPass === 1 ? o.path * o.race : 0.3) + a; if (a > (ctl.assistPass === 0 ? 0.75 : 0.3) && v > bv) { bv = v; best = o; } }
+    if (best) {
+      const [dx, dy, dd] = toward(best.tx, best.ty);
+      if (best.air) { const [v, vz] = lobV(dd, 0.68); return { kind: 'through', dx, dy, speed: v, vz, sw: 0, tx: best.tx, ty: best.ty, intended: best.m, noOff, tag: 'uara_kosucu' }; }
+      return { kind: 'through', dx, dy, speed: throughV0(dd, best.tRec), vz: 0, sw, tx: best.tx, ty: best.ty, intended: best.m, noOff, tag: 'uara_kosucu' };
+    }
+    // kosucu yoksa: yon boyunca bosluga sert top; en yakin takim arkadasi kosar (hedeflenen alici)
+    const dist = 16 + 20 * power;
+    const ax = clamp(c.x + ddx * dist, 0.5, L - 0.5), ay = clamp(c.y + ddy * dist, 0.5, W - 0.5);
+    let runner: PState | null = null, rd = 1e9;
+    for (const m of mates) { if (m.pos === 'GK') continue; const d = hyp(m.x - ax, m.y - ay); if (d < rd) { rd = d; runner = m; } }
+    const [dx, dy, dd] = toward(ax, ay);
+    const tRun = runner ? rd / playerSpeed(runner) : 1.5;
+    return { kind: 'through', dx, dy, speed: throughV0(dd, tRun), vz: 0, sw, tx: ax, ty: ay, intended: runner, noOff, tag: 'uara_bosluk' };
+  }
+  // yonlu pas: hedef nokta nisan yonunde, mesafe basili tutma suresinden; yardim seviyesi yone yakin takim
+  // arkadasina ceker (koni), yardimsizda top tam nisan noktasina gider
+  const dist = 8 + 32 * power;
+  const ax = clamp(c.x + ddx * dist, 0.5, L - 0.5), ay = clamp(c.y + ddy * dist, 0.5, W - 0.5);
+  const tol = [1.2, 5.5, 8][ctl.assistPass];
+  let bestM: PState | null = null, bestV = -1e9;
+  for (const m of mates) {
+    const vx = m.x - c.x, vy = m.y - c.y, d = hyp(vx, vy);
+    if (d < 2.5 || d > dist + 14) continue;
+    const along = vx * ddx + vy * ddy;
+    if (along < 2) continue;
+    const perp = Math.abs(vx * ddy - vy * ddx);
+    if (perp > tol + along * (ctl.assistPass === 0 ? 0.04 : 0.12)) continue;
+    if (m.pos === 'GK' && toFrame(side, m.x, m.y)[0] > 20) continue;
+    const dd = hyp(m.x - ax, m.y - ay);
+    const v = ctl.assistPass === 0 ? -dd : -dd * 0.04 + passEval(st, c, m).p * [0, 0.8, 1.2][ctl.assistPass];
+    if (v > bestV) { bestV = v; bestM = m; }
+  }
+  if (!bestM && ctl.assistPass === 2) {
+    let bv = -1e9;
+    for (const m of mates) {
+      const vx = m.x - c.x, vy = m.y - c.y, d = hyp(vx, vy) || 1;
+      if (d < 2.5 || d > 50 || (m.pos === 'GK' && toFrame(side, m.x, m.y)[0] > 20)) continue;
+      const a = (vx * ddx + vy * ddy) / d;
+      if (a < 0.1) continue;
+      const v = a + passEval(st, c, m).p * 0.5;
+      if (v > bv) { bv = v; bestM = m; }
+    }
+  }
+  if (bestM) {
+    const d = hyp(bestM.x - c.x, bestM.y - c.y);
+    const air = actK !== 'pass' || (dist > 26 && d > 22);
+    return passPlan(st, c, bestM, 'pass', air, sw, noOff, 'upass_player');
+  }
+  // bosluga pas: top tam nisan noktasina; en yakin takim arkadasi kosar
+  let runner: PState | null = null, rd = 1e9;
+  for (const m of mates) { if (m.pos === 'GK') continue; const d = hyp(m.x - ax, m.y - ay); if (d < rd) { rd = d; runner = m; } }
+  const [dx, dy, dd] = toward(ax, ay);
+  if (dist > 26) { const [v, vz] = lobV(dd, 0.42); return { kind: 'pass', dx, dy, speed: v, vz, sw, tx: ax, ty: ay, intended: runner, noOff, tag: 'upass_space' }; }
+  return { kind: 'pass', dx, dy, speed: passV0(dd), vz: 0, sw, tx: ax, ty: ay, intended: runner, noOff, tag: 'upass_space' };
+}
+// takim arkadasina pas plani (passTo ile ayni hesap: onune, varis hizi ayarli, uzun top / orta havadan)
+function passPlan(st: MatchState, c: PState, m: PState, kind: BallKind, air: boolean, sw: number, noOff: boolean, tag: string): KickPlan {
+  const d0 = hyp(m.x - c.x, m.y - c.y);
+  const tEst = d0 / 14;
+  const tx = clamp(m.x + (m.vx ?? 0) * tEst * 0.7, 0.5, L - 0.5);
+  const ty = clamp(m.y + (m.vy ?? 0) * tEst * 0.7, 0.5, W - 0.5);
+  const b = st.ball;
+  const dxx = tx - b.x, dyy = ty - b.y, d = hyp(dxx, dyy) || 1;
+  const [txf, tyf] = toFrame(c.side, tx, ty);
+  const cross = air && txf > 86 && Math.abs(tyf - 34) < 14;
+  const k: BallKind = cross ? 'cross' : kind;
+  if (air) { const [v, vz] = lobV(d, cross ? 0.55 : 0.42); return { kind: k, dx: dxx / d, dy: dyy / d, speed: v, vz, sw, tx, ty, intended: m, noOff, tag }; }
+  return { kind: k, dx: dxx / d, dy: dyy / d, speed: passV0(d), vz: 0, sw, tx, ty, intended: m, noOff, tag };
+}
+function execKick(st: MatchState, c: PState, plan: KickPlan, firstTime = false) {
+  const side = c.side;
+  dbg(plan.tag + (firstTime ? '_gelisine' : ''));
+  if (plan.kind === 'shot' && plan.shot) {
+    const s = st.stats[side];
+    const [cxf, cyf] = toFrame(side, c.x, c.y);
+    s.shots++;
+    s.xg += plan.shot.xg;
+    st.zoneShots[side][cyf < 23 ? 0 : cyf > 45 ? 2 : 1]++;
+    st.playerXg[side][c.num] = (st.playerXg[side][c.num] ?? 0) + plan.shot.xg;
+    if (c.thruT !== undefined && st.t - c.thruT < 8) { dbg('arapas_sut'); c.thruT = undefined; }
+    st.keyUntil = st.t + 1.8;
+    const speed = clamp(plan.speed + (st.rng() - 0.5) * 2, 14, P.kickMax);
+    const vz = clamp(plan.vz + gauss(st.rng) * 2.6, -0.2, 9);
+    // gelisine vurus: topun gelis yonu ile vurus yonu arasindaki aci buyudukce isabet duser
+    const sigma = plan.shot.sigma * (firstTime ? 1 + 0.8 * firstTimeAngle(st, plan) : 1);
+    kickBall(st, c, plan.dx, plan.dy, speed, vz, plan.sw, 'shot', { tx: plan.tx, ty: plan.ty, shot: { xg: plan.shot.xg, setPiece: false, kind: 'open' }, sigma, dip: 0 });
+    markShotOT(st, side);
+    return;
+  }
+  st.stats[side].passes++;
+  const sigma = firstTime ? kickSigma(c, plan.kind, plan.speed, pressureOn(st, c, c.x, c.y)) * (1 + 0.8 * firstTimeAngle(st, plan)) : undefined;
+  kickBall(st, c, plan.dx, plan.dy, plan.speed, plan.vz, plan.sw, plan.kind, { tx: plan.tx, ty: plan.ty, intended: plan.intended, noOff: plan.noOff, sigma });
+}
+// gelisine vuruste aci bedeli: top nereden geldi (son hiz yonu), nereye vuruluyor; 0 (ayni yon) .. 1 (ters)
+function firstTimeAngle(st: MatchState, plan: KickPlan): number {
+  const v = (st as any)._lastBallV as [number, number] | undefined;
+  if (!v) return 0;
+  const n = hyp(v[0], v[1]);
+  if (n < 1) return 0;
+  return (1 - (v[0] * plan.dx + v[1] * plan.dy) / n) / 2;
+}
+// isabet tahmini: top kale cizgisini kale agzinin icinden mi gececek (kaleci yalniz isabetli topa uzanir)
+function markShotOT(st: MatchState, side: 0 | 1) {
+  const b = st.ball;
+  const pts = ballPath(st, 4);
+  b.shotOT = false;
+  for (let i = 1; i < pts.length; i++) {
+    const [x0f] = toFrame(side, pts[i - 1].x, pts[i - 1].y);
+    const [x1f, y1f] = toFrame(side, pts[i].x, pts[i].y);
+    if (x0f < 105 && x1f >= 105) {
+      const u = (105 - x0f) / Math.max(1e-6, x1f - x0f);
+      const [, y0f] = toFrame(side, pts[i - 1].x, pts[i - 1].y);
+      const yc = y0f + (y1f - y0f) * u, zc = pts[i - 1].z + (pts[i].z - pts[i - 1].z) * u;
+      b.shotOT = Math.abs(yc - 34) < 3.66 + 0.25 && zc < 2.44 + 0.2;
+      break;
+    }
+  }
+  dbg(b.shotOT ? 'sut_isabetli' : 'sut_isabetsiz');
+}
+// ekran onizlemesi: kontrol edilen tasiyicinin su anki jestiyle topun gurultusuz tahmini yolu (0,1 s ornekleme)
+export function previewKick(st: MatchState, side: 0 | 1, act: UserAct, power: number, ax: number, ay: number, curve: number, tap = false): { pts: PathPt[]; plan: KickPlan } | null {
+  const ctl = st.control[side];
+  if (!ctl || !st.owner || st.owner !== ctl.player) return null;
+  const c = st.owner;
+  let ax0 = ax, ay0 = ay;
+  const an = hyp(ax0, ay0);
+  if (an > 0.1) { ax0 /= an; ay0 /= an; } else { ax0 = c.hx; ay0 = c.hy; }
+  // top, oyuncu nisana dondugunde ayaginin onunde olacak
+  const b = st.ball;
+  const save = { x: b.x, y: b.y, hx: c.hx, hy: c.hy };
+  c.hx = ax0; c.hy = ay0;
+  const lead = P.leadBase + P.leadSpeed * hyp(c.vx ?? 0, c.vy ?? 0);
+  b.x = clamp(c.x + ax0 * lead, 0.3, L - 0.3); b.y = clamp(c.y + ay0 * lead, 0.3, W - 0.3);
+  const plan = planKick(st, c, ctl, { act, power: clamp(power, 0, 1), ax: ax0, ay: ay0, curve: clamp(curve, -1, 1), tap }, st.restartKind, pressureOn(st, c, c.x, c.y));
+  const s: BallSim = { x: b.x, y: b.y, z: 0, vx: 0, vy: 0, vz: 0, sw: 0, dip: 0 };
+  b.x = save.x; b.y = save.y; c.hx = save.hx; c.hy = save.hy;
+  if (!plan) return null;
+  s.vx = plan.dx * plan.speed; s.vy = plan.dy * plan.speed; s.vz = plan.vz; s.sw = plan.sw;
+  const pts: PathPt[] = [{ t: 0, x: s.x, y: s.y, z: 0, v: plan.speed }];
+  for (let t = 0.1; t <= 4; t += 0.1) {
+    integrateBall(s, 0.1);
+    pts.push({ t, x: s.x, y: s.y, z: s.z, v: hyp(s.vx, s.vy) });
+    if (s.x < -1 || s.x > L + 1 || s.y < -1 || s.y > W + 1) break;
+    if (s.z <= 0 && s.vz === 0 && hyp(s.vx, s.vy) < 1) break;
+  }
+  return { pts, plan };
 }
 // kontrol edilen tasiyici icin ekranin bilmesi gerekenler: pas zorunlu mu, kalan sure
 export function userCarrierInfo(st: MatchState, side: 0 | 1): { mustPlay: boolean; left: number } | null {
@@ -2538,21 +2704,7 @@ function shootAt(st: MatchState, c: PState, xg: number, opt: { header?: boolean;
   const sw = opt.sw !== undefined ? opt.sw : opt.freekick ? (st.rng() < 0.5 ? 1 : -1) * (2.2 + st.rng() * 1.2) : (st.rng() - 0.5) * 0.8;
   const kind = opt.penalty ? 'penalty' : opt.freekick ? 'freekick' : opt.header ? (opt.setPiece ? 'sp-header' : 'header') : 'open';
   kickBall(st, c, dx / d, dy / d, speed, vz, sw, 'shot', { tx, ty, shot: { xg, setPiece: !!opt.setPiece, kind, penalty: !!opt.penalty }, sigma: opt.sigma, dip: opt.freekick ? 3 : 0 });
-  // isabet tahmini: top kale cizgisini kale agzinin icinden mi gececek (kaleci yalniz isabetli topa uzanir)
-  const pts = ballPath(st, 4);
-  b.shotOT = false;
-  for (let i = 1; i < pts.length; i++) {
-    const [x0f] = toFrame(side, pts[i - 1].x, pts[i - 1].y);
-    const [x1f, y1f] = toFrame(side, pts[i].x, pts[i].y);
-    if (x0f < 105 && x1f >= 105) {
-      const u = (105 - x0f) / Math.max(1e-6, x1f - x0f);
-      const [, y0f] = toFrame(side, pts[i - 1].x, pts[i - 1].y);
-      const yc = y0f + (y1f - y0f) * u, zc = pts[i - 1].z + (pts[i].z - pts[i - 1].z) * u;
-      b.shotOT = Math.abs(yc - 34) < 3.66 + 0.25 && zc < 2.44 + 0.2;
-      break;
-    }
-  }
-  dbg(b.shotOT ? 'sut_isabetli' : 'sut_isabetsiz');
+  markShotOT(st, side);
 }
 // uzaklastirma: kendi kalesinden uzaga, kenara dogru havadan; kale onunde baski altinda aceleyle yana/geriye (korner, tac)
 function clearBall(st: MatchState, p: PState, header = false) {
@@ -2709,19 +2861,70 @@ function ballContacts(st: MatchState) {
   }
   if (!cands.length) return;
   cands.sort((a, c) => a.u - c.u || a.d - c.d);
-  // ayni anda yetisenler: hava topunda hava hakimiyeti, yerde guc agirlikli mucadele
   const first = cands[0];
-  const group = cands.filter((c) => (c.u - first.u) * segLen < 1.0);
-  let win = first;
-  if (group.length > 1) {
-    const aerialDuel = first.z > P.headZ[0];
-    const ws = group.map((c) => (c.gk ? 2.0 : 1) * (aerialDuel ? aerial(c.p) : eg(c.p)) * (c.p.beatenUntil !== undefined && st.t < c.p.beatenUntil ? 0.5 : 1));
-    const tot = ws.reduce((a, w) => a + w, 0);
-    let r = st.rng() * tot;
-    for (let i = 0; i < group.length; i++) { r -= ws[i]; if (r <= 0) { win = group[i]; break; } }
-    const other = group.find((c) => c !== win && c.p.side !== win.p.side);
-    if (other) { st.stats[win.p.side].duels++; other.p.beatenUntil = st.t + 0.45; dbg(aerialDuel ? 'hava_mucadele' : 'yer_mucadele'); }
+  // sahipsiz top mucadelesi: temas noktasina pencere (0,25 s) icinde yetisebilecek herkes; iki taraftan da varsa mucadele
+  const cx = bx0 + (bx1 - bx0) * first.u, cy = by0 + (by1 - by0) * first.u;
+  const aerialDuel = first.z > P.headZ[0];
+  type Cont = { p: PState; late: number; gk: boolean; pressed: 'tackle' | 'slide' | null; w: number };
+  const conts: Cont[] = [];
+  for (const q of st.players) {
+    if (q.off || q.injured) continue;
+    if (q === b.kicker && st.t - b.kickT < P.kickCd) continue;
+    const dq = Math.max(0, hyp(q.x - cx, q.y - cy) - P.reach);
+    const late = q === first.p ? 0 : dq / playerSpeed(q) + (q.beatenUntil !== undefined && st.t < q.beatenUntil ? 0.3 : 0);
+    if (late > P.contestWin) continue;
+    const toward = (q.vx ?? 0) * (cx - q.x) + (q.vy ?? 0) * (cy - q.y);
+    if (q !== first.p && dq > 0.5 && toward <= 0) continue; // topa dogru kosmuyorsa mucadeleye girmez
+    const [qxf, qyf] = toFrame(q.side, q.x, q.y);
+    const gkH = q.pos === 'GK' && qxf < 16.5 && Math.abs(qyf - 34) < 20.16;
+    conts.push({ p: q, late, gk: gkH, pressed: null, w: 0 });
   }
+  let win = first;
+  const sides = new Set(conts.map((c) => c.p.side));
+  if (sides.size > 1) {
+    const vBall = hyp(b.vx, b.vy);
+    for (const c of conts) {
+      const q = c.p;
+      const sp = hyp(q.vx ?? 0, q.vy ?? 0);
+      const mom = 1 + 0.15 * clamp(sp / 8, 0, 1);
+      const lateK = clamp(1 - P.contestLate * (c.late / P.contestWin), 0.3, 1);
+      // girdi: insan pencerede Mudahale/Kaydir bastiysa; bot seviyesine gore sanal tus; hucumcuya bonus yok
+      let inputK = 1;
+      const ctl = st.control[q.side];
+      const attacking = b.kicker ? b.kicker.side === q.side : st.lastPossSide === q.side;
+      if (ctl && ctl.player === q) {
+        if (ctl.press50 && !ctl.press50.spent && st.t - ctl.press50.t <= 0.3) { ctl.press50.spent = true; c.pressed = ctl.press50.kind; inputK = ctl.press50.kind === 'slide' ? P.contestSlide : P.contestTackle; }
+      } else if (!attacking && q.pos !== 'GK') {
+        const timing = st.teams[q.side].ai?.timing ?? 0.7;
+        if (st.rng() < timing) { c.pressed = 'tackle'; inputK = P.contestTackle; }
+      }
+      const base = aerialDuel ? aerial(q) : eg(q);
+      c.w = base * mom * lateK * inputK * (c.gk ? 2.0 : 1) * (q.beatenUntil !== undefined && st.t < q.beatenUntil ? 0.6 : 1);
+    }
+    // kazanan: agirliklarin oranindan (ln oran x egim), tek zar
+    const tot = conts.reduce((a, c) => a + Math.pow(c.w, P.contestSlope), 0);
+    let r = st.rng() * tot;
+    let winner: Cont = conts[0];
+    for (const c of conts) { r -= Math.pow(c.w, P.contestSlope); if (r <= 0) { winner = c; break; } }
+    win = cands.find((c) => c.p === winner.p) ?? { p: winner.p, u: first.u, d: hyp(winner.p.x - cx, winner.p.y - cy), z: first.z, gk: winner.gk };
+    st.stats[winner.p.side].duels++;
+    dbg(aerialDuel ? 'hava_mucadele' : 'elli_elli');
+    addFx(st, cx, cy, 'clean');
+    for (const c of conts) {
+      if (c === winner) continue;
+      c.p.beatenUntil = st.t + 0.5;
+      // kaybeden mudahaleye girdiyse faul ihtimali (kaydirma daha yuksek)
+      if (c.pressed && c.p.side !== winner.p.side) {
+        const Pp = [0.8, 1.0, 1.3][st.teams[c.p.side].tactic.press];
+        const [wxf, wyf] = toFrame(winner.p.side, winner.p.x, winner.p.y);
+        const inBoxW = wxf > 88.5 && Math.abs(wyf - 34) < 20.16;
+        const pF = P.foulBase * Pp * (c.pressed === 'slide' ? P.behindFoul : 1) * (1 + 0.6 * (1 - c.p.k / 100)) * (inBoxW ? P.inBoxFoul : 1);
+        if (st.rng() < pF) { giveBall(st, winner.p, 0.5); foul(st, c.p, winner.p, wxf); return; }
+      }
+    }
+    void vBall;
+  }
+  (st as any)._lastBallV = [b.vx, b.vy];
   resolveContact(st, win.p, win.z, speed, win.d);
 }
 // topun tahmini yolunun (0,6 s) oyuncuya en yakin gecis uzakligi: kurtaris olasiligi temasin hangi adimda yakalandigina bagli olmasin
@@ -2760,7 +2963,7 @@ function resolveContact(st: MatchState, p: PState, z: number, speed: number, dis
       const reachMax = P.gkReach + clamp((st.t - b.kickT - 0.15) * 2.5, 0, P.gkDive - P.gkReach);
       const skill = 0.22 * Math.log(eg(p) / eg(shooter)) + (p.traits.includes('Refleks') ? 0.06 : 0) - (p.emergencyGk ? 0.3 : 0);
       const dPath = Math.min(dist, minDistToPath(st, p));
-      const pSave = clamp(0.93 - 0.6 * (dPath / reachMax) - (speed - 16) / 55 + skill, 0.1, 0.97);
+      const pSave = clamp(0.85 - 0.6 * (dPath / reachMax) - (speed - 16) / 55 + skill, 0.1, 0.97);
       if (st.rng() < pSave) {
         st.stats[kickerSide as 0 | 1].onTarget++;
         st.events.push({ t: st.clock, type: 'save', side: kickerSide as 0 | 1, player: shooter.num, xg: b.shot?.xg });
@@ -2817,6 +3020,24 @@ function resolveContact(st: MatchState, p: PState, z: number, speed: number, dis
   const awareP = p === b.intended || chaseNow(st, p);
   const high = z > (awareP ? 1.9 : P.headZ[0]);
   if (high) {
+    // kullanici: gelisine kafa (niyet verilmisse) - sut ya da pas yonune, dusuk hiz, yuksek hata
+    const ctlH = st.control[side];
+    if (ctlH && ctlH.player === p && ctlH.pre) {
+      const pre = ctlH.pre; ctlH.pre = null;
+      dbg('pre_kafa');
+      p.hx = pre.ax; p.hy = pre.ay;
+      const rk = st.restartKind; st.restartKind = '';
+      const plan = planKick(st, p, ctlH, pre, rk, pressureOn(st, p, p.x, p.y));
+      if (plan) {
+        plan.speed = Math.min(plan.speed, 14); plan.vz = plan.kind === 'shot' ? 0.5 : 1.5; plan.sw = 0;
+        if (plan.shot) plan.shot.sigma *= 1.5;
+        if (plan.kind === 'shot') { const m0 = shotModel(st, p, pxf, pyf, pressureOn(st, p, p.x, p.y), false); plan.shot!.xg = Math.min(P.maxShotP, m0.pGoal * P.headerK) * (1 - m0.pBlock); }
+        if (b.kicker && kickerSide === side && wasPass) st.stats[side].passesOk++;
+        execKick(st, p, plan, true);
+        dbg('kafa_gelisine');
+        return;
+      }
+    }
     // kafa: hucumda ceza sahasinda kaleye, savunmada uzaklastirma, ortada takim arkadasina
     const inAttBox = pxf > 86 && Math.abs(pyf - 34) < 22;
     if (inAttBox) {
@@ -2884,6 +3105,33 @@ function resolveContact(st: MatchState, p: PState, z: number, speed: number, dis
   }
   const hold = b.kind === 'through' ? 0.2 : P.holdMin + st.rng() * P.holdVar;
   giveBall(st, p, hold);
+  userFirstTouch(st, p);
+}
+// kullanici kontrolundeki alici: gelisine vurus niyeti varsa ilk dokunusta vurur; yoksa joystick yonune ilk dokunus (topu o yone acar)
+function userFirstTouch(st: MatchState, p: PState) {
+  const ctl = st.control[p.side];
+  if (!ctl || ctl.player !== p) return;
+  if (ctl.pre) {
+    const pre = ctl.pre;
+    ctl.pre = null;
+    dbg('pre_ilk_dokunus');
+    const rk = st.restartKind; st.restartKind = '';
+    p.hx = pre.ax; p.hy = pre.ay;
+    ballAt(st, p);
+    const plan = planKick(st, p, ctl, pre, rk, pressureOn(st, p, p.x, p.y));
+    if (plan) execKick(st, p, plan, true);
+    return;
+  }
+  const inp = ctl.input;
+  const mg = hyp(inp.mx, inp.my);
+  if (mg > 0.3) {
+    // ilk dokunus yonu: top joystick yonune 1,2 m acilir, oyuncu o yone doner
+    const ux = inp.mx / mg, uy = inp.my / mg;
+    p.hx = ux; p.hy = uy;
+    const b = st.ball;
+    b.x = clamp(p.x + ux * 1.2, 0.3, L - 0.3); b.y = clamp(p.y + uy * 1.2, 0.3, W - 0.3);
+    st.holdUntil = st.t;
+  }
 }
 function corner(st: MatchState, side: 0 | 1, nearY?: number) {
   const s = st.stats[side];
