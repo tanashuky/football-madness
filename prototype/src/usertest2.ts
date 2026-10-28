@@ -38,5 +38,5 @@ P.dt = 0.1;
     }
     off += st.stats[0].offsides; passes += st.stats[0].passes; ok += st.stats[0].passesOk; goals[0] += st.stats[0].goals; goals[1] += st.stats[1].goals;
   }
-  console.log(JSON.stringify({ dbg: { player: DBG.upass_player, space: DBG.upass_space, cut: DBG.upass_space_cut } })); console.log(JSON.stringify({ test: 'dirpass', matches: 3, userOffsides: off, userPasses: passes, userPassAcc: +(ok / Math.max(1, passes)).toFixed(2), goals }));
+  console.log(JSON.stringify({ dbg: { player: DBG.upass_player, space: DBG.upass_space, sut: DBG.usut, ara: (DBG.uara_kosucu ?? 0) + (DBG.uara_bosluk ?? 0) } })); console.log(JSON.stringify({ test: 'dirpass', matches: 3, userOffsides: off, userPasses: passes, userPassAcc: +(ok / Math.max(1, passes)).toFixed(2), goals }));
 }

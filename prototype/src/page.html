@@ -328,14 +328,14 @@ for (const b of document.querySelectorAll('[data-sp]')) b.addEventListener('clic
 
 // Zaman: fizik gercek zamanli (1x'te ekranda 1 saniye = sahada 1 saniye), mac saati 6 kat hizli akar.
 // Deneme surumunde 1x %20 hizli oynar, mac yaklasik 12,5 dakika surer. 4x ve 16x yalniz izlemek icindir.
-const STEPS_PER_SEC = 2 * 1.39; // motor adimi 0,5 fiziksel saniye; deneme: 1x %39 hizli (mac ~11 dk)
-const isDead = () => st.t < st.restartUntil && !st.flight;
+const WATCH_SPEED = 1.39; // izleme: 1x %39 hizli (mac ~11 dk); motor adimi st.dt (0,1 s)
+const isDead = () => st.t < st.restartUntil && !ballMoving(st);
 function frame(now) {
   const dtReal = Math.min(0.1, (now - last) / 1000);
   last = now;
   let alpha = 1;
   if (playing && !st.done) {
-    acc += dtReal * (PLAY.on ? 1 / st.dt : STEPS_PER_SEC) * (PLAY.on ? 1 : speed);
+    acc += dtReal * (1 / st.dt) * (PLAY.on ? 1 : WATCH_SPEED * speed);
     let guard = 0;
     while (acc >= 1 && !st.done && guard++ < 200) {
       prev = snapshot();
@@ -528,11 +528,11 @@ function draw(alpha, now = performance.now()) {
     }
     ctx.restore();
   }
-  // top izi: sut, orta ve uzun toplarda kisa sure kalan iz
-  const fl = st.flight;
-  const trailOn = fl && (fl.kind === 'shot' || fl.kind === 'cross' || (fl.air && Math.hypot(fl.toX - fl.fromX, fl.toY - fl.fromY) > 22));
+  // top izi: sut, orta ve havadaki uzun toplarda kisa sure kalan iz
+  const bk = st.ball.kind;
+  const trailOn = !st.owner && (bk === 'shot' || bk === 'cross' || (st.ball.z > 0.3 && Math.hypot(st.ball.vx, st.ball.vy) > 12));
   const [tbx, tby, tbz] = pos(cur.length - 1);
-  if (trailOn) trail.push({ x: tbx, y: tby, z: tbz, t: now, shot: fl.kind === 'shot' });
+  if (trailOn) trail.push({ x: tbx, y: tby, z: tbz, t: now, shot: bk === 'shot' });
   while (trail.length && now - trail[0].t > 450) trail.shift();
   if (trail.length > 1) {
     ctx.save(); ctx.lineCap = 'round';
@@ -568,7 +568,7 @@ function applyCam(mode) {
   CAM.mode = mode === 'full' ? 'full' : 'smart'; CAM.w = m[2];
   if (st) { CAM.cx = st.ball.x; CAM.cy = st.ball.y; }
 }
-function inPossession() { return PLAY.on && st && ((st.owner && st.owner.side === PLAY.side) || (st.flight && st.flight.receiver && st.flight.receiver.side === PLAY.side)); }
+function inPossession() { return PLAY.on && st && ((st.owner && st.owner.side === PLAY.side) || (!st.owner && st.ball.kicker && st.ball.kicker.side === PLAY.side && (st.ball.kind === 'pass' || st.ball.kind === 'through' || st.ball.kind === 'cross'))); }
 // kontrol gecmetrisi (CSS px): joystick solda yuzen, sagda 4 buton
 function ctrlGeom() {
   const Wc = cv.clientWidth, Hc = cv.clientHeight, u = Math.max(0.8, Math.min(1.6, Wc / 852));
@@ -676,7 +676,7 @@ addEventListener('keyup', (e) => {
 function startPlay() {
   readSetup();
   PLAY.on = true; PLAY.side = 0; PLAY.minutes = +document.getElementById('pMin').value;
-  P.dt = 0.1; P.clockRate = 90 / PLAY.minutes; knockout = false;
+  P.clockRate = 90 / PLAY.minutes; knockout = false;
   document.body.classList.add('play');
   CAM.phone = true; CAM.overlay = true;
   applyCam(document.getElementById('pCam').value);
@@ -690,7 +690,7 @@ function exitPlay() {
   PLAY.on = false;
   document.body.classList.remove('play', 'portrait');
   CAM.phone = false; CAM.overlay = false; CAM.mode = 'full';
-  P.dt = 0.5; P.clockRate = 6;
+  P.clockRate = 6;
   IN.acts.length = 0; IN.sprint = false; IN.press = false; IN.joyId = null; IN.mx = 0; IN.my = 0; IN.shotDownAt = IN.passDownAt = IN.throughDownAt = null;
   fitCanvas();
   newMatch(seed);
