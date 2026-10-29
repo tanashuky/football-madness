@@ -635,7 +635,7 @@ function applyCam(mode) {
   if (st) { CAM.cx = st.ball.x; CAM.cy = st.ball.y; }
 }
 // top kendi son ucte birimizde mi (Degistir butonunda kaleci ipucu)
-function ownThird() { if (!st) return false; const gx = (st.half % 2 === 0) === (PLAY.side === 0) ? 105 : 0; return Math.abs(st.ball.x - gx) < 35; }
+function ownThird() { if (!st) return false; const gx = (st.half % 2 === 0) === (PLAY.side === 0) ? 105 : 0; return Math.abs(st.ball.x - gx) < P.gkRushZone; }
 function inPossession() { return PLAY.on && st && ((st.owner && st.owner.side === PLAY.side) || (!st.owner && st.ball.kicker && st.ball.kicker.side === PLAY.side && (st.ball.kind === 'pass' || st.ball.kind === 'through' || st.ball.kind === 'cross'))); }
 // kontrol geometrisi (CSS px): elmas buton kumesi sag altta basparmak yayinda
 function ctrlGeom() {

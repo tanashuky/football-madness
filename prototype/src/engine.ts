@@ -162,6 +162,7 @@ interface Pending {
   spotX?: number; // hucum cercevesinde vurus noktasi
   spotY?: number;
   xg?: number;
+  wallSet?: PState[]; // baraja secilen oyuncular (bir kez secilir, dizilis boyunca sabit)
 }
 
 // rakibi okuma sonucu: kanat kaymasi (-1 sol / +1 sag), hizli forvete karsi hat geri, tehlikeli oyuncuya siki markaj
@@ -286,6 +287,8 @@ export const P = {
   gkOutRange: 22, // kaleci birebirde tasiyici bu kadar yakinsa cikar (m)
   gkOutK: 0.4, // cikis mesafesi = tasiyici mesafesi x bu
   gkOutMax: 8, // en cok bu kadar acilir (m)
+  gkRushZone: 35, // kullanici kaleci cikisi yalniz top kendi kalesine bu kadar yakinken (m)
+  gkRushMax: 25, // kullanici kaleci cikisinda kale cizgisinden en cok bu kadar uzaklasir (m)
   leadBase: 0.6, // top surerken topun ayaktan onde durusu (m) + hizla artan pay
   leadSpeed: 0.09,
   tackleReach: 1.5, // mudahale icin azami mesafe (m)
@@ -1254,9 +1257,12 @@ function updateAnchorsAndMove(st: MatchState) {
         }
       }
       // kullanici kaleci cikisi (Degistir basili): kaleci topa / tasiyiciya kosar, birakinca normal kurallara doner
-      if (ctl && ctl.input.gkRush && p.pos === 'GK' && !inPoss && !deadBall) {
+      if (ctl && ctl.input.gkRush && p.pos === 'GK' && !inPoss && !deadBall && bxf < P.gkRushZone) {
+        // kullanici kaleci cikisi: yalniz top kendi son ucte birimizdeyken; kale cizgisinden en cok gkRushMax uzaklasir
         if (carrier) { tx = carrier.x; ty = carrier.y; }
         else { const c0 = chaseTarget(p, ballPath(st), 0, playerSpeed(p)); tx = c0.x; ty = c0.y; }
+        const [rxf, ryf] = toFrame(s, tx, ty);
+        if (rxf > P.gkRushMax) [tx, ty] = fromFrame(s, P.gkRushMax, ryf);
         urg = 1.15;
         if (st.t % 1 < dt) dbg('kaleci_cikisi_kullanici');
       }
@@ -1296,6 +1302,8 @@ function separate(st: MatchState) {
   const minD = P.sepD;
   const sameD = P.sepD;
   const mx = new Array(ps.length).fill(0), my = new Array(ps.length).fill(0);
+  const wpd = st.pending ?? st.spWait;
+  const wall = wpd && (wpd.kind === 'fk' || wpd.kind === 'fkshot') ? wpd.wallSet : undefined;
   for (let i = 0; i < ps.length; i++) {
     const a = ps[i];
     if (a.off) continue;
@@ -1306,6 +1314,8 @@ function separate(st: MatchState) {
       const dy = b.y - a.y;
       const d = Math.hypot(dx, dy);
       if (d >= (a.side === b.side ? sameD : minD)) continue;
+      // barajdakiler omuz omuza durur (ayrilma itmesi yok)
+      if (a.side === b.side && wall && wall.includes(a) && wall.includes(b)) continue;
       // top sahibi ile rakibi arasinda itme yok: mudahale/omuz omuza mucadele temasi gerekir
       if (a.side !== b.side && (st.owner === a || st.owner === b)) continue;
       let nx: number, ny: number;
@@ -3514,7 +3524,7 @@ function setPieceTarget(st: MatchState, p: PState): [number, number, number] | n
   if (pd.kind === 'fkshot' || pd.kind === 'fk') {
     const spotX = pd.spotX!, spotY = pd.spotY!;
     const distG = hyp(105 - spotX, 34 - spotY);
-    const crowd = pd.kind === 'fk' && distG < 40; // ceza sahasina atilacak: yigilma
+    const crowd = (pd.kind === 'fk' && distG < 45) || pd.kind === 'fkshot'; // ceza sahasina atilacak ya da direkt sut: iki takim da ceza sahasina
     if (atk && p === pd.taker) {
       const [x, y] = fromFrame(A, spotX - 1.2, spotY - 0.6);
       return [x, y, 0.5];
@@ -3531,7 +3541,7 @@ function setPieceTarget(st: MatchState, p: PState): [number, number, number] | n
       const outSpots: [number, number][] = [[84, 24], [84, 44], [76, 34], [68, 22], [68, 46], [55, 34], [50, 20]];
       const [sx, sy] = i < nBox ? boxSpots[Math.min(i, boxSpots.length - 1)] : outSpots[Math.min(i - nBox, outSpots.length - 1)];
       const [x, y] = fromFrame(A, sx, sy);
-      return [x, y, 0.45];
+      return [x, y, i < nBox ? 1.0 : 0.6];
     }
     if (p.pos === 'GK') {
       if (!crowd) return null;
@@ -3541,10 +3551,12 @@ function setPieceTarget(st: MatchState, p: PState): [number, number, number] | n
     // baraj: topa en yakin n savunmaci, kaleye dogru 9,15 m'de
     const nWall = pd.wall ?? 0;
     const [bx, by] = fromFrame(A, spotX, spotY);
-    const near = liveTeam(st, p.side)
-      .filter((q) => q.pos !== 'GK')
+    // baraj bir kez secilir (her adim yeniden secilirse oyuncular yer degistirip topun onunde doner)
+    if (!pd.wallSet) pd.wallSet = liveTeam(st, p.side)
+      .filter((q) => q.pos !== 'GK' && q.pos !== 'ST')
       .sort((a, b) => hyp(a.x - bx, a.y - by) - hyp(b.x - bx, b.y - by))
       .slice(0, nWall);
+    const near = pd.wallSet.filter((q) => !q.off);
     const i = near.indexOf(p);
     if (i >= 0) {
       const vx = 105 - spotX;
@@ -3562,7 +3574,7 @@ function setPieceTarget(st: MatchState, p: PState): [number, number, number] | n
       const spots: [number, number][] = [[100, 30.5], [100, 37.5], [101.5, 34], [97, 29], [97, 39], [93, 34], [89, 25], [89, 43], [80, 34], [66, 34]];
       const [sx, sy] = spots[Math.min(Math.max(j, 0), spots.length - 1)];
       const [x, y] = fromFrame(A, sx, sy);
-      return [x, y, 0.45];
+      return [x, y, 0.8];
     }
     return null;
   }
@@ -3814,7 +3826,7 @@ function foul(st: MatchState, d: PState, c: PState, cxf: number) {
     st.events.push({ t: st.clock, type: 'freekick', side: c.side, player: c.num });
     st.owner = null;
     placeBall(st, c.x, c.y);
-    const dur = 4 + st.rng() * 1;
+    const dur = 6 + st.rng() * 1;
     // uzak frikigi Bitirici, yoksa en guclu hucum oyuncusu kullanir (duran top gorevlileri)
     const fkCands = liveTeam(st, c.side).filter((p) => p.pos !== 'GK');
     const fkTaker = fkCands.reduce((b, p) => (p.traits.includes('Bitirici') && !b.traits.includes('Bitirici') ? p : !p.traits.includes('Bitirici') && b.traits.includes('Bitirici') ? b : eg(p) > eg(b) ? p : b), fkCands[0] ?? c);
@@ -3824,7 +3836,7 @@ function foul(st: MatchState, d: PState, c: PState, cxf: number) {
   }
   // dolayli serbest vurus: rakip yarisahada baraj kurulur; ceza sahasina yakinsa top ceza sahasina atilir
   const wall = dist > 45 ? 0 : dist > 30 ? 2 : dist > 24 ? 3 : 4;
-  const dur = wall > 0 ? 3.5 + st.rng() * 1 : 2.5 + st.rng() * 1;
+  const dur = dist < 45 ? 6 + st.rng() * 1 : wall > 0 ? 3.5 + st.rng() * 1 : 2.5 + st.rng() * 1; // ceza sahasina atilacaksa oyuncular yerlesir
   st.owner = null;
   placeBall(st, c.x, c.y);
   st.pending = { kind: 'fk', side: c.side, at: st.t + dur, taker: c, spotX: xf, spotY: yf, wall };
