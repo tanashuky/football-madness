@@ -148,6 +148,7 @@ export interface Ball {
   dip: number; // ust falso: havada ek asagi ivme (serbest vurus)
   gkTried?: boolean; // kaleci bu suta bir kez uzandi
   noTouch?: PState | null; // duran topu kullanan: baskasi dokunana kadar topa dokunamaz
+  fromRestart?: string; // top bir duran toptan cikti ve henuz kimse dokunmadi ('throw' | 'goalkick' | ...)
   shotOT?: boolean; // sut isabetli yolda mi (vurus aninda tahmin)
   pkY?: number; // penaltida kalecinin tahmin ettigi kose (dunya y)
 }
@@ -2132,7 +2133,19 @@ function planKick(st: MatchState, c: PState, ctl: ControlState, kk: KickReq, rk:
   const [cxf, cyf] = toFrame(side, c.x, c.y);
   const gkHands = c.pos === 'GK' && cxf < 16.5 && Math.abs(cyf - 34) < 20.16 && !st.gkFeet;
   const mates = liveTeam(st, side).filter((p) => p !== c);
-  const ddx = kk.ax, ddy = kk.ay;
+  let ddx = kk.ax, ddy = kk.ay;
+  // kaleci / aut: kendi kalesine dogru nisan alinamaz (ileri yonden en cok ~100 derece)
+  if (c.pos === 'GK' && cxf < 18) {
+    const [f1x, f1y] = fromFrame(side, 1, 0), [f0x, f0y] = fromFrame(side, 0, 0);
+    const fx = f1x - f0x, fy = f1y - f0y;
+    const fwd = ddx * fx + ddy * fy, lim = -0.17;
+    if (fwd < lim) {
+      let px = ddx - fwd * fx, py = ddy - fwd * fy, pn = hyp(px, py);
+      if (pn < 1e-3) { px = -fy; py = fx; pn = 1; } // tam geriye: bir yana cevir
+      const s2 = Math.sqrt(1 - lim * lim);
+      ddx = fx * lim + (px / pn) * s2; ddy = fy * lim + (py / pn) * s2;
+    }
+  }
   const noOff = rk === 'throw' || rk === 'goalkick' || rk === 'corner';
   const power = kk.power;
   const b = st.ball;
@@ -2629,6 +2642,7 @@ function kickBall(st: MatchState, p: PState, dx: number, dy: number, speed: numb
   b.gkTried = false;
   // ikinci dokunus yasagi: duran topu kullanan baskasi dokunana kadar topa dokunamaz (Kural 8, 13, 15, 16, 17)
   b.noTouch = st.restartTaker === p ? p : null;
+  b.fromRestart = b.noTouch ? (st.takerKind || st.restartKind || 'restart') : undefined;
   if (b.noTouch && st.takerKind === 'throw') {
     // tac: top elle, bas ustunden atilir; en cok ~25 m, hafif yukselen
     b.z = 2.0;
@@ -2846,6 +2860,23 @@ function moveBall(st: MatchState) {
     const D = defSideAtX(st, xl);
     const A: 0 | 1 = (1 - D) as 0 | 1;
     if (Math.abs(yc - 34) < 3.66 && zc < 2.44) {
+      const fr = b.fromRestart, k = b.kicker;
+      if (fr && k && k.side === D) {
+        // duran toptan dogrudan kendi kalesine: gol olmaz, rakibe korner (Kural 13, 15, 16)
+        dbg('duran_top_kendi_kale_korner');
+        corner(st, A, yc);
+        return;
+      }
+      if (fr === 'throw' && k && k.side === A) {
+        // tactan dogrudan rakip kaleye: gol olmaz, aut (Kural 15)
+        dbg('tac_dogrudan_gol_yok');
+        const dur = 3 + st.rng();
+        placeBall(st, xl < 1 ? 0.5 : L - 0.5, 34);
+        st.owner = null;
+        st.pending = { kind: 'goalkick', side: D, at: st.t + dur };
+        deadTime(st, dur, 'Aut');
+        return;
+      }
       goalScored(st, A, xl, yc);
       return;
     }
@@ -3037,6 +3068,7 @@ function resolveContact(st: MatchState, p: PState, z: number, speed: number, dis
   const touchedBefore = b.touch;
   b.touch = p;
   if (b.noTouch && b.noTouch !== p) b.noTouch = null;
+  b.fromRestart = undefined;
   if (b.kind === 'through' || b.kind === 'pass') dbg((b.kind === 'through' ? 'ara_ilk_' : 'pas_ilk_') + (p === b.intended ? 'hedef' : p.side === kickerSide ? 'arkadas' : p.pos === 'GK' ? 'kaleci' : 'rakip') + (speed > P.ctrlSpeed ? '_sert' : z > P.headZ[0] ? '_kafa' : ''));
   if (speed > P.ctrlSpeed && z <= P.headZ[0] && !(p.pos === 'GK' && inOwnBox)) dbg('sert_' + b.kind + '_' + (p === b.intended ? 'hedef' : chaseNow(st, p) ? 'kosan' : p.side === kickerSide ? 'arkadas' : 'rakip'));
   // ofsayt: pas aninda ofsayt konumundaki alici topa dokununca
