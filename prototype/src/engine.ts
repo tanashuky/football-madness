@@ -3264,6 +3264,17 @@ function aerial(p: PState): number {
 function setPieceTarget(st: MatchState, p: PState): [number, number, number] | null {
   const pd = st.pending;
   const cel = st.celebrate;
+  // aut kullanilana kadar rakipler ceza sahasinin disinda (Kural 16): bulundugu yerden ceza sahasi cizgisinin 1 m disina
+  if (!pd && st.takerKind === 'goalkick' && st.restartTaker && st.owner === st.restartTaker && p.side !== st.restartTaker.side) {
+    const A = st.restartTaker.side;
+    const [pxf, pyf] = toFrame(A, p.x, p.y);
+    if (pxf < 17.5 && Math.abs(pyf - 34) < 21.2) {
+      const [x, y] = fromFrame(A, 17.8, pyf);
+      return [x, y, 1.0];
+    }
+    const [x, y] = fromFrame(A, Math.max(pxf, 17.8), pyf); // disarida: yerinde bekler (iceri girmez)
+    return [x, y, 0.3];
+  }
   // santra vurulana kadar herkes yerinde: kendi yarisinda, orta yuvarlagin disinda (Kural 8)
   if (!pd && st.restartKind === 'kickoff' && st.restartTaker && st.owner === st.restartTaker && p !== st.restartTaker) {
     if (p.pos === 'GK') { const [x, y] = fromFrame(p.side, 4, 34); return [x, y, 0.4]; }
@@ -3360,9 +3371,10 @@ function setPieceTarget(st: MatchState, p: PState): [number, number, number] | n
       const [x, y] = fromFrame(A, 14 + (p.ax - 22) * 0.75, 34 + (p.ay - 34) * 1.12);
       return [x, y, 0.45];
     }
-    // rakip orta sahaya ve kendi pres hattina cekilir
+    // rakip orta sahaya ve kendi pres hattina cekilir; ceza sahasindaysa hizla cikar (Kural 16)
     const [x, y] = fromFrame(p.side, 34 + (p.ax - 22) * 0.55, p.ay);
-    return [x, y, 0.45];
+    const [axf, ayf] = toFrame(A, p.x, p.y);
+    return [x, y, axf < 18 && Math.abs(ayf - 34) < 21.5 ? 0.9 : 0.45];
   }
   if (pd.kind === 'fkshot' || pd.kind === 'fk') {
     const spotX = pd.spotX!, spotY = pd.spotY!;
@@ -3493,7 +3505,7 @@ function execPending(st: MatchState, pd: Pending) {
     giveBall(st, keeper, 1.5);
     st.gkFeet = true; // aut: kaleci topu yerden vurur
     st.restartTaker = keeper;
-    st.takerKind = '';
+    st.takerKind = 'goalkick';
     return;
   }
   if (pd.kind === 'throw') {

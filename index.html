@@ -3827,6 +3827,17 @@ function aerial(p) {
 function setPieceTarget(st, p) {
     const pd = st.pending;
     const cel = st.celebrate;
+    // aut kullanilana kadar rakipler ceza sahasinin disinda (Kural 16): bulundugu yerden ceza sahasi cizgisinin 1 m disina
+    if (!pd && st.takerKind === 'goalkick' && st.restartTaker && st.owner === st.restartTaker && p.side !== st.restartTaker.side) {
+        const A = st.restartTaker.side;
+        const [pxf, pyf] = toFrame(A, p.x, p.y);
+        if (pxf < 17.5 && Math.abs(pyf - 34) < 21.2) {
+            const [x, y] = fromFrame(A, 17.8, pyf);
+            return [x, y, 1.0];
+        }
+        const [x, y] = fromFrame(A, Math.max(pxf, 17.8), pyf); // disarida: yerinde bekler (iceri girmez)
+        return [x, y, 0.3];
+    }
     // santra vurulana kadar herkes yerinde: kendi yarisinda, orta yuvarlagin disinda (Kural 8)
     if (!pd && st.restartKind === 'kickoff' && st.restartTaker && st.owner === st.restartTaker && p !== st.restartTaker) {
         if (p.pos === 'GK') {
@@ -3928,9 +3939,10 @@ function setPieceTarget(st, p) {
             const [x, y] = fromFrame(A, 14 + (p.ax - 22) * 0.75, 34 + (p.ay - 34) * 1.12);
             return [x, y, 0.45];
         }
-        // rakip orta sahaya ve kendi pres hattina cekilir
+        // rakip orta sahaya ve kendi pres hattina cekilir; ceza sahasindaysa hizla cikar (Kural 16)
         const [x, y] = fromFrame(p.side, 34 + (p.ax - 22) * 0.55, p.ay);
-        return [x, y, 0.45];
+        const [axf, ayf] = toFrame(A, p.x, p.y);
+        return [x, y, axf < 18 && Math.abs(ayf - 34) < 21.5 ? 0.9 : 0.45];
     }
     if (pd.kind === 'fkshot' || pd.kind === 'fk') {
         const spotX = pd.spotX, spotY = pd.spotY;
@@ -4066,7 +4078,7 @@ function execPending(st, pd) {
         giveBall(st, keeper, 1.5);
         st.gkFeet = true; // aut: kaleci topu yerden vurur
         st.restartTaker = keeper;
-        st.takerKind = '';
+        st.takerKind = 'goalkick';
         return;
     }
     if (pd.kind === 'throw') {
@@ -4487,8 +4499,19 @@ function draw(alpha, now = performance.now()) {
     const top0 = PLAY.on ? hudReserve(Wc) : 0;
     const vh = (Hc - top0) / s;
     // hedef: top + hiz yonunde hafif onden bakis; yumusak takip
-    const tx = st.ball.x + (st.ball.vx ?? 0) * 0.6, ty = st.ball.y + (st.ball.vy ?? 0) * 0.6;
-    CAM.cx += (tx - CAM.cx) * 0.12; CAM.cy += (ty - CAM.cy) * 0.12;
+    // yumusak takip: one bakis payi da yumusatilir (pasta ani sicrama olmaz), kamera yay-sonumleyici ile ve hiz sinirli izler
+    const now0 = performance.now(), cdt = Math.min(0.05, (now0 - (CAM.lt ?? now0)) / 1000); CAM.lt = now0;
+    const lx = (st.ball.vx ?? 0) * 0.35, ly = (st.ball.vy ?? 0) * 0.35;
+    const kl = 1 - Math.exp(-cdt * 2.0);
+    CAM.lx = (CAM.lx ?? 0) + (Math.max(-8, Math.min(8, lx)) - (CAM.lx ?? 0)) * kl;
+    CAM.ly = (CAM.ly ?? 0) + (Math.max(-5, Math.min(5, ly)) - (CAM.ly ?? 0)) * kl;
+    const tx = st.ball.x + CAM.lx, ty = st.ball.y + CAM.ly;
+    const w0 = 3.2; // yay frekansi (1/s): kucuk = daha yumusak
+    CAM.vx = (CAM.vx ?? 0) + ((tx - CAM.cx) * w0 * w0 - 2 * w0 * (CAM.vx ?? 0)) * cdt;
+    CAM.vy = (CAM.vy ?? 0) + ((ty - CAM.cy) * w0 * w0 - 2 * w0 * (CAM.vy ?? 0)) * cdt;
+    const cv0 = Math.hypot(CAM.vx, CAM.vy), vmax = 26;
+    if (cv0 > vmax) { CAM.vx *= vmax / cv0; CAM.vy *= vmax / cv0; }
+    CAM.cx += CAM.vx * cdt; CAM.cy += CAM.vy * cdt;
     ox = Math.max(-PADX, Math.min(105 + PADX - CAM.w, CAM.cx - CAM.w / 2));
     oy = (vh >= PH ? -PADY - (vh - PH) / 2 : Math.max(-PADY, Math.min(68 + PADY - vh, CAM.cy - vh / 2))) - top0 / s;
   } else {
