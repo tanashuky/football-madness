@@ -1044,10 +1044,19 @@ function drawPhoneOverlay(Wc, Hc, s, X, Y, ox, oy, pos) {
     ctx.globalAlpha = 1;
     // duran top / kaleci: pas zorunlu, geri sayim
     const ui = userCarrierInfo(st, PLAY.side);
+    // duran top ipucu: ne yapilabilir, kalan sure; savunmada penalti: kalecinin atlayacagi taraf joystick ile
+    let tip = null;
     if (ui && ui.mustPlay) {
-      ctx.fillStyle = 'rgba(10,12,16,.7)'; ctx.fillRect(Wc / 2 - 110 * u, Hc - (SA.b + 44) * u, 220 * u, 30 * u);
-      ctx.fillStyle = '#fff'; ctx.font = `600 ${Math.round(13 * u)}px ${css('--font-body')}`;
-      ctx.fillText(`Pas ver · ${Math.ceil(ui.left)} sn sonra otomatik`, Wc / 2, Hc - (SA.b + 29) * u);
+      const lab = { corner: 'Korner: Orta (havadan) · Pas (kısa)', fkshot: 'Serbest vuruş: Şut (kavisi çiz) · Orta · Pas', fk: 'Serbest vuruş: Orta · Pas · Şut', penalty: 'Penaltı: Şut (yönü çiz, basılı tut = güç)', throw: 'Taç: Pas · Ara · Orta', goalkick: 'Aut: Pas · Orta' }[ui.kind] ?? 'Pas ver';
+      tip = `${lab} · ${Math.ceil(ui.left)} sn`;
+    } else if (st.pending && st.pending.kind === 'penalty' && st.pending.side !== PLAY.side) {
+      tip = 'Penaltı: atlayacağın tarafa joystick ile bas ve tut (boş bırakırsan ortada kalır)';
+    }
+    if (tip) {
+      ctx.font = `600 ${Math.round(13 * u)}px ${css('--font-body')}`;
+      const tw = ctx.measureText(tip).width + 24 * u;
+      ctx.fillStyle = 'rgba(10,12,16,.75)'; ctx.fillRect(Wc / 2 - tw / 2, Hc - (SA.b + 44) * u, tw, 30 * u);
+      ctx.fillStyle = '#fff'; ctx.fillText(tip, Wc / 2, Hc - (SA.b + 29) * u);
     }
     if (st.celebrate) { ctx.fillStyle = 'rgba(255,255,255,.7)'; ctx.font = `600 ${Math.round(12 * u)}px ${css('--font-body')}`; ctx.fillText('dokun: sevinci atla', Wc / 2, Hc - (SA.b + 24) * u); }
     if (st.done) { ctx.fillStyle = 'rgba(10,12,16,.75)'; ctx.fillRect(Wc / 2 - 150 * u, Hc / 2 - 24 * u, 300 * u, 48 * u); ctx.fillStyle = '#fff'; ctx.font = `700 ${Math.round(16 * u)}px ${css('--font-body')}`; ctx.fillText('Maç bitti · sol üstten çık', Wc / 2, Hc / 2); }
