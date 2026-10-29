@@ -957,6 +957,25 @@ function ballPath(st, maxT = 5) {
     st._path = { t: st.t, k: b.kickT, pts };
     return pts;
 }
+// havadaki topun ilk yere degecegi nokta: motorun kendi adim suresiyle (st.dt) ve ayni denklemlerle - gercek inisle ayni.
+// Yalniz belirgin havalanan topta (tepe >= 1,5 m) ve top henuz havadayken; yoksa null.
+function predictLanding(st) {
+    const b = st.ball;
+    if (st.owner || (b.z <= 0.02 && b.vz <= 0))
+        return null;
+    const s = { x: b.x, y: b.y, z: b.z, vx: b.vx, vy: b.vy, vz: b.vz, sw: b.sw, dip: b.dip };
+    let apex = s.z, t = 0;
+    const h = st.dt;
+    for (let i = 0; i < 200; i++) {
+        integrateBall(s, h);
+        t += h;
+        if (s.z > apex)
+            apex = s.z;
+        if (s.z <= 0)
+            return apex >= 1.5 ? { x: s.x, y: s.y, t, apex } : null;
+    }
+    return null;
+}
 // oyuncunun topa yetisebilecegi ilk nokta: tepki suresinden sonra tam hizla kosar; cok yuksek top ulasilmaz
 function interceptPt(p, pts, react, speed, maxZ = P.headZ[1], maxV = 99) {
     for (const pt of pts) {
@@ -5194,20 +5213,30 @@ function underBtn(b, X, Y, pos) {
 }
 // havadaki topun dusecegi yer: yoldaki ilk inis (tepe noktasindan sonra z sifira iner)
 function landingOf(pts) {
-  let apex = 0, up = false;
+  let apex = pts.length ? pts[0].z : 0;
   for (let i = 1; i < pts.length; i++) {
-    if (pts[i].z > apex) { apex = pts[i].z; up = true; }
-    if (up && apex > 0.8 && pts[i].z <= 0.05 && pts[i - 1].z > 0.05) return pts[i];
+    if (pts[i].z > apex) apex = pts[i].z;
+    if (pts[i].z <= 0.05 && pts[i - 1].z > 0.05) return apex >= 1.5 ? pts[i] : null;
   }
   return null;
 }
-function drawLanding(x, y, s, X, Y, now, col) {
-  const r0 = Math.max(6, s * 1.3), pulse = 1 + 0.12 * Math.sin(now / 120);
-  ctx.save(); ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = Math.max(2, s * 0.28); ctx.globalAlpha = 0.9;
-  ctx.beginPath(); ctx.arc(X(x), Y(y), r0 * pulse, 0, Math.PI * 2); ctx.stroke();
-  ctx.globalAlpha = 0.35; ctx.beginPath(); ctx.arc(X(x), Y(y), r0 * pulse * 1.6, 0, Math.PI * 2); ctx.stroke();
-  ctx.globalAlpha = 0.95; ctx.beginPath(); ctx.arc(X(x), Y(y), Math.max(2, s * 0.3), 0, Math.PI * 2); ctx.fill();
+// dusus isareti: sabit (nabiz yok); k = 1 vuruş anı .. 0 inis ani: dis halka inise yaklastikca ice kapanir
+function drawLanding(x, y, s, X, Y, now, col, k = 1) {
+  const r0 = Math.max(6, s * 1.2);
+  ctx.save(); ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = Math.max(2, s * 0.26); ctx.globalAlpha = 0.85;
+  ctx.beginPath(); ctx.arc(X(x), Y(y), r0, 0, Math.PI * 2); ctx.stroke();
+  if (k > 0.05) { ctx.globalAlpha = 0.35; ctx.lineWidth = Math.max(1.5, s * 0.18); ctx.beginPath(); ctx.arc(X(x), Y(y), r0 * (1 + 1.2 * k), 0, Math.PI * 2); ctx.stroke(); }
+  ctx.globalAlpha = 0.9; ctx.beginPath(); ctx.arc(X(x), Y(y), Math.max(2, s * 0.28), 0, Math.PI * 2); ctx.fill();
   ctx.restore();
+}
+// canli dusus noktasi: her vuruşta bir kez hesaplanir ve inise kadar sabit kalir (yeni dokunus/vuruş yeniden hesaplar)
+const LAND = { kickT: -1, p: null, t0: 0 };
+function liveLanding() {
+  const b = st.ball;
+  if (st.owner) { LAND.p = null; return null; }
+  if (b.kickT !== LAND.kickT) { LAND.kickT = b.kickT; LAND.p = predictLanding(st); LAND.t0 = st.t; }
+  if (LAND.p && st.t - LAND.t0 > LAND.p.t + 0.05) LAND.p = null; // indi
+  return LAND.p;
 }
 const SPR = { on: false, trail: [] }; // sprint izi ve titresim
 function sprintFx(cp, now) {
@@ -5250,9 +5279,9 @@ function drawPhoneOverlay(Wc, Hc, s, X, Y, ox, oy, pos) {
     }
   }
   // havadaki top: dusus noktasi halkasi (herkes gorur)
-  if (PLAY.on && !st.owner && (st.ball.z > 0.5 || st.ball.vz > 1.5)) {
-    const land = landingOf(ballPath(st));
-    if (land) drawLanding(land.x, land.y, s, X, Y, nowMs, '#ffffff');
+  if (PLAY.on) {
+    const land = liveLanding();
+    if (land) drawLanding(land.x, land.y, s, X, Y, nowMs, '#ffffff', Math.max(0, 1 - (st.t - LAND.t0) / land.t));
   }
   // yaklasan sahipsiz top mucadelesi: iki oyuncu arasinda isaret (mudahale zamanlamasi icin)
   if (PLAY.on && st.contest && st.t < st.contest.until) {

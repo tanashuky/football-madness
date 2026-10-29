@@ -940,6 +940,21 @@ function ballPath(st: MatchState, maxT = 5): PathPt[] {
   (st as any)._path = { t: st.t, k: b.kickT, pts };
   return pts;
 }
+// havadaki topun ilk yere degecegi nokta: motorun kendi adim suresiyle (st.dt) ve ayni denklemlerle - gercek inisle ayni.
+// Yalniz belirgin havalanan topta (tepe >= 1,5 m) ve top henuz havadayken; yoksa null.
+export function predictLanding(st: MatchState): { x: number; y: number; t: number; apex: number } | null {
+  const b = st.ball;
+  if (st.owner || (b.z <= 0.02 && b.vz <= 0)) return null;
+  const s: BallSim = { x: b.x, y: b.y, z: b.z, vx: b.vx, vy: b.vy, vz: b.vz, sw: b.sw, dip: b.dip };
+  let apex = s.z, t = 0;
+  const h = st.dt;
+  for (let i = 0; i < 200; i++) {
+    integrateBall(s, h); t += h;
+    if (s.z > apex) apex = s.z;
+    if (s.z <= 0) return apex >= 1.5 ? { x: s.x, y: s.y, t, apex } : null;
+  }
+  return null;
+}
 // oyuncunun topa yetisebilecegi ilk nokta: tepki suresinden sonra tam hizla kosar; cok yuksek top ulasilmaz
 function interceptPt(p: PState, pts: PathPt[], react: number, speed: number, maxZ = P.headZ[1], maxV = 99): { pt: PathPt; t: number } | null {
   for (const pt of pts) {
