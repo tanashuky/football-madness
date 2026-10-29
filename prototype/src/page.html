@@ -191,7 +191,7 @@ label.chk { display: flex; flex-direction: row; gap: 8px; align-items: center; }
           <label for="pCam">Kamera<select id="pCam"><option value="full" selected>Tam saha</option><option value="length">Tam boy</option><option value="near">Yakın</option></select></label>
           <label for="pKeys">Klavye<select id="pKeys"><option value="arrows" selected>Ok tuşları + S pas · D şut · W ara · A orta · E sprint · Q değiştir</option><option value="wasd">WASD + J pas · K şut · L ara · I orta · Shift sprint · Boşluk değiştir</option></select></label>
           <div class="ctrl"><button class="btn prim" id="playBtn">Oynamaya başla (Kartal SK, Team play)</button></div>
-          <p class="keys">Telefon: sol yarıda parmağını bastığın yer joystick olur; kesikli sarı çizgiyi geçip dış banda itince sprint (iç daire normal koşu). Sağ altta elmas butonlar: hücumda üst Ara, sağ Şut, sol Orta, alt Pas; savunmada üst Değiştir, sağ Kaydır, sol Müdahale, alt Baskı (basılı). Vuruş: butona basınca oyuncunun üstünde topun gerçek yolu belirir; parmağınla yolu çiz: yön = sürükleme yönü, kavis = izin bükülmesi, güç = basılı tutma; bırakınca vurur (ne görüyorsan o). Kısa dokunuş (0,2 s altı, sürüklemeden) nişan açmaz: Pas/Ara joystick yönündeki arkadaşa tek pas, Şut joystick yönüne düz şut. Pas ve Ara her zaman yerden, Orta her zaman havadan. Top sana gelirken Pas/Şut'a basarsan gelişine vurur (⚡); joystick ilk dokunuş yönüdür. Sahipsiz topta rakiple aynı anda yetişiyorsan iki yay belirir: o anda Müdahale/Kaydır bas (erken basan atmış olur). Klavyede yön tuşları nişandır; tuşu basılı tutmak güç. C kamera, P duraklat, Esc çık; Değiştir'i (Q / üst buton) basılı tutmak kaleciyi çıkarır; gol sevincini dokunarak atla.</p>
+          <p class="keys">Telefon: sol yarıda parmağını bastığın yer joystick olur; kesikli sarı çizgiyi geçip dış banda itince sprint (iç daire normal koşu). Sağ altta elmas butonlar: hücumda üst Ara, sağ Şut, sol Orta, alt Pas; savunmada üst Değiştir, sağ Kaydır, sol Müdahale, alt Baskı (basılı; joystick dış bandı ile koşarak baskı, başparmağı Baskı'dan Müdahale/Kaydır'a kaydırınca o hareket). Vuruş: butona basınca oyuncunun üstünde topun gerçek yolu belirir; parmağınla yolu çiz: yön = sürükleme yönü, kavis = izin bükülmesi, güç = basılı tutma; bırakınca vurur (ne görüyorsan o). Kısa dokunuş (0,2 s altı, sürüklemeden) nişan açmaz: Pas/Ara joystick yönündeki arkadaşa tek pas, Şut joystick yönüne düz şut. Pas ve Ara her zaman yerden, Orta her zaman havadan. Top sana gelirken Pas/Şut'a basarsan gelişine vurur (⚡); joystick ilk dokunuş yönüdür. Sahipsiz topta rakiple aynı anda yetişiyorsan iki yay belirir: o anda Müdahale/Kaydır bas (erken basan atmış olur). Klavyede yön tuşları nişandır; tuşu basılı tutmak güç. C kamera, P duraklat, Esc çık; Değiştir'i (Q / üst buton) basılı tutmak kaleciyi çıkarır; gol sevincini dokunarak atla.</p>
         </div>
         <div class="panel">
           <h3>Takımlar</h3>
@@ -613,7 +613,7 @@ function draw(alpha, now = performance.now()) {
 // Hucum: ust Ara, sag Sut, sol Orta, alt Pas. Savunma: ust Degistir, sag Kaydir, sol Mudahale, alt Baski (basili).
 // Vurus: butona basinca nisan oku acilir; ilk 12 px surukleme yon, yana kayma falso, basili tutma guc; birakinca vurus.
 const PLAY = { on: false, side: 0, camMode: 'full', minutes: 10, keys: 'arrows', autoSwitch: true, speed: 1.3, ball: 1.4, names: 'auto', t0: 0, paused: false };
-const IN = { joyId: null, joyBase: null, mx: 0, my: 0, joyK: 0, press: false, acts: [], keys: new Set(), ptrBtn: new Map(), kick: null, kbKick: null, swDown: null };
+const IN = { joyId: null, joyBase: null, mx: 0, my: 0, joyK: 0, press: false, acts: [], keys: new Set(), ptrBtn: new Map(), kick: null, kbKick: null, swDown: null, slideOver: null };
 const GK_HOLD_MS = 300; // Degistir bu kadar basili tutulunca kaleci cikisi
 const POWER_MS = { shoot: 900, pass: 600, through: 600, cross: 700 };
 const JOY_SPRINT = 1.5, JOY_MAX = 1.9; // joystick: sprint esigi ve topuzun en uzak noktasi (ic halka yaricapi katinda)
@@ -748,13 +748,23 @@ function onPtrMove(e) {
     IN.mx = m > 2 ? (dx / m) * Math.min(1, k) : 0; IN.my = m > 2 ? (dy / m) * Math.min(1, k) : 0;
     return;
   }
-  if (IN.kick && e.pointerId === IN.kick.ptr) { e.preventDefault(); kickMove(e.offsetX, e.offsetY); }
+  if (IN.kick && e.pointerId === IN.kick.ptr) { e.preventDefault(); kickMove(e.offsetX, e.offsetY); return; }
+  // Baski basiliyken basparmak Mudahale ya da Kaydir'a kaydirilirsa o aksiyon yapilir (baski surer)
+  const held = IN.ptrBtn.get(e.pointerId);
+  if (held && held.def === 'press' && !inPossession()) {
+    e.preventDefault();
+    const b = hitBtn(e.offsetX, e.offsetY);
+    const over = b && (b.def === 'tackle' || b.def === 'slide') ? b.def : null;
+    if (over && IN.slideOver !== over) IN.acts.push(over);
+    IN.slideOver = over;
+  }
 }
 function onPtrUp(e) {
   if (!PLAY.on) return;
   if (e.pointerId === IN.joyId) { IN.joyId = null; IN.joyBase = null; IN.mx = 0; IN.my = 0; IN.joyK = 0; }
   const b = IN.ptrBtn.get(e.pointerId);
   if (b) { IN.ptrBtn.delete(e.pointerId); pressBtn(b, false, e.pointerId, e.offsetX, e.offsetY); }
+  IN.slideOver = null;
   if (IN.kick && e.pointerId === IN.kick.ptr) kickEnd();
 }
 // iOS Safari: dokunma varsayilanlari (kaydirma, yakinlastirma, uzun basma buyutec) oyun modunda kapatilir
