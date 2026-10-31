@@ -143,7 +143,7 @@ export interface Ball {
   intended: PState | null; // pasin hedeflenen alicisi (kontrol ve anlatim icin; topu almak zorunda degildir)
   tx: number; // hedef nokta (nisan)
   ty: number;
-  shot: { xg: number; setPiece: boolean; kind: string; penalty?: boolean } | null; // sut ise kayit bilgisi
+  shot: { xg: number; setPiece: boolean; kind: string; penalty?: boolean; dist?: number } | null; // sut ise kayit bilgisi
   offside: Set<PState> | null; // vurus aninda ofsayt konumundaki takim arkadaslari
   dip: number; // ust falso: havada ek asagi ivme (serbest vurus)
   gkTried?: boolean; // kaleci bu suta bir kez uzandi
@@ -351,6 +351,9 @@ export const P = {
   shotBias: 0.0,
   shotW: 0.85, // sut kararinin agirligi (hacim ayari)
   safePass: 0.011, // pas seciminde guvenlik egilimi (beklenen deger birimi, isabet olasiligi basina)
+  letBallOut: 1, // cikan topu avantajli tarafin birakmasi (0 kapali)
+  longShotMax: 36, // bu mesafeden uzaga akan oyunda sut dusunulmez (m)
+  longShotBias: 0.05, // bos alanda uzaktan sut egilimi (EV puani; 28 m'ye kadar tam, longShotMax'ta sifir)
   minShotXg: 0.012, // bu ham xG'nin altindaki pozisyondan sut dusunulmez (~27 m merkez)
   maxShotP: 0.7, // akan oyunda tek sutun en yuksek gol olasiligi
   onTargetBase: 0.26, // blok olmayan sutun isabetli olma tabani (+1,2 x gol olasiligi)
@@ -1049,10 +1052,18 @@ function updateAnchorsAndMove(st: MatchState) {
       }
       lists[s].sort((a, b2) => a.c.t - b2.c.t);
     }
+    // top oyun disina cikiyor mu (kale agzindan degil): cikis ani
+    const lastPt = pts[pts.length - 1];
+    const exiting = pts.length > 1 && (lastPt.x < -0.5 || lastPt.x > L + 0.5 || lastPt.y < -0.5 || lastPt.y > W + 0.5) && !((lastPt.x < -0.5 || lastPt.x > L + 0.5) && Math.abs(lastPt.y - 34) < 4.2 && lastPt.z < 2.8);
     for (let s = 0 as 0 | 1; s < 2; s = (s + 1) as 0 | 1) {
       const cands = lists[s];
       const oppBest = lists[1 - s].length ? lists[1 - s][0].c.t : 9;
       const g = gks[s];
+      // topu disari birakma: son dokunan rakipse (tac/aut/korner bize), rakip cikmadan yetisemiyorsa ve bizim yetismemiz de riskliyse kovalamayiz
+      if (P.letBallOut && exiting && b.touch && b.touch.side !== s && oppBest >= lastPt.t - 0.05 && !(b.intended && b.intended.side === s)) {
+        const ourBest = cands.length ? cands[0].c.t : 9;
+        if (ourBest > lastPt.t - 0.6) { dbg('topu_birakti'); continue; }
+      }
       // kaleci: rakipten en az 0,3 s once ve takim arkadasindan once yetisecekse cikar
       if (g && g.c.t + 0.3 < oppBest && (!cands.length || g.c.t < cands[0].c.t)) chase.set(g.p, g.c);
       // kendi vurusumuzda 1, rakipte 2 kovalayan; top yavas ve sahipsiz kaldiysa (>0,8 s) her iki takimdan 2'ser (sahipsiz topta bekleme olmasin)
@@ -1829,10 +1840,13 @@ function aiDecide(st: MatchState, c: PState) {
   // sut
   const distGoal = hyp(105 - cxf, 34 - cyf);
   let shotM: ReturnType<typeof shotModel> | null = null;
-  if (distGoal < 32 && !noShot) {
+  if (distGoal < P.longShotMax && !noShot) {
     shotM = shotModel(st, c, cxf, cyf, press, oneOnOne);
-    const ev = shotM.xg * P.shotW + P.shotBias + gauss(st.rng) * noiseSigma;
-    if ((shotM.raw >= P.minShotXg || oneOnOne) && ev > bestEV) {
+    // uzaktan sut: 20 m otesinde onu bos ve merkeze yakin olan oyuncu ara sira dener (eğilim mesafeyle duser, baskiyla kalkar)
+    const centr = Math.exp(-Math.pow((cyf - 34) / 12, 2));
+    const longBonus = distGoal > 20 && press < 0.4 ? P.longShotBias * clamp((P.longShotMax - distGoal) / 8, 0, 1) * centr * (1 - press / 0.4) : 0;
+    const ev = shotM.xg * P.shotW + P.shotBias + longBonus + gauss(st.rng) * noiseSigma;
+    if ((shotM.raw >= P.minShotXg || oneOnOne || longBonus > 0) && ev > bestEV) {
       bestEV = ev;
       bestAct = { kind: 'shot' };
     }
@@ -2890,6 +2904,7 @@ function shootAt(st: MatchState, c: PState, xg: number, opt: { header?: boolean;
   s.shots++;
   s.xg += xg;
   st.zoneShots[side][cyf < 23 ? 0 : cyf > 45 ? 2 : 1]++;
+  { const dg = hyp(105 - cxf, 34 - cyf); dbg('sut_m_' + (dg < 11 ? '0_11' : dg < 16.5 ? '11_16' : dg < 22 ? '16_22' : dg < 27 ? '22_27' : dg < 32 ? '27_32' : '32p')); }
   st.playerXg[side][c.num] = (st.playerXg[side][c.num] ?? 0) + xg;
   if (c.thruT !== undefined && st.t - c.thruT < 8) { dbg('arapas_sut'); DBG.arapas_sut_xg = (DBG.arapas_sut_xg ?? 0) + xg; c.thruT = undefined; }
   st.keyUntil = st.t + 1.8;
@@ -2907,7 +2922,7 @@ function shootAt(st: MatchState, c: PState, xg: number, opt: { header?: boolean;
   const vz = opt.header ? -0.3 + st.rng() * 1.2 : opt.penalty ? 0.8 + st.rng() * 1.2 : opt.freekick ? 7.2 + st.rng() * 0.8 : clamp(0.8 + power * 2.5 + gauss(st.rng) * 2.6, -0.2, 9);
   const sw = opt.sw !== undefined ? opt.sw : opt.freekick ? (st.rng() < 0.5 ? 1 : -1) * (2.2 + st.rng() * 1.2) : (st.rng() - 0.5) * 0.8;
   const kind = opt.penalty ? 'penalty' : opt.freekick ? 'freekick' : opt.header ? (opt.setPiece ? 'sp-header' : 'header') : 'open';
-  kickBall(st, c, dx / d, dy / d, speed, vz, sw, 'shot', { tx, ty, shot: { xg, setPiece: !!opt.setPiece, kind, penalty: !!opt.penalty }, sigma: opt.sigma, dip: opt.freekick ? 3 : 0 });
+  kickBall(st, c, dx / d, dy / d, speed, vz, sw, 'shot', { tx, ty, shot: { xg, setPiece: !!opt.setPiece, kind, penalty: !!opt.penalty, dist: hyp(105 - cxf, 34 - cyf) }, sigma: opt.sigma, dip: opt.freekick ? 3 : 0 });
   markShotOT(st, side);
 }
 // asirtma: top kalecinin ustunden, kale cizgisine yakin iner; isabet beceriye bagli
@@ -3036,6 +3051,7 @@ function goalScored(st: MatchState, side: 0 | 1, xl: number, yc: number) {
   const sp = (b.shot && b.shot.setPiece) || st.t - st.lastRestartT < 6;
   if (sp) s.setPieceGoals++;
   dbg('gol_' + (b.shot ? b.shot.kind : scorer ? 'sapma' : 'kendi_kale') + (sp ? '_sp' : ''));
+  if (b.shot && b.shot.dist !== undefined && !b.shot.setPiece) { const dg = b.shot.dist; dbg('gol_m_' + (dg < 11 ? '0_11' : dg < 16.5 ? '11_16' : dg < 22 ? '16_22' : dg < 27 ? '22_27' : dg < 32 ? '27_32' : '32p')); }
   st.events.push({ t: st.clock, type: 'goal', side, player: scorer ? scorer.num : undefined, xg, text: scorer ? undefined : 'kk' });
   st.extra[st.half - 1] += 0.5;
   st.keyUntil = st.t + 1.5;
