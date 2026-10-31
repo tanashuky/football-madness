@@ -35,6 +35,14 @@ export interface TacticIn {
   shapeDef?: Shape; // savunma sekli (topsuz); yoksa formasyondan
   shapeAtt?: Shape; // hucum sekli (toplu); yoksa formasyon + doktrinden turetilir
 }
+// Gorev karti (oyuncu basina; takim talimatlarinin ustune yazar)
+export interface Duty {
+  runs?: Lvl; // 0 geride kal, 1 ayaga, 2 derin kosu
+  press?: Lvl; // 0 blokta kal, 1 normal, 2 ilk basan
+  pass?: Lvl; // 0 kisa, 1 karisik, 2 uzun
+  mark?: 0 | 1; // 0 alan, 1 adam (kendi bolgesindeki rakibi tutar)
+  overlap?: Lvl; // bekler: 0 kal, 1 dengeli, 2 bindir
+}
 
 export interface TeamIn {
   name: string;
@@ -56,7 +64,8 @@ export interface TeamIn {
   mainFormation?: Formation;
   specialTraining?: boolean; // maca ozel taktik antrenmani yapildi: doktrin bedeli yariya iner
   ai?: { noiseMult: number; readAcc?: number; react?: number; timing?: number }; // bot zekasi: karar hata payi carpani, rakibi okuma dogrulugu, topa tepki suresi (s), mucadele zamanlamasi (pencereyi tutturma orani)
-  situational?: { when: 'leading' | 'trailing' | 'drawing' | 'any'; fromMinute: number; tactic?: Partial<TacticIn>; formation?: Formation }[]; // durum taktikleri
+  situational?: { when: 'leading' | 'trailing' | 'drawing' | 'any'; fromMinute: number; tactic?: Partial<TacticIn>; formation?: Formation }[]; // durum taktikleri (eski; kosullu kurallar bunun yerini alir)
+  duties?: Record<number, Duty>; // forma numarasina gore gorev kartlari
 }
 
 export type FxKind = 'clean' | 'foul' | 'card' | 'int' | 'kick' | 'save' | 'throw' | 'aim' | 'skill';
@@ -834,6 +843,9 @@ export function ballMoving(st: MatchState): boolean {
 
 const s_stats = (st: MatchState, side: 0 | 1) => st.stats[side];
 // etkin taktik kapasite: uyum suresinde -10
+const NO_DUTY: Duty = {};
+function dutyOf(st: MatchState, p: PState): Duty { return st.teams[p.side].duties?.[p.num] ?? NO_DUTY; }
+export function setDuty(st: MatchState, side: 0 | 1, num: number, d: Duty) { const t = st.teams[side]; t.duties = { ...(t.duties ?? {}), [num]: { ...(t.duties?.[num] ?? {}), ...d } }; }
 function tEff(st: MatchState, side: 0 | 1): number {
   return st.teams[side].T - (st.clock < st.adaptUntil[side] ? 10 : 0);
 }
@@ -1179,7 +1191,9 @@ function updateAnchorsAndMove(st: MatchState) {
     if (!inPoss && !deadBall && carrier) {
       const tx = carrier.x;
       const ty = carrier.y;
-      const sorted = live.filter((p) => p.pos !== 'GK').sort((a, b) => hyp(a.x - tx, a.y - ty) - hyp(b.x - tx, b.y - ty));
+      // gorev karti: ilk basan 6 m yakin sayilir, blokta kalan yalniz 5 m icindeyse basar
+      const pd = (p: PState) => { const d = hyp(p.x - tx, p.y - ty), du = dutyOf(st, p).press ?? 1; return du === 2 ? d - 6 : du === 0 ? (d < 5 ? d : d + 40) : d; };
+      const sorted = live.filter((p) => p.pos !== 'GK').sort((a, b) => pd(a) - pd(b));
       const nPress = t.tactic.press === 2 ? 2 : 1;
       const [cxf] = toFrame(s, tx, ty);
       // dusuk pres: yalniz kendi yarisinda ilk adam bastirir
@@ -1246,9 +1260,11 @@ function updateAnchorsAndMove(st: MatchState) {
         // 3'lu savunmada kanat bekleri topsuz oyunda savunmaya donup 5'li hat olusturur
         if (!inPoss && threeBack && p.pos === 'FB') ax -= 13 * (1 - ph);
         // gorev kartlari (sekle ek): bekler bindirir / kalir, merkez orta saha ceza sahasina kosar / geride kalir, kanat ice kat
-        if (inPoss && p.pos === 'FB' && bxf > 50) ax += (P.fbUp[t.tactic.fb ?? 1] - P.fbUp[1]) * ph;
+        const duty = dutyOf(st, p);
+        if (inPoss && p.pos === 'FB' && bxf > 50) ax += (P.fbUp[duty.overlap ?? t.tactic.fb ?? 1] - P.fbUp[1]) * ph;
         if (inPoss && p.pos === 'CM' && bxf > 55) ax += P.cmUp[t.tactic.cm ?? 1] * ph;
         if (inPoss && p.pos === 'W' && t.tactic.wing === 1 && bxf > 60) ay = 34 + (ay - 34) * 0.7;
+        if (duty.runs !== undefined) ax += [-4, 0, 4][duty.runs] * ph;
         // savunma hatti ayari esas olarak defans hattini oynatir; orta saha yarisi kadar, forvetler hic etkilenmez
         const lineW = p.pos === 'CB' || p.pos === 'FB' ? 1 : p.pos === 'DM' || p.pos === 'CM' ? P.lineMid : 0;
         txf = centerX + (ax - centerX) * lenF + shiftX - lineOff * (1 - lineW);
@@ -1280,6 +1296,12 @@ function updateAnchorsAndMove(st: MatchState) {
             if ((st.teams[s === 0 ? 1 : 0].tactic.runs ?? 1) === 2) txf -= P.respect;
             if (t.tactic.trap) txf += 1.5;
           }
+          // adam markaji: evinin 12 m yakinindaki en yakin rakip hucumcuyu kale tarafindan 1,5 m'de tutar
+          if (dutyOf(st, p).mark === 1) {
+            let mk: PState | null = null, md = 12;
+            for (const q of st.players) { if (q.side === s || q.off || q.pos === 'GK' || q === carrier) continue; const [qxf, qyf] = toFrame(s, q.x, q.y); const dq = hyp(qxf - txf, qyf - tyf); if (dq < md) { md = dq; mk = q; } }
+            if (mk) { const [qxf, qyf] = toFrame(s, mk.x, mk.y); txf = Math.max(2, qxf - 1.5); tyf = qyf; }
+          }
           txf = Math.min(txf, bxf + 2); // savunmada topun onune gecme
           // top kendi kalesine yakinsa savunma kale onunde daralir
           // defansif orta sahasi olmayan dizilislerde (4-4-2) merkez orta sahalar bu gorevi ustlenir
@@ -1294,7 +1316,7 @@ function updateAnchorsAndMove(st: MatchState) {
         if (!inPoss && p.pos === 'ST' && p === live.find((q) => q.pos === 'ST')) txf = Math.max(txf, t.tactic.line === 0 ? 50 : 45);
         // hucumda ofsayta dusmemek icin son savunma cizgisinde bekle
         // hucumcular topa sahipken son savunma cizgisine yaslanir (ara pas kosusu icin)
-        if (inPoss && (p.pos === 'ST' || (p.pos === 'W' && p.ax >= 58 && bxf > 35))) txf = Math.max(txf, offL - P.runsGap[t.tactic.runs ?? 1]);
+        if (inPoss && (p.pos === 'ST' || (p.pos === 'W' && p.ax >= 58 && bxf > 35))) txf = Math.max(txf, offL - P.runsGap[dutyOf(st, p).runs ?? t.tactic.runs ?? 1]);
         if (inPoss && txf > offL - 0.4) txf = offL - 0.4;
         txf = clamp(txf, 6, 101);
         tyf = clamp(tyf, 2, 66);
@@ -1946,7 +1968,10 @@ function aiDecide(st: MatchState, c: PState) {
     const v = threat(mxf, myf) * (1 - 0.25 * recvPress);
     const lossV = threat(105 - mxf, 68 - myf);
     let ev = ps * v - (1 - ps) * lossV;
-    // stil: kisa pas uzun pasi sevmez, direkt ileri pasi sever
+    // stil: kisa pas uzun pasi sevmez, direkt ileri pasi sever; gorev karti pas menzili oyuncuya ozel
+    const pr = dutyOf(st, c).pass;
+    if (pr === 0 && d > 20) ev -= 0.005 * (d - 20) / 10;
+    if (pr === 2) ev += 0.0004 * Math.max(0, d - 15);
     if (team.tactic.style === 0 && d > 25) ev -= 0.004 * (d - 25) / 10;
     if (team.tactic.style === 2) ev += 0.0004 * Math.max(0, mxf - cxf);
     // tempo: hizli tempo gecis aninda (kontra) ileriyi sever, yavas tempo guvenligi
