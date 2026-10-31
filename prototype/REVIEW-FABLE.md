@@ -48,3 +48,10 @@ Testler: `prototype/src/` altında rules.ts, throwtest.ts, gktest.ts, ogtest.ts,
 - Kalibrasyon (speed.ts 60 maç): gol 2,35; şut 8,5; isabet 4,2; pas %78,4; faul 2,78; korner 0,97; ofsayt 0,07; mücadele 51,7. Bant 2,4–2,6'nın hemen altı; korner ve ofsayt hedefin altında → kalibrasyon 2. geçişi.
 - Doküman tutarsızlıkları düzeltildi (Maç Motoru): "oyun saati kesintilerde akar" → efektif süre; süre sınırları tablosu (penaltı 5 s rastgele köşe → 8 s yapay zekâ); klasik şema tablosunda "Pas kanatta Orta'ya döner" → ayrı Orta butonu; sprint "%85" → 1,5R–1,9R bandı; klavye W ara / I orta. Kritik tur paragrafı eklendi.
 - Açık: santra yönü kararı (proje sahibi).
+
+## 1 Kasım gecesi (Fable)
+
+- Yapay zekâ uzaktan şut: `P.longShotMax` 36 (eski sabit 32), `P.longShotBias` 0,05 (20 m ötesi, önü boş, merkeze yakın; 28 m'ye kadar tam, 36'da sıfır). Şut mesafe sayaçları `sut_m_*`, gol `gol_m_*` (DBG). 27 m+ şut maç başı 0,9 → 1,4; gol/şut aynı seed'lerde değişmedi.
+- Çıkan topu bırakma: `P.letBallOut` (updateAnchorsAndMove; son dokunan rakip, rakip çıkmadan yetişemiyor, bizim yetişmemiz çıkıştan 0,6 s'den geç → kovalamaz). 200 seed A/B: gol 2,71 / 2,74.
+- Kalibrasyon notu: 22 m+ şut dönüşümü %6–7 (gerçek %2–4) → kalibrasyon 2'de kaleci uzak şut kurtarışı. Kalibrasyon tabanı bu seed'lerde ~2,65–2,75 gol (speed.ts 500+ seed'lerinde 2,35–2,8 arası oynuyor; 60 maç yetmiyor, 200 kullan).
+- Kararlar: santra her yöne (değişiklik yok); oyun hızı %30 sabit (seçenek test sürümünde duruyor, oyunda kaldırılacak); taktik modeli 2.0 dokümanda (Maç Motoru).
