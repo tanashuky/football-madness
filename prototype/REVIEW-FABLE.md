@@ -55,3 +55,12 @@ Testler: `prototype/src/` altında rules.ts, throwtest.ts, gktest.ts, ogtest.ts,
 - Çıkan topu bırakma: `P.letBallOut` (updateAnchorsAndMove; son dokunan rakip, rakip çıkmadan yetişemiyor, bizim yetişmemiz çıkıştan 0,6 s'den geç → kovalamaz). 200 seed A/B: gol 2,71 / 2,74.
 - Kalibrasyon notu: 22 m+ şut dönüşümü %6–7 (gerçek %2–4) → kalibrasyon 2'de kaleci uzak şut kurtarışı. Kalibrasyon tabanı bu seed'lerde ~2,65–2,75 gol (speed.ts 500+ seed'lerinde 2,35–2,8 arası oynuyor; 60 maç yetmiyor, 200 kullan).
 - Kararlar: santra her yöne (değişiklik yok); oyun hızı %30 sabit (seçenek test sürümünde duruyor, oyunda kaldırılacak); taktik modeli 2.0 dokümanda (Maç Motoru).
+
+## Gece turu 1–2 Kasım (Fable, proje sahibi uyurken)
+
+Commit sırası: 8ee1406 hız/pencereler → dd51833 şekiller → 7402036 görev kartları → 122944b kurallar → deb6639 sayfa. Her biri tek başına geri alınabilir; yedekler `fm-proto/engine.v23-pre-tactic.ts`, `page.v23-pre-tactic.html` (oturum dışı yok; git asıl yedek).
+
+- `P.playSpeed` (sayfa 1,3): `RT()` ile mücadele penceresi, press50, müdahale tamponu, bot tepki, otomatik değiştirme gecikmeleri oyun saniyesine çevrilir (gerçek saniye sabit). Hız seçeneği kaldırıldı.
+- Taktik 2.0: `Doctrine`, `Shape`, `DOCTRINES`, `applyDoctrine`, `attackShapeOf`, `shapesOf`, `shapeDist`, `GRID_X/GRID_Y`; `PState.ox/oy`; `st.phase` (faz geçişi `P.shapeTrans` 2 s, savunmaya dönüş ×0,4); `Duty`, `TeamIn.duties`, `setDuty`, `dutyOf`; `Rule`, `RULE_TEMPLATES`, `RULES_MAX`, `botRules`, `rulesStep` (her adım), `applyRuleAction`, `st.ruleSt`, `st.ruleLog`, olay türü `'rule'`; `setMentality` (`st.mentality`, `st.baseTactic`). Eski `situational` duruyor (sayfada "eski" diye işaretli), kaldırılabilir.
+- Denge: hücum şekli + geçiş aynı 100 seed'de gol 2,79 → 3,02, şut 8,75 → 9,4 (kalibrasyon 2'ye). Testler: doctest.ts (doktrin havuzu), dutytest.ts, ruletest.ts, calib.ts; crit/stall/rules/throw/fk/sptest3/usertest2/gktest temiz.
+- Bilinen açıklar: rol uyumu çarpanı (görev kartı rolüne aykırıysa EG düşüşü) yok; kural tetiği "rakip şekil değiştirince" yok; şekil editörü (ızgara) sayfada yok, yalnız presetler; `keeperGuess` kullanıcı penaltısında kullanılmıyor (online).
