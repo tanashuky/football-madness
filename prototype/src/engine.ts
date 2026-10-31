@@ -400,6 +400,8 @@ export const P = {
   shotW: 0.85, // sut kararinin agirligi (hacim ayari)
   safePass: 0.011, // pas seciminde guvenlik egilimi (beklenen deger birimi, isabet olasiligi basina)
   playSpeed: 1, // oynama hizi (1,3 = %30 hizli): tepki pencereleri gercek saniye sabit kalsin diye oyun saniyesine bununla cevrilir
+  gkSaveBase: 0.85, // kaleci kurtaris tabani
+  gkFarSave: 0, // uzak suttan (18-32 m) ek kurtaris (kalibrasyon 2)
   shapeTrans: 2, // sekil gecisi taban suresi (s); savunmaya donus yarisi; 0 = aninda (test)
   letBallOut: 1, // cikan topu avantajli tarafin birakmasi (0 kapali)
   longShotMax: 36, // bu mesafeden uzaga akan oyunda sut dusunulmez (m)
@@ -3443,7 +3445,8 @@ function resolveContact(st: MatchState, p: PState, z: number, speed: number, dis
       const reachMax = P.gkReach + clamp((st.t - b.kickT - 0.15) * 2.5, 0, P.gkDive - P.gkReach);
       const skill = 0.22 * Math.log(eg(p) / eg(shooter)) + (p.traits.includes('Refleks') ? 0.06 : 0) - (p.emergencyGk ? 0.3 : 0);
       const dPath = Math.min(dist, minDistToPath(st, p));
-      const pSave = clamp(0.85 - 0.6 * (dPath / reachMax) - (speed - 16) / 55 + skill, 0.1, 0.97);
+      const shotD = b.shot?.dist ?? 12;
+      const pSave = clamp(P.gkSaveBase - 0.6 * (dPath / reachMax) - (speed - 16) / 55 + skill + P.gkFarSave * clamp((shotD - 18) / 14, 0, 1), 0.1, 0.97);
       if (st.rng() < pSave) {
         st.stats[kickerSide as 0 | 1].onTarget++;
         st.events.push({ t: st.clock, type: 'save', side: kickerSide as 0 | 1, player: shooter.num, xg: b.shot?.xg });
