@@ -43,6 +43,31 @@ export interface Duty {
   mark?: 0 | 1; // 0 alan, 1 adam (kendi bolgesindeki rakibi tutar)
   overlap?: Lvl; // bekler: 0 kal, 1 dengeli, 2 bindir
 }
+// Kosullu kurallar (karar 1 Kasim): tetik(ler) + eylem; en cok 4 aktif; tetiklenince ekranda etiket, 5 oyun dk bekleme
+export type RuleTrigger =
+  | { kind: 'score'; rel: 'behind' | 'ahead' | 'level'; by?: number }
+  | { kind: 'minute'; from?: number; to?: number }
+  | { kind: 'lost'; where?: 'oppHalf' | 'ownHalf' } // topu kaybettigimiz an (eylem sureli olmali); where: topun kaybedildigi yarisaha
+  | { kind: 'oppGkLong' } // rakip kaleci uzun vurdu (aut ya da elden, 35 m+)
+  | { kind: 'stamina'; below: number } // sahadaki ortalama kondisyon
+  | { kind: 'redCard'; who: 'us' | 'them' };
+export interface RuleAction { tactic?: Partial<TacticIn>; duties?: Record<number, Duty>; formation?: Formation; duration?: number } // duration: oyun saniyesi; yoksa kalici
+export interface Rule { id: string; label: string; when: RuleTrigger[]; then: RuleAction; cooldown?: number } // cooldown: oyun dakikasi (varsayilan 5)
+export const RULE_TEMPLATES: Rule[] = [
+  { id: 'counterpress', label: 'Karşı pres', when: [{ kind: 'lost', where: 'oppHalf' }], then: { tactic: { press: 2 }, duration: 6 }, cooldown: 0 },
+  { id: 'chase', label: 'Geriden gelme', when: [{ kind: 'score', rel: 'behind' }, { kind: 'minute', from: 70 }], then: { tactic: { line: 2, press: 2, fb: 2, cm: 2, runs: 2, tempo: 2 } } },
+  { id: 'protect', label: 'Sonucu koru', when: [{ kind: 'score', rel: 'ahead' }, { kind: 'minute', from: 80 }], then: { tactic: { line: 0, press: 0, tempo: 0, fb: 0, cm: 0, compact: 0 } } },
+  { id: 'tired', label: 'Yorgunluk: blok', when: [{ kind: 'stamina', below: 45 }], then: { tactic: { press: 0, tempo: 0 } } },
+  { id: 'opp10', label: 'Rakip 10 kişi: yüklen', when: [{ kind: 'redCard', who: 'them' }], then: { tactic: { line: 2, width: 2, press: 2 } } },
+  { id: 'us10', label: '10 kişi: derin blok', when: [{ kind: 'redCard', who: 'us' }], then: { tactic: { line: 0, press: 0, compact: 0, style: 2 } } },
+  { id: 'secondball', label: 'İkinci top', when: [{ kind: 'oppGkLong' }], then: { tactic: { cm: 0 }, duration: 8 }, cooldown: 0 },
+  { id: 'earlylead', label: 'Erken gol: sakin', when: [{ kind: 'score', rel: 'ahead' }, { kind: 'minute', to: 20 }], then: { tactic: { tempo: 0, press: 1 }, duration: 600 } },
+  { id: 'late-level', label: 'Son 10 dk: risk', when: [{ kind: 'score', rel: 'level' }, { kind: 'minute', from: 80 }], then: { tactic: { runs: 2, cm: 2, fb: 2 } } },
+  { id: 'h2tempo', label: 'İkinci yarı tempo', when: [{ kind: 'minute', from: 45 }, { kind: 'score', rel: 'level' }], then: { tactic: { tempo: 2 } } },
+];
+export const RULES_MAX = 4;
+// bot: zorluga gore kural sayisi (Amator 0, Yari pro 1, Pro 2, Dunya klasi 3, Efsane 4)
+export function botRules(n: number): Rule[] { return ['counterpress', 'chase', 'protect', 'tired'].slice(0, clamp(n, 0, 4)).map((id) => RULE_TEMPLATES.find((r) => r.id === id)!); }
 
 export interface TeamIn {
   name: string;
@@ -66,6 +91,7 @@ export interface TeamIn {
   ai?: { noiseMult: number; readAcc?: number; react?: number; timing?: number }; // bot zekasi: karar hata payi carpani, rakibi okuma dogrulugu, topa tepki suresi (s), mucadele zamanlamasi (pencereyi tutturma orani)
   situational?: { when: 'leading' | 'trailing' | 'drawing' | 'any'; fromMinute: number; tactic?: Partial<TacticIn>; formation?: Formation }[]; // durum taktikleri (eski; kosullu kurallar bunun yerini alir)
   duties?: Record<number, Duty>; // forma numarasina gore gorev kartlari
+  rules?: Rule[]; // kosullu kurallar (en cok RULES_MAX)
 }
 
 export type FxKind = 'clean' | 'foul' | 'card' | 'int' | 'kick' | 'save' | 'throw' | 'aim' | 'skill';
@@ -83,7 +109,7 @@ export interface LogEntry {
 
 export interface MatchEvent {
   t: number; // oyun saniyesi
-  type: 'goal' | 'shot' | 'save' | 'miss' | 'corner' | 'foul' | 'yellow' | 'red' | 'penalty' | 'freekick' | 'half' | 'end' | 'kickoff' | 'offside' | 'sub' | 'injury' | 'tactic' | 'adjust' | 'extra' | 'shootout';
+  type: 'goal' | 'shot' | 'save' | 'miss' | 'corner' | 'foul' | 'yellow' | 'red' | 'penalty' | 'freekick' | 'half' | 'end' | 'kickoff' | 'offside' | 'sub' | 'injury' | 'tactic' | 'adjust' | 'extra' | 'shootout' | 'rule';
   player2?: number; // degisiklikte cikan oyuncu
   side: 0 | 1;
   player?: number; // forma numarasi
@@ -257,6 +283,8 @@ export interface MatchState {
   knockout: boolean; // kupa: esitlikte uzatma ve penaltilar
   shootout: [number, number] | null;
   sitUsed: boolean[][];
+  ruleSt: { last: Record<string, number>; active: { id: string; until: number; revert: Partial<TacticIn>; set: Partial<TacticIn> }[]; lastTurnoverSeen: number; gkLongT: number; reds: [number, number] }[];
+  ruleLog: { t: number; side: 0 | 1; label: string }[]; // ekran icin: tetiklenen kurallar
   restartKind: string; // yeniden baslatma turu: 'throw' | 'goalkick' | 'fk' | 'corner' | 'gk' | '' (ofsayt kurali icin)
   lastPossSide: 0 | 1;
   stats: [TeamStats, TeamStats];
@@ -777,6 +805,8 @@ export function createMatch(a0: TeamIn, b0: TeamIn, seed: number, opts?: { knock
     knockout: !!opts?.knockout,
     shootout: null,
     sitUsed: [[], []],
+    ruleSt: [{ last: {}, active: [], lastTurnoverSeen: -1, gkLongT: -1, reds: [0, 0] }, { last: {}, active: [], lastTurnoverSeen: -1, gkLongT: -1, reds: [0, 0] }],
+    ruleLog: [],
     lastPossSide: 0,
     stats: [emptyStats(), emptyStats()],
     events: [],
@@ -1525,6 +1555,66 @@ function situational(st: MatchState) {
     });
   }
 }
+// kosullu kurallar: her adimda tetikler kontrol edilir; eylem taktik yamasi (sureli ya da kalici), 1 oyun dk uyum bedeli, bekleme suresi
+function applyRuleAction(st: MatchState, side: 0 | 1, r: Rule) {
+  const t = st.teams[side];
+  const a = r.then;
+  const revert: Partial<TacticIn> = {};
+  if (a.tactic) { for (const k of Object.keys(a.tactic) as (keyof TacticIn)[]) (revert as any)[k] = (t.tactic as any)[k]; t.tactic = { ...t.tactic, ...a.tactic }; }
+  if (a.duties) for (const [num, d] of Object.entries(a.duties)) setDuty(st, side, +num, d);
+  if (a.formation && a.formation !== t.formation) { const n0 = st.tacticChanges[side]; setTactic(st, side, {}, a.formation); st.tacticChanges[side] = n0; }
+  if (a.duration) st.ruleSt[side].active.push({ id: r.id, until: st.t + a.duration, revert, set: a.tactic ?? {} });
+  st.adaptUntil[side] = Math.max(st.adaptUntil[side], st.clock + 60); // 1 oyun dakikasi uyum
+  st.ruleSt[side].last[r.id] = st.clock;
+  st.ruleLog.push({ t: st.t, side, label: r.label });
+  if (st.ruleLog.length > 20) st.ruleLog.shift();
+  st.events.push({ t: st.clock, type: 'rule', side, text: r.label });
+  dbg('kural_' + r.id);
+}
+function rulesStep(st: MatchState) {
+  const minute = st.clock / 60;
+  for (const side of [0, 1] as const) {
+    const rs = st.ruleSt[side];
+    // sureli eylemlerin sonu
+    for (let i = rs.active.length - 1; i >= 0; i--) {
+      const a = rs.active[i];
+      if (st.t >= a.until) {
+        // yalniz bu kuralin koydugu deger hala duruyorsa geri al (arada kalici bir kural degistirdiyse dokunma)
+        const t = st.teams[side]; const patch: Partial<TacticIn> = {};
+        for (const k of Object.keys(a.revert) as (keyof TacticIn)[]) if ((t.tactic as any)[k] === (a.set as any)[k]) (patch as any)[k] = (a.revert as any)[k];
+        t.tactic = { ...t.tactic, ...patch }; rs.active.splice(i, 1);
+      }
+    }
+    const rules = st.teams[side].rules;
+    if (!rules) continue;
+    const gf = st.stats[side].goals, ga = st.stats[1 - side].goals;
+    const live = liveTeam(st, side);
+    const avgK = live.reduce((a, p) => a + p.k, 0) / Math.max(1, live.length);
+    const lostNow = st.lastTurnoverT !== rs.lastTurnoverSeen && st.lastPossSide !== side && st.t - st.lastTurnoverT < 0.2;
+    if (st.lastTurnoverT !== rs.lastTurnoverSeen && st.t - st.lastTurnoverT >= 0.2) rs.lastTurnoverSeen = st.lastTurnoverT;
+    const gkLongNow = st.ruleSt[side].gkLongT >= 0 && st.t - st.ruleSt[side].gkLongT < 0.2;
+    const reds: [number, number] = [st.stats[0].reds, st.stats[1].reds];
+    for (const r of rules.slice(0, RULES_MAX)) {
+      const last = rs.last[r.id];
+      if (last !== undefined && minute - last / 60 < (r.cooldown ?? 5)) continue;
+      if (rs.active.some((a) => a.id === r.id)) continue;
+      let ok = true;
+      for (const w of r.when) {
+        if (w.kind === 'score') { const d = gf - ga, by = w.by ?? 1; ok = w.rel === 'level' ? d === 0 : w.rel === 'behind' ? d <= -by : d >= by; }
+        else if (w.kind === 'minute') ok = (w.from === undefined || minute >= w.from) && (w.to === undefined || minute < w.to);
+        else if (w.kind === 'lost') { const [bxf] = toFrame(side, st.ball.x, st.ball.y); ok = lostNow && (w.where === undefined || (w.where === 'oppHalf' ? bxf > 52.5 : bxf <= 52.5)); }
+        else if (w.kind === 'oppGkLong') ok = gkLongNow;
+        else if (w.kind === 'stamina') ok = avgK < w.below;
+        else if (w.kind === 'redCard') ok = (w.who === 'us' ? reds[side] : reds[1 - side]) > 0;
+        if (!ok) break;
+      }
+      if (!ok) continue;
+      if (lostNow) rs.lastTurnoverSeen = st.lastTurnoverT;
+      applyRuleAction(st, side, r);
+    }
+  }
+}
+export function setRules(st: MatchState, side: 0 | 1, rules: Rule[]) { st.teams[side].rules = rules.slice(0, RULES_MAX); }
 // rakibi okuma: her 15 oyun dakikasinda baskin atak yonu ve en tehlikeli oyuncu; dogruluk T/100 (bot: sabit)
 function readOpponent(st: MatchState) {
   for (const side of [0, 1] as const) {
@@ -1688,6 +1778,7 @@ export function step(st: MatchState) {
   st.hclock += dc;
   const rest = inPlay ? 1 : 0.3;
   for (const p of st.players) if (!p.off) p.k = Math.max(0, p.k - (p.kDrop * dt * P.clockRate * rest) / 60);
+  rulesStep(st);
   injuryRoll(st);
 
   if (st.owner) st.stats[st.owner.side].possTicks++;
@@ -2886,6 +2977,7 @@ function kickBall(st: MatchState, p: PState, dx: number, dy: number, speed: numb
   if (b.noTouch) st.spWait = null;
   if (b.noTouch && st.takerKind === 'goalkick') st.lastGoalKickT = st.t;
   b.fromRestart = b.noTouch ? (st.takerKind || st.restartKind || 'restart') : undefined;
+  if (p.pos === 'GK' && hyp(b.vx, b.vy) > 17) st.ruleSt[p.side === 0 ? 1 : 0].gkLongT = st.t; // rakip kaleci uzun vurdu (kural tetigi)
   if (b.noTouch && st.takerKind === 'throw') {
     // tac: top elle, bas ustunden atilir; en cok ~25 m, hafif yukselen
     b.z = 2.0;
