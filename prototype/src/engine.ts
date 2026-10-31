@@ -5,6 +5,9 @@
 export type Pos = 'GK' | 'CB' | 'FB' | 'DM' | 'CM' | 'W' | 'ST';
 export type Lvl = 0 | 1 | 2;
 export type Formation = '4-3-3' | '4-4-2' | '4-2-3-1' | '3-5-2' | '5-3-2';
+// Taktik 2.0 (karar 1 Kasim): doktrin (oyun anlayisi), iki sekil (savunma / hucum), gorev kartlari, kosullu kurallar
+export type Doctrine = 'gegenpress' | 'bus' | 'possession' | 'counter' | 'direct' | 'wings' | 'balanced';
+export type Shape = [number, number][]; // 11 nokta, hucum cercevesinde (x 0..105 kendi kaleden rakip kaleye, y 0..68); 0 = kaleci
 
 export interface PlayerIn {
   num: number;
@@ -28,6 +31,9 @@ export interface TacticIn {
   wing?: 0 | 1; // kanatlar: 0 cizgide kal, 1 ice kat
   runs?: Lvl; // forvet kosulari: 0 guvenli, 1 dengeli, 2 riskli (ofsayt sinirinda)
   spBox?: Lvl; // duran topta (korner, serbest vurus) ceza sahasina giren oyuncu: 0 -> 3, 1 -> 5, 2 -> 7
+  doctrine?: Doctrine; // oyun anlayisi: eksik alanlari doldurur ve hucum seklinin cesaretini belirler
+  shapeDef?: Shape; // savunma sekli (topsuz); yoksa formasyondan
+  shapeAtt?: Shape; // hucum sekli (toplu); yoksa formasyon + doktrinden turetilir
 }
 
 export interface TeamIn {
@@ -109,8 +115,10 @@ interface PState {
   speedBase: number;
   x: number;
   y: number;
-  ax: number; // anchor (hucum cercevesinde)
+  ax: number; // savunma sekli evi (hucum cercevesinde)
   ay: number;
+  ox: number; // hucum sekli evi
+  oy: number;
   yellow: number;
   off: boolean; // oyundan atildi
   hx: number; // bakis yonu
@@ -222,6 +230,7 @@ export interface MatchState {
   subWindowsLeft: [number, number]; // degisiklik penceresi (devre arasi haric 3)
   adaptUntil: [number, number]; // taktik degisikligi sonrasi uyum suresi (oyun saniyesi): T -10
   tacticChanges: [number, number];
+  phase: [number, number]; // sekil fazi: 0 savunma sekli, 1 hucum sekli (gecis kademeli)
   reads: [ReadResult | null, ReadResult | null]; // rakibi okuma sonucu
   zoneShots: [number[], number[]]; // hucum eden tarafin sutlari bolgeye gore (sol/orta/sag, kendi cercevesinde)
   zoneEntries: [number[], number[]]; // hucum ucuncu bolgeye girisler bolgeye gore (sol/orta/sag) - baskin atak yonu bundan okunur
@@ -352,6 +361,7 @@ export const P = {
   shotW: 0.85, // sut kararinin agirligi (hacim ayari)
   safePass: 0.011, // pas seciminde guvenlik egilimi (beklenen deger birimi, isabet olasiligi basina)
   playSpeed: 1, // oynama hizi (1,3 = %30 hizli): tepki pencereleri gercek saniye sabit kalsin diye oyun saniyesine bununla cevrilir
+  shapeTrans: 2, // sekil gecisi taban suresi (s); savunmaya donus yarisi; 0 = aninda (test)
   letBallOut: 1, // cikan topu avantajli tarafin birakmasi (0 kapali)
   longShotMax: 36, // bu mesafeden uzaga akan oyunda sut dusunulmez (m)
   longShotBias: 0.05, // bos alanda uzaktan sut egilimi (EV puani; 28 m'ye kadar tam, longShotMax'ta sifir)
@@ -490,6 +500,56 @@ const FORM_NUM: Record<Formation, number[]> = {
   '5-3-2': [1, 3, 4, 5, 6, 2, 8, 14, 10, 9, 11],
 };
 export const FORMATION_LIST = Object.keys(FORM_POS) as Formation[];
+// Doktrinler: eksik talimatlari doldurur; attK hucum seklinin cesareti (1 = dengeli), wingIn kanatlarin ice katma orani, stUp forvetin ek cikisi
+export const DOCTRINES: Record<Doctrine, { label: string; tactic: Partial<TacticIn>; attK: number; wingIn: number; stUp: number }> = {
+  gegenpress: { label: 'Gegenpress', tactic: { press: 2, line: 2, style: 1, tempo: 2, width: 1, compact: 0, fb: 2, cm: 2, wing: 1, runs: 1 }, attK: 1.1, wingIn: 0.75, stUp: 2 },
+  bus: { label: 'Otobüs', tactic: { press: 0, line: 0, style: 2, tempo: 0, width: 0, compact: 0, fb: 0, cm: 0, wing: 0, runs: 0 }, attK: 0.6, wingIn: 0.9, stUp: 0 },
+  possession: { label: 'Kısa pas', tactic: { press: 1, line: 1, style: 0, tempo: 0, width: 2, compact: 1, fb: 1, cm: 1, wing: 1, runs: 0 }, attK: 1.0, wingIn: 0.7, stUp: 0 },
+  counter: { label: 'Kontra', tactic: { press: 0, line: 0, style: 2, tempo: 2, width: 1, compact: 0, fb: 0, cm: 1, wing: 0, runs: 2 }, attK: 0.8, wingIn: 0.85, stUp: 6 },
+  direct: { label: 'Uzun top', tactic: { press: 1, line: 1, style: 2, tempo: 1, width: 1, compact: 1, fb: 1, cm: 2, wing: 0, runs: 1 }, attK: 0.9, wingIn: 0.9, stUp: 4 },
+  wings: { label: 'Kanat oyunu', tactic: { press: 1, line: 1, style: 1, tempo: 1, width: 2, compact: 1, fb: 2, cm: 1, wing: 0, runs: 1 }, attK: 1.05, wingIn: 1.0, stUp: 2 },
+  balanced: { label: 'Dengeli', tactic: { press: 1, line: 1, style: 1, tempo: 1, width: 1, compact: 1, fb: 1, cm: 1, wing: 0, runs: 1 }, attK: 1.0, wingIn: 0.85, stUp: 0 },
+};
+export const DOCTRINE_LIST = Object.keys(DOCTRINES) as Doctrine[];
+// doktrin: tactic'teki bos alanlari doktrinin varsayilanlariyla doldurur (acik verilen degerler korunur)
+export function applyDoctrine(t: TacticIn): TacticIn {
+  const d = t.doctrine ? DOCTRINES[t.doctrine] : null;
+  if (!d) return t;
+  const out: TacticIn = { ...d.tactic, ...t } as TacticIn;
+  for (const k of Object.keys(d.tactic) as (keyof TacticIn)[]) if ((t as any)[k] === undefined) (out as any)[k] = (d.tactic as any)[k];
+  return out;
+}
+// hucum sekli: savunma seklinden mevkiye gore turetilir (dengeli doktrin); attK cesaret, wingIn kanat ice katma, stUp forvet
+export function attackShapeOf(def: Shape, pos: Pos[], doctrine?: Doctrine): Shape {
+  const d = doctrine ? DOCTRINES[doctrine] : DOCTRINES.balanced;
+  const up: Record<Pos, number> = { GK: 0, CB: 1, FB: 8, DM: 2, CM: 4, W: 4, ST: 3 };
+  return def.map(([x, y], i) => {
+    const p = pos[i];
+    if (p === 'GK') return [x, y] as [number, number];
+    let nx = x + up[p] * d.attK + (p === 'ST' ? d.stUp : 0);
+    let ny = y;
+    if (p === 'W') ny = 34 + (y - 34) * d.wingIn;
+    if (p === 'FB') ny = 34 + (y - 34) * 1.08;
+    return [clamp(nx, 4, 92), clamp(ny, 3, 65)] as [number, number];
+  });
+}
+// takimin iki sekli (verilmemisse formasyon ve doktrinden)
+export function shapesOf(t: TeamIn): { def: Shape; att: Shape } {
+  const def = t.tactic.shapeDef ?? FORMATIONS[t.formation];
+  const att = t.tactic.shapeAtt ?? attackShapeOf(def, FORM_POS[t.formation], t.tactic.doctrine);
+  return { def, att };
+}
+// iki sekil arasindaki ortalama uzaklik (m): gecis suresi bundan
+export function shapeDist(def: Shape, att: Shape): number {
+  let s = 0;
+  for (let i = 1; i < 11; i++) s += hyp(att[i][0] - def[i][0], att[i][1] - def[i][1]);
+  return s / 10;
+}
+// UI izgarasi: 6 derinlik bandi x 5 serit -> cerceve koordinati (karar 1 Kasim)
+export const GRID_X = [12, 25, 38, 51, 64, 77];
+export const GRID_Y = [8, 21, 34, 47, 60];
+export function gridToShape(cells: [number, number][]): [number, number][] { return cells.map(([b, l]) => [GRID_X[clamp(b, 0, 5)], GRID_Y[clamp(l, 0, 4)]]); }
+export function shapeToGrid(sh: Shape): [number, number][] { return sh.map(([x, y]) => { let bb = 0, bd = 1e9; GRID_X.forEach((gx, i) => { const d = Math.abs(gx - x); if (d < bd) { bd = d; bb = i; } }); let bl = 0, ld = 1e9; GRID_Y.forEach((gy, i) => { const d = Math.abs(gy - y); if (d < ld) { ld = d; bl = i; } }); return [bb, bl]; }); }
 
 // ---------- Taktik etkilesimleri (Mac Motoru sekmesi: hicbir talimat mutlak ustun degildir) ----------
 // Her eslesme +1 (gucluluk) ya da -1 (zayiflik) puani verir; toplam, takim kapasitesiyle olceklenen
@@ -595,8 +655,8 @@ export function doctrinePenalty(t: TeamIn): number {
 export function createMatch(a0: TeamIn, b0: TeamIn, seed: number, opts?: { knockout?: boolean }): MatchState {
   FLIP = false;
   // taktik kopyalanir (mac icinde degisebilir), doktrin bedeli T'ye uygulanir
-  const a: TeamIn = { ...a0, tactic: { ...a0.tactic }, T: a0.T * (1 - doctrinePenalty(a0)) };
-  const b: TeamIn = { ...b0, tactic: { ...b0.tactic }, T: b0.T * (1 - doctrinePenalty(b0)) };
+  const a: TeamIn = { ...a0, tactic: applyDoctrine({ ...a0.tactic }), T: a0.T * (1 - doctrinePenalty(a0)) };
+  const b: TeamIn = { ...b0, tactic: applyDoctrine({ ...b0.tactic }), T: b0.T * (1 - doctrinePenalty(b0)) };
   // rastgele sayi ureteci durumu mac durumunda tutulur (seri hale getirilebilir)
   const box = { rngState: seed | 0 };
   const rng = () => {
@@ -609,7 +669,7 @@ export function createMatch(a0: TeamIn, b0: TeamIn, seed: number, opts?: { knock
   const teams: [TeamIn, TeamIn] = [a, b];
   for (let s = 0 as 0 | 1; s < 2; s = (s + 1) as 0 | 1) {
     const t = teams[s];
-    const form = FORMATIONS[t.formation];
+    const { def: form, att: formAtt } = shapesOf(t);
     const edge = tacticEdge(t, teams[s === 0 ? 1 : 0]);
     t.players.forEach((p, i) => {
       const eg = Math.max(5, playerEG(t, p)) * edge;
@@ -617,6 +677,7 @@ export function createMatch(a0: TeamIn, b0: TeamIn, seed: number, opts?: { knock
       const fast = p.traits?.includes('Hızlı') ? 0.8 : 0;
       const kDropPerMin = 0.45 * (1.3 - (0.6 * t.F) / 100) * (p.traits?.includes('Dayanıklı') ? 0.8 : 1) * P.pressFat[t.tactic.press] * (p.pos === 'FB' ? P.roleFat[t.tactic.fb ?? 1] : p.pos === 'CM' ? P.roleFat[t.tactic.cm ?? 1] : 1) * (t.tactic.tempo === 2 && t.F < 55 ? 1.15 : 1);
       const [ax, ay] = form[i];
+      const [ox, oy] = formAtt[i];
       const [wx, wy] = fromFrame(s, ax, ay);
       players.push({
         side: s,
@@ -633,6 +694,8 @@ export function createMatch(a0: TeamIn, b0: TeamIn, seed: number, opts?: { knock
         y: wy,
         ax,
         ay,
+        ox,
+        oy,
         yellow: 0,
         off: false,
         hx: s === 0 ? 1 : -1,
@@ -651,7 +714,7 @@ export function createMatch(a0: TeamIn, b0: TeamIn, seed: number, opts?: { knock
       return {
         side: s, idx: 11 + i, num: p.num, name: p.name, pos: p.pos, traits: p.traits ?? [], egBase: eg, k: 100 - 0.5 * (p.fatigue ?? 20),
         kDrop: 0.45 * (1.3 - (0.6 * t.F) / 100) * (p.traits?.includes('Dayanıklı') ? 0.8 : 1) * P.pressFat[t.tactic.press],
-        speedBase: 6.2 + 1.6 * egN + fast, x: -10, y: -10, ax: 0, ay: 34, yellow: 0, off: true, hx: 1, hy: 0,
+        speedBase: 6.2 + 1.6 * egN + fast, x: -10, y: -10, ax: 0, ay: 34, ox: 0, oy: 34, yellow: 0, off: true, hx: 1, hy: 0,
       };
     });
   };
@@ -687,6 +750,7 @@ export function createMatch(a0: TeamIn, b0: TeamIn, seed: number, opts?: { knock
     subWindowsLeft: [3, 3],
     adaptUntil: [-1, -1],
     tacticChanges: [0, 0],
+    phase: [0, 0],
     reads: [null, null],
     zoneShots: [[0, 0, 0], [0, 0, 0]],
     zoneEntries: [[0, 0, 0], [0, 0, 0]],
@@ -1091,13 +1155,20 @@ function updateAnchorsAndMove(st: MatchState) {
     const inPoss = possSide === s;
     const [bxf, byf] = toFrame(s, st.ball.x, st.ball.y);
     // savunma hatti derinligi esas olarak topsuz oyunda gecerlidir; topa sahipken takim yine ileri cikar
-    const lineOff = inPoss ? [-2, 0, 2][t.tactic.line] : [-7, 0, 6][t.tactic.line];
-    const targetLen = inPoss ? [34, 35, 37][t.tactic.line] : [30, 35, 40][t.tactic.line];
+    // sekil fazi: topu kazaninca hucum sekline, kaybedince savunma sekline kademeli gecis (2-4 s; iki sekil uzaksa ve uyum dusukse daha yavas)
+    const shp = shapesOf(t);
+    const trans = P.shapeTrans > 0 ? clamp(P.shapeTrans + shapeDist(shp.def, shp.att) / 8, P.shapeTrans, P.shapeTrans * 2) * (1 + Math.max(0, 60 - t.U) / 100) : 1e-6;
+    const phTarget = inPoss ? 1 : 0;
+    // savunmaya donus daha acil (yarisi surede)
+    st.phase[s] += clamp(phTarget - st.phase[s], -dt / (trans * 0.4), dt / trans);
+    const ph = st.phase[s];
+    const lineOff = [-7, 0, 6][t.tactic.line] + ([-2, 0, 2][t.tactic.line] - [-7, 0, 6][t.tactic.line]) * ph;
+    const targetLen = [30, 35, 40][t.tactic.line] + ([34, 35, 37][t.tactic.line] - [30, 35, 40][t.tactic.line]) * ph;
     const avgK = live.reduce((a, p) => a + p.k, 0) / live.length;
     const stretch = (1.1 + (0.125 * (60 - t.U)) / 100) * (avgK < 40 ? 1.1 : 1);
-    const lenF = (targetLen / 44) * stretch * (inPoss ? 1.15 : 1) * P.compactLen[t.tactic.compact ?? 1];
-    const widthF = [0.85, 1, 1.12][t.tactic.width ?? 1] * (inPoss ? 1.1 : 0.85);
-    const shiftX = (bxf - 52.5) * 0.5 + (inPoss ? 7 : -5) + lineOff;
+    const lenF = (targetLen / 44) * stretch * (1 + 0.1 * ph) * P.compactLen[t.tactic.compact ?? 1];
+    const widthF = [0.85, 1, 1.12][t.tactic.width ?? 1] * (0.85 + 0.25 * ph);
+    const shiftX = (bxf - 52.5) * 0.5 + (-5 + 9 * ph) + lineOff;
     const centerX = 45;
     const noDM = !live.some((q) => q.pos === 'DM');
     const threeBack = live.filter((q) => q.pos === 'CB').length >= 3 && live.filter((q) => q.pos === 'FB').length === 2 && t.formation === '3-5-2';
@@ -1169,17 +1240,15 @@ function updateAnchorsAndMove(st: MatchState) {
         txf = clamp(2.5 + Math.max(0, bxf - 40) * 0.1 + (t.tactic.line === 2 ? 3 : 0), 1.5, 12);
         tyf = 34 + (byf - 34) * 0.15;
       } else {
-        let ax = p.ax;
+        // ev: savunma ve hucum sekli arasinda faza gore
+        let ax = p.ax + (p.ox - p.ax) * ph;
+        let ay = p.ay + (p.oy - p.ay) * ph;
         // 3'lu savunmada kanat bekleri topsuz oyunda savunmaya donup 5'li hat olusturur
-        if (!inPoss && threeBack && p.pos === 'FB') ax -= 13;
-        // bekler hucumda bindirir
-        if (inPoss && p.pos === 'FB' && bxf > 50) ax += P.fbUp[t.tactic.fb ?? 1];
-        // merkez orta saha: geride kal ya da ceza sahasina kos
-        if (inPoss && p.pos === 'CM' && bxf > 55) ax += P.cmUp[t.tactic.cm ?? 1];
-        // kanat ice kat: hucum ucuncu bolgede merkeze yaklasir
-        let ay = p.ay;
-        if (inPoss && p.pos === 'W' && t.tactic.wing === 1 && bxf > 60) ay = 34 + (ay - 34) * 0.55;
-        if (inPoss && p.pos === 'ST') ax += 4;
+        if (!inPoss && threeBack && p.pos === 'FB') ax -= 13 * (1 - ph);
+        // gorev kartlari (sekle ek): bekler bindirir / kalir, merkez orta saha ceza sahasina kosar / geride kalir, kanat ice kat
+        if (inPoss && p.pos === 'FB' && bxf > 50) ax += (P.fbUp[t.tactic.fb ?? 1] - P.fbUp[1]) * ph;
+        if (inPoss && p.pos === 'CM' && bxf > 55) ax += P.cmUp[t.tactic.cm ?? 1] * ph;
+        if (inPoss && p.pos === 'W' && t.tactic.wing === 1 && bxf > 60) ay = 34 + (ay - 34) * 0.7;
         // savunma hatti ayari esas olarak defans hattini oynatir; orta saha yarisi kadar, forvetler hic etkilenmez
         const lineW = p.pos === 'CB' || p.pos === 'FB' ? 1 : p.pos === 'DM' || p.pos === 'CM' ? P.lineMid : 0;
         txf = centerX + (ax - centerX) * lenF + shiftX - lineOff * (1 - lineW);
@@ -1396,16 +1465,20 @@ function separate(st: MatchState) {
 export function setTactic(st: MatchState, side: 0 | 1, patch: Partial<TacticIn>, formation?: Formation): boolean {
   if (st.tacticChanges[side] >= 3) return false;
   const t = st.teams[side];
-  t.tactic = { ...t.tactic, ...patch };
-  if (formation && formation !== t.formation) {
-    t.formation = formation;
-    const form = FORMATIONS[formation];
-    const pos = FORM_POS[formation];
+  const formChange = !!formation && formation !== t.formation;
+  if (formChange) { t.formation = formation!; patch = { ...patch }; if (patch.shapeDef === undefined) patch.shapeDef = undefined; }
+  t.tactic = applyDoctrine({ ...t.tactic, ...patch });
+  if (formChange || patch.shapeDef !== undefined || patch.shapeAtt !== undefined || patch.doctrine !== undefined) {
+    if (formChange) { t.tactic.shapeDef = patch.shapeDef; t.tactic.shapeAtt = patch.shapeAtt; }
+    const { def: form, att } = shapesOf(t);
+    const pos = FORM_POS[t.formation];
     for (const p of st.players) {
       if (p.side !== side || p.off || p.idx >= 11) continue;
       if (p.pos === 'GK' || pos[p.idx] === 'GK') continue;
       p.ax = form[p.idx][0];
       p.ay = form[p.idx][1];
+      p.ox = att[p.idx][0];
+      p.oy = att[p.idx][1];
       p.pos = pos[p.idx];
     }
   }
@@ -1495,6 +1568,8 @@ function applySubs(st: MatchState, halfTime = false) {
     n.off = false;
     n.ax = q.reason === 'gk' ? 4 : o.ax;
     n.ay = q.reason === 'gk' ? 34 : o.ay;
+    n.ox = q.reason === 'gk' ? 4 : o.ox;
+    n.oy = q.reason === 'gk' ? 34 : o.oy;
     n.idx = o.idx;
     if (q.reason !== 'gk') n.pos = o.pos === 'GK' ? 'GK' : o.pos;
     const [ex, ey] = fromFrame(n.side, 52.5, o.y < W / 2 ? 0.5 : W - 0.5);
