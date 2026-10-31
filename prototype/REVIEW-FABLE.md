@@ -39,3 +39,12 @@ Yedekler (scratchpad, oturum dışında yok): engine.v14-fable.ts … engine.v19
 7. **Kaleci çıkışı sınırsız:** basılı tutulduğu sürece orta sahaya kadar gidebiliyor; 25–30 m sınır önerildi, karar proje sahibinde.
 
 Testler: `prototype/src/` altında rules.ts, throwtest.ts, gktest.ts, ogtest.ts, rushtest.ts, sptest.ts, sptest2.ts, sptest3.ts (+ Fable'ın speed.ts, usertest2.ts). Hepsi son durumda temiz.
+
+## Fable denetimi (1 Kasım 2026)
+
+- Kaynak–yayın: `prototype/src/engine.ts` + `page.html` derlenince `index.html` bayt bayt aynı çıkıyor (gömülü kalibrasyon JSON'ları index.html'den geri alındı). Çalışma kopyası ile repo aynı.
+- Derleme (tsc es2020) temiz. Regresyon: crit (0 ihlal / saat 0), stall 0, rules 0 yanlış yer, throwtest 0 yürüme/kendine dokunma, sptest3, usertest2, groundtest (Pas yerden), fktest, gktest (76 autta 5 kısa ihlal, kabul), ogtest 0 kendi kale, rushtest 18,1 m, pretest — hepsi geçti.
+- Riskli noktalar: (1) `spWait` yaşam döngüsü kapalı: kuran giveSetPiece/aiSetPiece, temizleyen kickBall (noTouch), giveBall (başkası alınca), deadTime; stall.ts ve crit.ts takılma göstermiyor. (2) Süre dolunca `aiTake` yolu doğru: armed → pending → execPending → aiSetPiece (kullanıcıya dönmüyor). (3) Kullanıcı penaltısı: yeni `pentest.ts` (zorla penaltı, 4×40): şut 25/40 gol, pas seçeneği çalışıyor, bekleyince 8,6 s'de yapay zekâ alıyor, takılma 0. Not: `execKick` penaltıda kaleci tahmini yapay zekâ ile; iki kullanıcılı maçta `keeperGuess` kullanılmalı (Dilim 1 online). (4) Geri pas: rules.ts geri_pas 60, sorun yok.
+- Kalibrasyon (speed.ts 60 maç): gol 2,35; şut 8,5; isabet 4,2; pas %78,4; faul 2,78; korner 0,97; ofsayt 0,07; mücadele 51,7. Bant 2,4–2,6'nın hemen altı; korner ve ofsayt hedefin altında → kalibrasyon 2. geçişi.
+- Doküman tutarsızlıkları düzeltildi (Maç Motoru): "oyun saati kesintilerde akar" → efektif süre; süre sınırları tablosu (penaltı 5 s rastgele köşe → 8 s yapay zekâ); klasik şema tablosunda "Pas kanatta Orta'ya döner" → ayrı Orta butonu; sprint "%85" → 1,5R–1,9R bandı; klavye W ara / I orta. Kritik tur paragrafı eklendi.
+- Açık: santra yönü kararı (proje sahibi).
