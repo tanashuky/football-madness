@@ -285,6 +285,8 @@ export interface MatchState {
   sitUsed: boolean[][];
   ruleSt: { last: Record<string, number>; active: { id: string; until: number; revert: Partial<TacticIn>; set: Partial<TacticIn> }[]; lastTurnoverSeen: number; gkLongT: number; reds: [number, number] }[];
   ruleLog: { t: number; side: 0 | 1; label: string }[]; // ekran icin: tetiklenen kurallar
+  mentality: [number, number]; // kolay seviye kaydiricisi: -2 savunma .. +2 hucum (taktik tabanina gore kaydirir)
+  baseTactic: [TacticIn | null, TacticIn | null]; // kaydiricinin referansi (mac basindaki taktik)
   restartKind: string; // yeniden baslatma turu: 'throw' | 'goalkick' | 'fk' | 'corner' | 'gk' | '' (ofsayt kurali icin)
   lastPossSide: 0 | 1;
   stats: [TeamStats, TeamStats];
@@ -807,6 +809,8 @@ export function createMatch(a0: TeamIn, b0: TeamIn, seed: number, opts?: { knock
     sitUsed: [[], []],
     ruleSt: [{ last: {}, active: [], lastTurnoverSeen: -1, gkLongT: -1, reds: [0, 0] }, { last: {}, active: [], lastTurnoverSeen: -1, gkLongT: -1, reds: [0, 0] }],
     ruleLog: [],
+    mentality: [0, 0],
+    baseTactic: [null, null],
     lastPossSide: 0,
     stats: [emptyStats(), emptyStats()],
     events: [],
@@ -1615,6 +1619,22 @@ function rulesStep(st: MatchState) {
   }
 }
 export function setRules(st: MatchState, side: 0 | 1, rules: Rule[]) { st.teams[side].rules = rules.slice(0, RULES_MAX); }
+// Kolay seviye kaydiricisi: savunma (-2) .. hucum (+2); hat, pres, bek/orta saha cikisi, kosu ve tempo birlikte kayar; 1 oyun dk uyum, degisiklik hakkindan dusmez
+export function setMentality(st: MatchState, side: 0 | 1, m: number): void {
+  m = clamp(Math.round(m), -2, 2);
+  const t = st.teams[side];
+  if (!st.baseTactic[side]) st.baseTactic[side] = { ...t.tactic };
+  const b = st.baseTactic[side]!;
+  // +-1: hat ve pres bir kademe; +-2: ayrica bek/orta saha cikisi, kosular ve tempo
+  const sg = Math.sign(m);
+  const sh = (v: number | undefined, on: boolean) => (on ? clamp((v ?? 1) + sg, 0, 2) : (v ?? 1)) as Lvl;
+  const patch: Partial<TacticIn> = {
+    line: sh(b.line, Math.abs(m) >= 1), press: sh(b.press, Math.abs(m) >= 1), fb: sh(b.fb, Math.abs(m) >= 2), cm: sh(b.cm, Math.abs(m) >= 2), runs: sh(b.runs, Math.abs(m) >= 2), tempo: sh(b.tempo, Math.abs(m) >= 2),
+  };
+  t.tactic = { ...t.tactic, ...patch };
+  if (st.mentality[side] !== m) { st.adaptUntil[side] = Math.max(st.adaptUntil[side], st.clock + 60); st.events.push({ t: st.clock, type: 'adjust', side, text: m > 0 ? 'Hücum +' + m : m < 0 ? 'Savunma ' + m : 'Dengeli' }); }
+  st.mentality[side] = m;
+}
 // rakibi okuma: her 15 oyun dakikasinda baskin atak yonu ve en tehlikeli oyuncu; dogruluk T/100 (bot: sabit)
 function readOpponent(st: MatchState) {
   for (const side of [0, 1] as const) {

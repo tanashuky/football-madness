@@ -77,6 +77,11 @@ body.play #pitch { position: fixed; inset: 0; width: 100vw; height: 100vh; heigh
 body.play #exitPlay { display: block; }
 #pausePlay { position: fixed; top: max(8px, env(safe-area-inset-top, 0px)); left: calc(max(10px, env(safe-area-inset-left, 0px)) + 58px); z-index: 950; display: none; font: 600 13px/1 var(--font-body); color: var(--chalk); background: rgba(10,12,16,.7); border: 1px solid rgba(255,255,255,.2); border-radius: 8px; padding: 9px 12px; min-width: 40px; }
 body.play #pausePlay { display: block; }
+#mentBar { position: fixed; top: max(8px, env(safe-area-inset-top, 0px)); left: calc(max(10px, env(safe-area-inset-left, 0px)) + 112px); z-index: 950; display: none; gap: 4px; align-items: center; font: 600 12px/1 var(--font-body); color: var(--chalk); background: rgba(10,12,16,.7); border: 1px solid rgba(255,255,255,.2); border-radius: 8px; padding: 5px 6px; }
+body.play #mentBar { display: flex; }
+#mentBar button { font: 700 14px/1 var(--font-body); color: var(--chalk); background: transparent; border: 1px solid rgba(255,255,255,.25); border-radius: 6px; width: 30px; height: 26px; }
+#mentBar output { min-width: 72px; text-align: center; }
+@media (max-width: 760px) { #mentBar output { min-width: 0; font-size: 11px; } }
 #pauseBox { position: fixed; inset: 0; z-index: 940; display: flex; align-items: center; justify-content: center; background: rgba(8,12,10,.55); pointer-events: none; }
 #pauseBox[hidden] { display: none; }
 #pauseBox div { background: rgba(10,12,16,.85); border-radius: 10px; padding: 16px 22px; display: flex; flex-direction: column; gap: 4px; text-align: center; font: 500 14px/1.4 var(--font-body); color: var(--chalk); }
@@ -195,6 +200,8 @@ label.chk { display: flex; flex-direction: row; gap: 8px; align-items: center; }
         </div>
         <div class="panel playbox">
           <h3>Oyna (Dilim 0.4: fiziksel top)</h3>
+          <label for="pTac">Taktik (preset: formasyon · doktrin · mesafe)<select id="pTac"></select></label>
+          <label for="pRules">Kural seti (koşullu kurallar)<select id="pRules"></select></label>
           <label for="pDiff">Zorluk (rakip bot)<select id="pDiff"><option value="1">Amatör</option><option value="2" selected>Yarı profesyonel</option><option value="3">Profesyonel</option><option value="4">Dünya klası</option><option value="5">Efsane</option></select></label>
           <label for="pAssistP">Pas yardımı<select id="pAssistP"><option value="0" selected>Kapalı (top tam nişana)</option><option value="1">Kısmi</option><option value="2">Tam</option></select></label>
           <label for="pAssistS">Şut yardımı<select id="pAssistS"><option value="1" selected>Kısmi</option><option value="0">Kapalı</option><option value="2">Tam</option></select></label>
@@ -205,7 +212,7 @@ label.chk { display: flex; flex-direction: row; gap: 8px; align-items: center; }
           <label for="pCam">Kamera<select id="pCam"><option value="full" selected>Tam saha</option><option value="length">Tam boy</option><option value="near">Yakın</option></select></label>
           <label for="pKeys">Klavye<select id="pKeys"><option value="arrows" selected>Ok tuşları + S pas · D şut · W ara · A orta · E sprint · Q değiştir</option><option value="wasd">WASD + J pas · K şut · L ara · I orta · Shift sprint · Boşluk değiştir</option></select></label>
           <div class="ctrl"><button class="btn prim" id="playBtn">Oynamaya başla (Kartal SK, Team play)</button></div>
-          <p class="keys">Telefon: sol yarıda parmağını bastığın yer joystick olur; kesikli sarı çizgiyi geçip dış banda itince sprint (iç daire normal koşu). Sağ altta elmas butonlar: hücumda üst Ara, sağ Şut, sol Orta, alt Pas; savunmada üst Değiştir, sağ Kaydır, sol Müdahale, alt Baskı (basılı; joystick dış bandı ile koşarak baskı, başparmağı Baskı'dan Müdahale/Kaydır'a kaydırınca o hareket). Vuruş: butona basınca oyuncunun üstünde topun gerçek yolu belirir; parmağınla yolu çiz: yön = sürükleme yönü, kavis = izin bükülmesi, güç = basılı tutma; bırakınca vurur (ne görüyorsan o). Kısa dokunuş (0,2 s altı, sürüklemeden) nişan açmaz: Pas/Ara joystick yönündeki arkadaşa tek pas, Şut joystick yönüne düz şut. Pas ve Ara her zaman yerden, Orta her zaman havadan. Top sana gelirken Pas/Şut'a basarsan gelişine vurur (⚡); joystick ilk dokunuş yönüdür. Sahipsiz topta rakiple aynı anda yetişiyorsan iki yay belirir: o anda Müdahale/Kaydır bas (erken basan atmış olur). Klavyede yön tuşları nişandır; tuşu basılı tutmak güç. C kamera, P duraklat, Esc çık; Değiştir'i (Q / üst buton) basılı tutmak kaleciyi çıkarır; gol sevincini dokunarak atla.</p>
+          <p class="keys">Telefon: sol yarıda parmağını bastığın yer joystick olur; kesikli sarı çizgiyi geçip dış banda itince sprint (iç daire normal koşu). Sağ altta elmas butonlar: hücumda üst Ara, sağ Şut, sol Orta, alt Pas; savunmada üst Değiştir, sağ Kaydır, sol Müdahale, alt Baskı (basılı; joystick dış bandı ile koşarak baskı, başparmağı Baskı'dan Müdahale/Kaydır'a kaydırınca o hareket). Vuruş: butona basınca oyuncunun üstünde topun gerçek yolu belirir; parmağınla yolu çiz: yön = sürükleme yönü, kavis = izin bükülmesi, güç = basılı tutma; bırakınca vurur (ne görüyorsan o). Kısa dokunuş (0,2 s altı, sürüklemeden) nişan açmaz: Pas/Ara joystick yönündeki arkadaşa tek pas, Şut joystick yönüne düz şut. Pas ve Ara her zaman yerden, Orta her zaman havadan. Top sana gelirken Pas/Şut'a basarsan gelişine vurur (⚡); joystick ilk dokunuş yönüdür. Sahipsiz topta rakiple aynı anda yetişiyorsan iki yay belirir: o anda Müdahale/Kaydır bas (erken basan atmış olur). Taktik (Kolay seviye): maç öncesi tek seçim (formasyon · doktrin · mesafe) ve kural seti; maç içinde üstteki ◀ ▶ (ya da [ ve ] tuşları) savunma↔hücum kaydırıcısı (1 dk uyum bedeli, değişiklik hakkından düşmez); tetiklenen kural ekranın üstünde yeşil etiketle görünür, rakibinki yalnız “rakip taktik değiştirdi”. Klavyede yön tuşları nişandır; tuşu basılı tutmak güç. C kamera, P duraklat, Esc çık; Değiştir'i (Q / üst buton) basılı tutmak kaleciyi çıkarır; gol sevincini dokunarak atla.</p>
         </div>
         <div class="panel">
           <h3>Takımlar</h3>
@@ -224,6 +231,7 @@ label.chk { display: flex; flex-direction: row; gap: 8px; align-items: center; }
 <div id="sa" aria-hidden="true"></div>
 <button id="exitPlay" type="button">Çık</button>
 <button id="pausePlay" type="button" aria-label="Duraklat">❚❚</button>
+<div id="mentBar" aria-label="Taktik kaydırıcı"><button id="mentDown" type="button" aria-label="Savunma">◀</button><output id="mentOut">Dengeli</output><button id="mentUp" type="button" aria-label="Hücum">▶</button></div>
 <div id="pauseBox" hidden><div><b>Durduruldu</b><span>Devam etmek için ▶ ya da P</span></div></div>
 <div id="rotate">Telefonu yatay çevir.<br><span style="font-weight:400;font-size:14px;color:var(--muted)">Oyun yatay oynanır; uygulamada yön kilitli olacak.</span></div>
 <script>
@@ -763,6 +771,8 @@ function createMatch(a0, b0, seed, opts) {
         sitUsed: [[], []],
         ruleSt: [{ last: {}, active: [], lastTurnoverSeen: -1, gkLongT: -1, reds: [0, 0] }, { last: {}, active: [], lastTurnoverSeen: -1, gkLongT: -1, reds: [0, 0] }],
         ruleLog: [],
+        mentality: [0, 0],
+        baseTactic: [null, null],
         lastPossSide: 0,
         stats: [emptyStats(), emptyStats()],
         events: [],
@@ -1817,6 +1827,26 @@ function rulesStep(st) {
     }
 }
 function setRules(st, side, rules) { st.teams[side].rules = rules.slice(0, RULES_MAX); }
+// Kolay seviye kaydiricisi: savunma (-2) .. hucum (+2); hat, pres, bek/orta saha cikisi, kosu ve tempo birlikte kayar; 1 oyun dk uyum, degisiklik hakkindan dusmez
+function setMentality(st, side, m) {
+    m = clamp(Math.round(m), -2, 2);
+    const t = st.teams[side];
+    if (!st.baseTactic[side])
+        st.baseTactic[side] = { ...t.tactic };
+    const b = st.baseTactic[side];
+    // +-1: hat ve pres bir kademe; +-2: ayrica bek/orta saha cikisi, kosular ve tempo
+    const sg = Math.sign(m);
+    const sh = (v, on) => (on ? clamp((v ?? 1) + sg, 0, 2) : (v ?? 1));
+    const patch = {
+        line: sh(b.line, Math.abs(m) >= 1), press: sh(b.press, Math.abs(m) >= 1), fb: sh(b.fb, Math.abs(m) >= 2), cm: sh(b.cm, Math.abs(m) >= 2), runs: sh(b.runs, Math.abs(m) >= 2), tempo: sh(b.tempo, Math.abs(m) >= 2),
+    };
+    t.tactic = { ...t.tactic, ...patch };
+    if (st.mentality[side] !== m) {
+        st.adaptUntil[side] = Math.max(st.adaptUntil[side], st.clock + 60);
+        st.events.push({ t: st.clock, type: 'adjust', side, text: m > 0 ? 'Hücum +' + m : m < 0 ? 'Savunma ' + m : 'Dengeli' });
+    }
+    st.mentality[side] = m;
+}
 // rakibi okuma: her 15 oyun dakikasinda baskin atak yonu ve en tehlikeli oyuncu; dogruluk T/100 (bot: sabit)
 function readOpponent(st) {
     for (const side of [0, 1]) {
@@ -4977,6 +5007,29 @@ const SIT_RULES = [
   { n: "70'ten sonra gerideysen bastır (önde hat, yüksek pres, hızlı)", s: [{ when: 'trailing', fromMinute: 70, tactic: { line: 2, press: 2, tempo: 2, runs: 2 } }] },
   { n: "60'tan sonra berabereysen risk al (bindiren bek, ceza sahasına orta saha)", s: [{ when: 'drawing', fromMinute: 60, tactic: { fb: 2, cm: 2, runs: 2 } }] },
 ];
+// kural setleri (Taktik 2.0): sablonlardan 4'erli paketler
+const RULE_SETS = [
+  { n: 'Yok', ids: [] },
+  { n: 'Pres takımı: karşı pres, geriden gelme, sonucu koru, yorgunluk', ids: ['counterpress', 'chase', 'protect', 'tired'] },
+  { n: 'Sonuç takımı: sonucu koru, erken gol sakin, 10 kişi, rakip 10 kişi', ids: ['protect', 'earlylead', 'us10', 'opp10'] },
+  { n: 'Risk takımı: geriden gelme, son 10 dk risk, 2. yarı tempo, ikinci top', ids: ['chase', 'late-level', 'h2tempo', 'secondball'] },
+];
+const rulesOf = (j) => RULE_SETS[j].ids.map((id) => RULE_TEMPLATES.find((r) => r.id === id));
+// oynama presetleri (Kolay seviye): formasyon x doktrin x mesafe; tek secimle her sey dolar
+const TAC_PRESETS = [
+  ['4-3-3', 'balanced', 1], ['4-3-3', 'gegenpress', 0], ['4-3-3', 'possession', 1], ['4-3-3', 'wings', 1],
+  ['4-4-2', 'balanced', 1], ['4-4-2', 'direct', 1], ['4-4-2', 'counter', 0],
+  ['4-2-3-1', 'possession', 1], ['4-2-3-1', 'gegenpress', 0], ['4-2-3-1', 'balanced', 1],
+  ['3-5-2', 'wings', 2], ['3-5-2', 'balanced', 1],
+  ['5-3-2', 'bus', 0], ['5-3-2', 'counter', 0],
+];
+const COMPACT_LABEL = ['kompakt', 'normal', 'açık'];
+function fillPlayPresets() {
+  const sel = document.getElementById('pTac');
+  sel.innerHTML = TAC_PRESETS.map(([f, d, c], i) => `<option value="${i}" ${i === 0 ? 'selected' : ''}>${f} · ${DOCTRINES[d].label} · ${COMPACT_LABEL[c]}</option>`).join('');
+  const rs = document.getElementById('pRules');
+  rs.innerHTML = RULE_SETS.map((o, j) => `<option value="${j}" ${j === 1 ? 'selected' : ''}>${o.n}</option>`).join('');
+}
 function renderSetup() {
   const root = document.getElementById('setup');
   root.innerHTML = '';
@@ -4991,7 +5044,9 @@ function renderSetup() {
     for (const [k, lab] of mets) h += `<label for="${k}${i}">${lab} <output id="${k}o${i}">${c[k]}</output><input type="range" id="${k}${i}" min="20" max="100" value="${c[k]}"></label>`;
     h += `<label class="chk" for="home${i}"><input type="checkbox" id="home${i}" ${c.home ? 'checked' : ''}> İç saha (stadyum 8, taraftar morali 85)</label>`;
     h += `<label for="ai${i}">Zekâ (bot seviyesi)<select id="ai${i}">${AI_LEVELS.map((o, j) => `<option value="${j}" ${j === (c.ai ?? 0) ? 'selected' : ''}>${o.n}</option>`).join('')}</select></label>`;
-    h += `<label for="sit${i}">Durum taktiği<select id="sit${i}">${SIT_RULES.map((o, j) => `<option value="${j}" ${j === (c.sit ?? 0) ? 'selected' : ''}>${o.n}</option>`).join('')}</select></label>`;
+    h += `<label for="sit${i}">Durum taktiği (eski)<select id="sit${i}">${SIT_RULES.map((o, j) => `<option value="${j}" ${j === (c.sit ?? 0) ? 'selected' : ''}>${o.n}</option>`).join('')}</select></label>`;
+    h += `<label for="doc${i}">Doktrin (Taktik 2.0; eksik talimatları doldurur, hücum şeklini belirler)<select id="doc${i}"><option value="">Yok (yalnız talimatlar)</option>${DOCTRINE_LIST.map((d) => `<option value="${d}" ${d === (c.doctrine ?? '') ? 'selected' : ''}>${DOCTRINES[d].label}</option>`).join('')}</select></label>`;
+    h += `<label for="rul${i}">Kural seti<select id="rul${i}">${RULE_SETS.map((o, j) => `<option value="${j}" ${j === (c.rul ?? 0) ? 'selected' : ''}>${o.n}</option>`).join('')}</select></label>`;
     col.innerHTML = h;
     root.appendChild(col);
     col.querySelector('#gg' + i).addEventListener('input', (e) => (col.querySelector('#ggo' + i).textContent = e.target.value));
@@ -5008,12 +5063,17 @@ function readSetup() {
     c.home = document.getElementById('home' + i).checked;
     c.ai = +document.getElementById('ai' + i).value;
     c.sit = +document.getElementById('sit' + i).value;
+    c.doctrine = document.getElementById('doc' + i).value || undefined;
+    c.rul = +document.getElementById('rul' + i).value;
   });
   knockout = document.getElementById('ko').checked;
 }
 function buildTeams() {
   return cfg.map((c, i) =>
-    makeTeam(c.name, c.short, c.gg, { formation: c.formation, U: c.U, T: c.T, F: c.F, M: c.M, ...(c.home ? { home: true, stadium: 8, TM: 85 } : {}), ...(AI_LEVELS[c.ai ?? 0].ai ? { ai: AI_LEVELS[c.ai ?? 0].ai } : {}), ...(SIT_RULES[c.sit ?? 0].s ? { situational: SIT_RULES[c.sit ?? 0].s } : {}), tactic: Object.fromEntries(Object.keys(opts).map((k) => [k, c[k] ?? optDefault[k]])) }, i === 0 ? NAMES_A : NAMES_B, i === 0 ? css('--home') : css('--away'))
+    makeTeam(c.name, c.short, c.gg, { formation: c.formation, U: c.U, T: c.T, F: c.F, M: c.M, ...(c.home ? { home: true, stadium: 8, TM: 85 } : {}), ...(AI_LEVELS[c.ai ?? 0].ai ? { ai: AI_LEVELS[c.ai ?? 0].ai } : {}), ...(SIT_RULES[c.sit ?? 0].s ? { situational: SIT_RULES[c.sit ?? 0].s } : {}),
+      // kurallar: secilen set; bot (zeka seviyesi) secildiyse ve set yoksa seviyeye gore (Amator 0 .. Efsane 4)
+      rules: c.rul ? rulesOf(c.rul) : (c.ai ? botRules(c.ai - 1) : []),
+      tactic: { ...Object.fromEntries(Object.keys(opts).map((k) => [k, c[k] ?? optDefault[k]])), ...(c.doctrine ? { doctrine: c.doctrine } : {}) } }, i === 0 ? NAMES_A : NAMES_B, i === 0 ? css('--home') : css('--away'))
   );
 }
 
@@ -5078,6 +5138,7 @@ function frame(now) {
 // ---------- Olay yazilari ----------
 // ekranin ortasinda buyuk cikip hizla solar; gol icin patlama
 const banners = [];
+const ruleSeen = {};
 const trail = [];
 let lastDeadStart = -1, evSeen = 0;
 function banner(text, kind, sub) { banners.push({ text, kind, sub, t0: performance.now() }); if (banners.length > 3) banners.shift(); }
@@ -5092,6 +5153,11 @@ function watchEvents() {
     else if (e.type === 'penalty') banner('PENALTI', 'info', tm.short);
     else if (e.type === 'half') banner('DEVRE ARASI', 'info');
     else if (e.type === 'end') banner('MAÇ SONU', 'info');
+    else if (e.type === 'rule' && PLAY.on) {
+      // kural etiketi: kendi kuralimiz adiyla, rakibinki yalniz 'taktik degisti'; ayni etiket 8 s icinde tekrar cikmaz
+      const key = e.side + ':' + e.text, nowMs = performance.now();
+      if (!(ruleSeen[key] > nowMs - 8000)) { ruleSeen[key] = nowMs; if (e.side === PLAY.side) banner(e.text.toUpperCase(), 'rule', 'kural tetiklendi'); else banner('RAKİP TAKTİK DEĞİŞTİRDİ', 'rule'); }
+    }
   }
   if (st.deadStart !== lastDeadStart && isDead() && st.deadReason && st.deadReason !== 'GOL' && st.deadReason !== 'Penaltı') {
     banner(st.deadReason.toUpperCase(), 'info');
@@ -5502,6 +5568,8 @@ addEventListener('keydown', (e) => {
   }
   else if (e.code === kb.switch) { IN.swDown = performance.now(); e.preventDefault(); }
   else if (e.code === 'KeyP') togglePause();
+  else if (e.code === 'BracketLeft') setMent(ment - 1);
+  else if (e.code === 'BracketRight') setMent(ment + 1);
   else if (e.code === 'KeyC') cycleCam();
   else if (e.code === 'Escape') exitPlay();
   if (kb.move.includes(e.code) || e.code === 'Space') e.preventDefault();
@@ -5533,6 +5601,13 @@ function startPlay() {
   P.clockRate = 90 / (PLAY.minutes * PLAY.speed); P.dt = PLAY_DT; knockout = false;
   // rakibin bot seviyesi (zorluk)
   cfg[1].ai = +document.getElementById('pDiff').value;
+  // Kolay seviye: tek secimle formasyon, doktrin ve mesafe; doktrin talimatlari da doldurur
+  const [pf, pd, pc] = TAC_PRESETS[+document.getElementById('pTac').value];
+  cfg[0].formation = pf; cfg[0].doctrine = pd; cfg[0].compact = pc;
+  for (const k of ['press', 'line', 'style', 'tempo', 'width', 'fb', 'cm', 'wing', 'runs']) if (DOCTRINES[pd].tactic[k] !== undefined) cfg[0][k] = DOCTRINES[pd].tactic[k];
+  cfg[0].rul = +document.getElementById('pRules').value;
+  if (!cfg[1].doctrine) cfg[1].doctrine = 'balanced';
+  ment = 0; document.getElementById('mentOut').textContent = 'Dengeli';
   document.body.classList.add('play');
   CAM.phone = true; CAM.overlay = true;
   applyCam(document.getElementById('pCam').value);
@@ -5565,6 +5640,18 @@ if (window.visualViewport) visualViewport.addEventListener('resize', onResize);
 document.getElementById('playBtn').addEventListener('click', startPlay);
 document.getElementById('exitPlay').addEventListener('click', exitPlay);
 // duraklat / devam (yalniz tek oyunculu prototipte; online macta yok)
+// Kolay seviye kaydiricisi: -2 savunma .. +2 hucum ([ ve ] tuslari ya da ustteki oklar)
+let ment = 0;
+const MENT_LABEL = { '-2': 'Otobüs', '-1': 'Savunma', '0': 'Dengeli', '1': 'Hücum', '2': 'Tam hücum' };
+function setMent(m) {
+  if (!st || !PLAY.on) return;
+  ment = Math.max(-2, Math.min(2, m));
+  setMentality(st, PLAY.side, ment);
+  document.getElementById('mentOut').textContent = MENT_LABEL[String(ment)];
+  banner(MENT_LABEL[String(ment)].toUpperCase(), 'info', 'taktik · 1 dk uyum');
+}
+document.getElementById('mentDown').addEventListener('click', () => setMent(ment - 1));
+document.getElementById('mentUp').addEventListener('click', () => setMent(ment + 1));
 function togglePause() {
   if (!PLAY.on || st.done) return;
   PLAY.paused = !PLAY.paused;
@@ -5817,7 +5904,7 @@ function drawPhoneOverlay(Wc, Hc, s, X, Y, ox, oy, pos) {
 function drawBanners(now, Wc, Hc, s, X, Y) {
   for (const b of banners) {
     const age = (now - b.t0) / 1000;
-    const life = b.kind === 'goal' ? 2.2 : 1.1;
+    const life = b.kind === 'goal' ? 2.2 : b.kind === 'rule' ? 1.6 : 1.1;
     if (age > life) continue;
     const k = age / life;
     const cx = Wc / 2, cy = Hc / 2;
@@ -5854,12 +5941,13 @@ function drawBanners(now, Wc, Hc, s, X, Y) {
       ctx.restore();
       continue;
     }
-    const col = b.kind === 'yellow' ? css('--flood') : b.kind === 'red' ? '#e5483f' : '#ffffff';
+    const col = b.kind === 'yellow' ? css('--flood') : b.kind === 'red' ? '#e5483f' : b.kind === 'rule' ? '#9fe3b0' : '#ffffff';
     const sc = 1;
     ctx.save();
-    ctx.globalAlpha = age < 0.8 ? 1 : Math.max(0, 1 - (age - 0.8) / 0.3);
-    ctx.translate(cx, cy); ctx.scale(sc, sc);
-    ctx.font = `700 ${Math.round(s * 6)}px ${css('--font-display')}`;
+    ctx.globalAlpha = age < life - 0.3 ? 1 : Math.max(0, (life - age) / 0.3);
+    // kural etiketi: kucuk, ekranin ust tarafinda (oyunu kapatmaz)
+    ctx.translate(cx, b.kind === 'rule' ? cy - Hc * 0.3 : cy); ctx.scale(sc, sc);
+    ctx.font = `700 ${Math.round(s * (b.kind === 'rule' ? 3.2 : 6))}px ${css('--font-display')}`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.lineWidth = s * 0.6; ctx.strokeStyle = 'rgba(14,21,18,.85)'; ctx.strokeText(b.text, 0, 0);
     ctx.fillStyle = col; ctx.fillText(b.text, 0, 0);
@@ -6089,6 +6177,7 @@ function renderReport() {
 }
 
 renderSetup();
+fillPlayPresets();
 fitCanvas();
 newMatch(1);
 renderReport();
