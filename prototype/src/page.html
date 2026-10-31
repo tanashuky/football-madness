@@ -184,7 +184,6 @@ label.chk { display: flex; flex-direction: row; gap: 8px; align-items: center; }
           <label for="pAssistP">Pas yardımı<select id="pAssistP"><option value="0" selected>Kapalı (top tam nişana)</option><option value="1">Kısmi</option><option value="2">Tam</option></select></label>
           <label for="pAssistS">Şut yardımı<select id="pAssistS"><option value="1" selected>Kısmi</option><option value="0">Kapalı</option><option value="2">Tam</option></select></label>
           <label for="pAuto">Oyuncu değiştirme<select id="pAuto"><option value="1" selected>Otomatik (topa en yakın)</option><option value="0">Elle</option></select></label>
-          <label for="pSpeed">Oyun hızı<select id="pSpeed"><option value="1">Gerçek (1×)</option><option value="1.2">%20 hızlı</option><option value="1.3" selected>%30 hızlı</option><option value="1.39">%39 hızlı (izleme hızı)</option></select></label>
           <label for="pBall">Top boyutu<select id="pBall"><option value="1">Normal</option><option value="1.4" selected>Büyük</option><option value="1.8">Çok büyük</option></select></label>
           <label for="pNames">Oyuncu isimleri<select id="pNames"><option value="auto" selected>Otomatik (Yakın kamerada herkes, uzakta yalnız kontrol ettiğin)</option><option value="mine">Yalnız kontrol ettiğin</option><option value="off">Kapalı</option></select></label>
           <label for="pMin">Maç süresi (efektif)<select id="pMin"><option value="6">6 dakika</option><option value="10" selected>10 dakika</option><option value="15">15 dakika (online ölçek)</option></select></label>
@@ -822,7 +821,8 @@ addEventListener('keyup', (e) => {
 function startPlay() {
   readSetup();
   PLAY.on = true; PLAY.side = 0; PLAY.minutes = +document.getElementById('pMin').value; PLAY.keys = document.getElementById('pKeys').value; PLAY.autoSwitch = document.getElementById('pAuto').value === '1';
-  PLAY.speed = +document.getElementById('pSpeed').value;
+  PLAY.speed = 1.3; // karar 1 Kasim: oynama hizi %30 sabit; tepki pencereleri gercek saniye (P.playSpeed)
+  P.playSpeed = PLAY.speed;
   PLAY.ball = +document.getElementById('pBall').value; PLAY.names = document.getElementById('pNames').value; PLAY.t0 = performance.now(); PLAY.paused = false;
   // oyun hizi: fizik gercek zamandan hizli akar; secilen sure gercek dakika kalsin diye saat hizi bolunur
   P.clockRate = 90 / (PLAY.minutes * PLAY.speed); P.dt = PLAY_DT; knockout = false;
@@ -842,7 +842,7 @@ function exitPlay() {
   PLAY.on = false;
   document.body.classList.remove('play', 'portrait');
   CAM.phone = false; CAM.overlay = false; CAM.mode = 'full';
-  P.clockRate = 6; P.dt = 0.1;
+  P.clockRate = 6; P.dt = 0.1; P.playSpeed = 1;
   IN.acts.length = 0; IN.press = false; IN.joyId = null; IN.mx = 0; IN.my = 0; IN.joyK = 0; IN.kick = null; IN.kbKick = null; IN.ptrBtn.clear();
   fitCanvas();
   newMatch(seed);

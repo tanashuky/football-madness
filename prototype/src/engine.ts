@@ -351,6 +351,7 @@ export const P = {
   shotBias: 0.0,
   shotW: 0.85, // sut kararinin agirligi (hacim ayari)
   safePass: 0.011, // pas seciminde guvenlik egilimi (beklenen deger birimi, isabet olasiligi basina)
+  playSpeed: 1, // oynama hizi (1,3 = %30 hizli): tepki pencereleri gercek saniye sabit kalsin diye oyun saniyesine bununla cevrilir
   letBallOut: 1, // cikan topu avantajli tarafin birakmasi (0 kapali)
   longShotMax: 36, // bu mesafeden uzaga akan oyunda sut dusunulmez (m)
   longShotBias: 0.05, // bos alanda uzaktan sut egilimi (EV puani; 28 m'ye kadar tam, longShotMax'ta sifir)
@@ -986,7 +987,7 @@ function reactOf(st: MatchState, p: PState): number {
   if (!b.kicker) return 0;
   if (p === b.intended) return 0;
   if (p.side === b.kicker.side) return P.reactMate;
-  return (st.teams[p.side].ai?.react ?? P.reactOpp) + (b.kickT - st.lastTurnoverT < P.transWin ? P.transReact : 0);
+  return RT((st.teams[p.side].ai?.react ?? P.reactOpp) + (b.kickT - st.lastTurnoverT < P.transWin ? P.transReact : 0));
 }
 
 // duran topta rakip mesafesi (Kural 13, 15, 17, 8, 14): kullanilmamis duran topta rakip oyuncu topa bu kadar yaklasamaz
@@ -1018,6 +1019,8 @@ function keepAway(g: { side: 0 | 1; r: number; x: number; y: number } | null, p:
   if (dP < r || dT < r) { tx = ex; ty = ey; }
   return [clamp(tx, 0.5, L - 0.5), clamp(ty, 0.5, W - 0.5), dP < r];
 }
+// gercek saniye -> oyun saniyesi (tepki pencereleri oynama hizindan bagimsiz kalsin)
+const RT = (sec: number) => sec * P.playSpeed;
 const nearGuard = (g: { side: 0 | 1; r: number; x: number; y: number } | null, p: PState) => !!g && p.side !== g.side && hyp(p.x - g.x, p.y - g.y) < g.r + 3;
 // ---------- Takim sekli ----------
 function updateAnchorsAndMove(st: MatchState) {
@@ -1075,7 +1078,7 @@ function updateAnchorsAndMove(st: MatchState) {
     // yaklasan mucadele isareti: iki takimin en erken yetisecekleri pencere icindeyse (ekran icin)
     if (lists[0].length && lists[1].length) {
       const a = lists[0][0], c2 = lists[1][0];
-      if (Math.abs(a.c.t - c2.c.t) <= P.contestWin && Math.min(a.c.t, c2.c.t) <= 0.7) {
+      if (Math.abs(a.c.t - c2.c.t) <= RT(P.contestWin) && Math.min(a.c.t, c2.c.t) <= 0.7) {
         const first = a.c.t <= c2.c.t ? a : c2;
         st.contest = { x: first.c.x, y: first.c.y, until: st.t + 0.3, a: a.p, b: c2.p };
       }
@@ -2032,7 +2035,7 @@ function userStep(st: MatchState) {
     // otomatik gecis: savunmada (top bizde degil, bizim pasimiz yolda degil) topa en erken yetisecek oyuncuya;
     // 0,5 s'de bir, belirgin fark varsa; elle degistirmeden sonra 1,5 s beklenir
     let ourPass = !st.owner && b.kicker && b.kicker.side === side && b.intended && b.intended.side === side;
-    if (ourPass && ctl.autoSwitch && st.t - ctl.lastSwitchT >= 0.4 && st.t - b.kickT > 0.3) {
+    if (ourPass && ctl.autoSwitch && st.t - ctl.lastSwitchT >= RT(0.4) && st.t - b.kickT > RT(0.3)) {
       // kendi pasimiz: hedeflenen alicidan belirgin once yetisecek takim arkadasi varsa kontrol ve alici ona gecer (kisa dusen pas)
       const pts = ballPath(st);
       const tI = chaseTarget(b.intended!, pts, 0, playerSpeed(b.intended!), P.ctrlSpeed - 1).t;
@@ -2040,7 +2043,7 @@ function userStep(st: MatchState) {
       for (const q of liveTeam(st, side)) { if (q.pos === 'GK' || q.injured || q === b.intended || q === b.noTouch || (q === b.kicker && st.t - b.kickT < P.kickCd)) continue; const c = chaseTarget(q, pts, 0, playerSpeed(q), P.ctrlSpeed - 1).t; if (c < bt) { bt = c; best = q; } }
       if (best && bt < tI - 0.5) { b.intended = best; ctl.player = best; ctl.lastSwitchT = st.t; dbg('pas_alici_degisti'); ourPass = false; }
     }
-    if (ctl.autoSwitch && !inPoss && !ourPass && ctl.player && st.t >= ctl.manualUntil && st.t - ctl.lastSwitchT >= 0.5 && st.t >= st.restartUntil && !st.pending) {
+    if (ctl.autoSwitch && !inPoss && !ourPass && ctl.player && st.t >= ctl.manualUntil && st.t - ctl.lastSwitchT >= RT(0.5) && st.t >= st.restartUntil && !st.pending) {
       const pts = ballPath(st);
       const curT = chaseTarget(ctl.player, pts, 0, playerSpeed(ctl.player)).t;
       let best: PState | null = null, bt = 1e9;
@@ -2060,7 +2063,7 @@ function userStep(st: MatchState) {
     }
     if (inp.act === 'switch') {
       // savunmada ve top sahipsizken / rakip pasindayken: topa en yakin diger oyuncuya gecer
-      if (!inPoss && ctl.switchCd <= 0) { pickControlled(st, side, p); ctl.switchCd = 0.2; ctl.manualUntil = st.t + 1.5; ctl.lastSwitchT = st.t; if (ctl.player) addFx(st, ctl.player.x, ctl.player.y, 'int'); }
+      if (!inPoss && ctl.switchCd <= 0) { pickControlled(st, side, p); ctl.switchCd = RT(0.2); ctl.manualUntil = st.t + RT(1.5); ctl.lastSwitchT = st.t; if (ctl.player) addFx(st, ctl.player.x, ctl.player.y, 'int'); }
       inp.act = undefined;
       continue;
     }
@@ -2079,7 +2082,7 @@ function userStep(st: MatchState) {
     if ((inp.act === 'tackle' || inp.act === 'slide') && ctl.cooldown <= 0) {
       const kindT: 'tackle' | 'slide' = inp.act;
       // biraz uzaktaysa (mudahale 2,2-3,5 m, kayma 4-5 m) tampon suresince (0,3 s) bekler: kosarken/baskida basilan mudahale yetisince yapilir
-      if (c && c.side !== side) { const d0 = hyp(c.x - p.x, c.y - p.y); const rr = kindT === 'tackle' ? 2.2 : 4.0; if (d0 >= rr && d0 < rr + 1.3 && st.t - ctl.actAt <= 0.28) continue; }
+      if (c && c.side !== side) { const d0 = hyp(c.x - p.x, c.y - p.y); const rr = kindT === 'tackle' ? 2.2 : 4.0; if (d0 >= rr && d0 < rr + 1.3 && st.t - ctl.actAt <= RT(0.28)) continue; }
       inp.act = undefined;
       if (p.injured || st.t < st.restartUntil) continue;
       if (!c) {
@@ -2111,7 +2114,7 @@ function userStep(st: MatchState) {
     const ctl = st.control[side];
     if (!ctl) continue;
     if (ctl.pre && (st.t - ctl.pre.t > 4 || (st.owner && st.owner.side !== side))) { dbg(st.t - ctl.pre.t > 4 ? 'pre_dustu_sure' : 'pre_dustu_rakip'); ctl.pre = null; }
-    if (ctl.press50 && !ctl.press50.spent && st.t - ctl.press50.t > 0.3) {
+    if (ctl.press50 && !ctl.press50.spent && st.t - ctl.press50.t > RT(0.3)) {
       ctl.press50 = null;
       if (ctl.player) { ctl.player.beatenUntil = st.t + 0.3; dbg('erken_mudahale'); }
     }
@@ -3128,7 +3131,7 @@ function ballContacts(st: MatchState) {
     if (q === b.noTouch) continue;
     const dq = Math.max(0, hyp(q.x - cx, q.y - cy) - P.reach);
     const late = q === first.p ? 0 : dq / playerSpeed(q) + (q.beatenUntil !== undefined && st.t < q.beatenUntil ? 0.3 : 0);
-    if (late > P.contestWin) continue;
+    if (late > RT(P.contestWin)) continue;
     const toward = (q.vx ?? 0) * (cx - q.x) + (q.vy ?? 0) * (cy - q.y);
     if (q !== first.p && dq > 0.5 && toward <= 0) continue; // topa dogru kosmuyorsa mucadeleye girmez
     const [qxf, qyf] = toFrame(q.side, q.x, q.y);
@@ -3143,13 +3146,13 @@ function ballContacts(st: MatchState) {
       const q = c.p;
       const sp = hyp(q.vx ?? 0, q.vy ?? 0);
       const mom = 1 + 0.15 * clamp(sp / 8, 0, 1);
-      const lateK = clamp(1 - P.contestLate * (c.late / P.contestWin), 0.3, 1);
+      const lateK = clamp(1 - P.contestLate * (c.late / RT(P.contestWin)), 0.3, 1);
       // girdi: insan pencerede Mudahale/Kaydir bastiysa; bot seviyesine gore sanal tus; hucumcuya bonus yok
       let inputK = 1;
       const ctl = st.control[q.side];
       const attacking = b.kicker ? b.kicker.side === q.side : st.lastPossSide === q.side;
       if (ctl && ctl.player === q) {
-        if (ctl.press50 && !ctl.press50.spent && st.t - ctl.press50.t <= 0.3) { ctl.press50.spent = true; c.pressed = ctl.press50.kind; inputK = ctl.press50.kind === 'slide' ? P.contestSlide : P.contestTackle; }
+        if (ctl.press50 && !ctl.press50.spent && st.t - ctl.press50.t <= RT(0.3)) { ctl.press50.spent = true; c.pressed = ctl.press50.kind; inputK = ctl.press50.kind === 'slide' ? P.contestSlide : P.contestTackle; }
       } else if (!attacking && q.pos !== 'GK') {
         const timing = st.teams[q.side].ai?.timing ?? 0.7;
         if (st.rng() < timing) { c.pressed = 'tackle'; inputK = P.contestTackle; }
