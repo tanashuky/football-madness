@@ -337,6 +337,8 @@ function buildTeams() {
     makeTeam(c.name, c.short, c.gg, { formation: c.formation, U: c.U, T: c.T, F: c.F, M: c.M, ...(c.home ? { home: true, stadium: 8, TM: 85 } : {}), ...(AI_LEVELS[c.ai ?? 0].ai ? { ai: AI_LEVELS[c.ai ?? 0].ai } : {}),
       // kurallar: secilen set; bot (zeka seviyesi) secildiyse ve set yoksa seviyeye gore (Amator 0 .. Efsane 4)
       rules: c.rul ? rulesOf(c.rul) : (c.ai ? botRules(c.ai - 1) : []),
+      // dusunen bot: zorluk = derinlik (Amator 0 .. Efsane 4); tarayicida sezgisel mod (ic simulasyon sunucuda/testte)
+      think: c.ai ? c.ai - 1 : 0,
       tactic: { ...Object.fromEntries(Object.keys(opts).map((k) => [k, c[k] ?? optDefault[k]])), ...(c.doctrine ? { doctrine: c.doctrine } : {}) } }, i === 0 ? NAMES_A : NAMES_B, i === 0 ? css('--home') : css('--away'))
   );
 }

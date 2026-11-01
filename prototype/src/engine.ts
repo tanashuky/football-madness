@@ -91,6 +91,7 @@ export interface TeamIn {
   ai?: { noiseMult: number; readAcc?: number; react?: number; timing?: number }; // bot zekasi: karar hata payi carpani, rakibi okuma dogrulugu, topa tepki suresi (s), mucadele zamanlamasi (pencereyi tutturma orani)
   duties?: Record<number, Duty>; // forma numarasina gore gorev kartlari
   rules?: Rule[]; // kosullu kurallar (en cok RULES_MAX)
+  think?: number; // dusunen bot derinligi 0-4 (0 yok): gozlem penceresi ve aday sayisi (mimari 2.1, 4. katman)
 }
 
 export type FxKind = 'clean' | 'foul' | 'card' | 'int' | 'kick' | 'save' | 'throw' | 'aim' | 'skill';
@@ -283,7 +284,9 @@ export interface MatchState {
   shootout: [number, number] | null;
   ruleSt: { last: Record<string, number>; active: { id: string; until: number; revert: Partial<TacticIn>; set: Partial<TacticIn> }[]; lastTurnoverSeen: number; gkLongT: number; reds: [number, number] }[];
   ruleLog: { t: number; side: 0 | 1; label: string }[]; // ekran icin: tetiklenen kurallar
-  mentality: [number, number]; // kolay seviye kaydiricisi: -2 savunma .. +2 hucum (taktik tabanina gore kaydirir)
+  mentality: [number, number];
+  thinkSt: { nextMin: number; last: { xg: number; xga: number; shotsA: number; turnOwn: number }; tried: Record<string, number> }[];
+  thinkLog: { t: number; side: 0 | 1; label: string; cand: string[] }[]; // kolay seviye kaydiricisi: -2 savunma .. +2 hucum (taktik tabanina gore kaydirir)
   baseTactic: [TacticIn | null, TacticIn | null]; // kaydiricinin referansi (mac basindaki taktik)
   restartKind: string; // yeniden baslatma turu: 'throw' | 'goalkick' | 'fk' | 'corner' | 'gk' | '' (ofsayt kurali icin)
   lastPossSide: 0 | 1;
@@ -404,6 +407,8 @@ export const P = {
   pressLineUp: 4, // yuksek preste hattin yukari cikisi (m, uyum/100 ile)
   unfamiliarFat: 1.35, // aliskin olunmayan doktrinde 50. dk sonrasi yorulma carpani
   runsMask: 'b' as any, // etkin kosu turleri: 'b' arkaya, 'f' ayaga, 'w' kanada; bos = hepsi. Simdilik yalniz arkaya: ayaga ve kanada kosulari pas karariyla butunlesmeden hucumu zayiflatiyor (not)
+  thinkSim: 0, // dusunen bot adaylari ic simulasyonla dogrulasin mi (0: sezgisel puan; 1: kisa mac simulasyonu - sunucu/test)
+  thinkSimMin: 12, // ic simulasyon suresi (oyun dk)
   stepUp: 1.8, // ofsayt duellosunda savunmacinin erken adimi (m, G*B ile)
   timingErr: 1.5, // forvetin cizgi zamanlama hatasi (m, (1-B) ile)
   trackB: 0.55, // bu beklentinin altindaki savunmaci yem kosusunu takip eder
@@ -816,6 +821,8 @@ export function createMatch(a0: TeamIn, b0: TeamIn, seed: number, opts?: { knock
     ruleSt: [{ last: {}, active: [], lastTurnoverSeen: -1, gkLongT: -1, reds: [0, 0] }, { last: {}, active: [], lastTurnoverSeen: -1, gkLongT: -1, reds: [0, 0] }],
     ruleLog: [],
     mentality: [0, 0],
+    thinkSt: [{ nextMin: 10, last: { xg: 0, xga: 0, shotsA: 0, turnOwn: 0 }, tried: {} }, { nextMin: 10, last: { xg: 0, xga: 0, shotsA: 0, turnOwn: 0 }, tried: {} }],
+    thinkLog: [],
     baseTactic: [null, null],
     lastPossSide: 0,
     stats: [emptyStats(), emptyStats()],
@@ -1742,6 +1749,92 @@ function rulesStep(st: MatchState) {
 }
 export function setRules(st: MatchState, side: 0 | 1, rules: Rule[]) { st.teams[side].rules = rules.slice(0, RULES_MAX); }
 // Kolay seviye kaydiricisi: savunma (-2) .. hucum (+2); hat, pres, bek/orta saha cikisi, kosu ve tempo birlikte kayar; 1 oyun dk uyum, degisiklik hakkindan dusmez
+// ---------- Dusunen bot (mimari 2.1, 4. katman): gozlem -> hipotez -> (ic simulasyon) -> ayar ----------
+// Derinlik: 1 (Yari pro) 20 dk pencere / 2 aday, 2 (Pro) 15 dk / 3, 3 (Dunya) 10 dk / 5, 4 (Efsane) 8 dk / 8. Amator dusunmez.
+const THINK_WIN = [0, 20, 15, 10, 8], THINK_CANDS = [0, 2, 3, 5, 8];
+interface Cand { id: string; label: string; patch: Partial<TacticIn>; duties?: Record<number, Duty>; score: number }
+function thinkObserve(st: MatchState, side: 0 | 1) {
+  const opp = (1 - side) as 0 | 1;
+  const S = st.stats[side], O = st.stats[opp];
+  return { xg: S.xg, xga: O.xg, shotsA: O.shots, turnOwn: S.turnovers, duels: S.duels, duelsA: O.duels, passAcc: S.passes ? S.passesOk / S.passes : 0.8 };
+}
+function thinkCandidates(st: MatchState, side: 0 | 1): Cand[] {
+  const opp = (1 - side) as 0 | 1;
+  const t = st.teams[side], tac = t.tactic;
+  const ob = thinkObserve(st, side), last = st.thinkSt[side].last;
+  const dxg = ob.xg - last.xg, dxga = ob.xga - last.xga, dShotsA = ob.shotsA - last.shotsA;
+  const gf = st.stats[side].goals, ga = st.stats[opp].goals, minute = st.clock / 60;
+  const live = liveTeam(st, side), avgK = live.reduce((a, p) => a + p.k, 0) / Math.max(1, live.length);
+  const z = st.zoneShots[opp]; const flank = (z[0] + z[2]) / Math.max(1, z[0] + z[1] + z[2]);
+  const c: Cand[] = [];
+  const add = (id: string, label: string, patch: Partial<TacticIn>, score: number, duties?: Record<number, Duty>) => { if (score > 0) c.push({ id, label, patch, duties, score }); };
+  // pencerede cok pozisyon verdik: hatti cek / presi azalt
+  add('line-', 'Hattı geri çekti', { line: clamp((tac.line ?? 1) - 1, 0, 2) as Lvl }, dxga * 2 + (ga > gf ? 0 : 0.3) - (tac.line === 0 ? 9 : 0));
+  add('press-', 'Presi düşürdü', { press: clamp((tac.press ?? 1) - 1, 0, 2) as Lvl }, dxga * 1.5 + (avgK < 55 ? 0.6 : 0) - (tac.press === 0 ? 9 : 0));
+  // kanatlardan yiyoruz: genislik acik, bekler geride
+  add('wide-def', 'Kanatları kapattı', { fb: 0, width: 2 }, (flank > 0.6 && dShotsA >= 3 ? 0.8 : 0) - (tac.fb === 0 ? 9 : 0));
+  // az pozisyon uretiyoruz ve gerideyiz / berabereyiz: risk
+  add('push', 'Yüklendi', { line: clamp((tac.line ?? 1) + 1, 0, 2) as Lvl, runs: 2, fb: 2 }, (ga >= gf && dxg < 0.15 && minute > 30 ? 0.7 : 0) + (ga > gf && minute > 60 ? 0.6 : 0) - (tac.line === 2 ? 9 : 0));
+  add('cm-up', 'Orta sahayı ileri sürdü', { cm: 2 }, (ga >= gf && dxg < 0.2 ? 0.5 : 0) - (tac.cm === 2 ? 9 : 0));
+  // yorgunluk: tempo dusur
+  add('tempo-', 'Tempoyu düşürdü', { tempo: 0 }, (avgK < 50 ? 0.7 : 0) - (tac.tempo === 0 ? 9 : 0));
+  // ondeyiz ve son 20 dk: kapan
+  add('protect', 'Sonucu korumaya geçti', { line: 0, press: 0, tempo: 0, fb: 0 }, (gf > ga && minute > 70 ? 0.9 : 0) - (tac.line === 0 && tac.press === 0 ? 9 : 0));
+  // pas isabeti dusuk ve pres yiyoruz: direkt oyun
+  add('direct', 'Direkt oyuna döndü', { style: 2 }, (ob.passAcc < 0.72 && st.teams[opp].tactic.press === 2 ? 0.6 : 0) - (tac.style === 2 ? 9 : 0));
+  // rakibin tehlikeli forveti: adam markaji (stoperler)
+  const dang = st.reads[side]?.mark;
+  add('mark', 'Forveti adam adama aldı', {}, dang !== undefined && dxga > 0.3 ? 0.5 : 0, Object.fromEntries(live.filter((p) => p.pos === 'CB').map((p) => [p.num, { mark: 1 }])));
+  // daha once denenip sonuc vermeyen aday puan kaybeder
+  for (const k of c) if (st.thinkSt[side].tried[k.id]) k.score -= 0.4;
+  c.sort((a, b) => b.score - a.score);
+  return c;
+}
+// ic simulasyon: iki takimin bugunku taktikleriyle kisa mac(lar); aday yamasiyla ve yamasiz xG farki
+function thinkSim(st: MatchState, side: 0 | 1, patch: Partial<TacticIn>, duties: Record<number, Duty> | undefined, seed: number): number {
+  const me = st.teams[side], op = st.teams[1 - side];
+  const mk = (t: TeamIn, pt: Partial<TacticIn>, du?: Record<number, Duty>): TeamIn => ({ ...t, tactic: { ...t.tactic, ...pt }, duties: du ? { ...(t.duties ?? {}), ...du } : t.duties, rules: [], think: 0, mainTactic: undefined });
+  const a = mk(me, patch, duties), b = mk(op, {});
+  const s2 = createMatch(side === 0 ? a : b, side === 0 ? b : a, seed);
+  const lim = P.thinkSimMin * 60; let g = 0;
+  while (!s2.done && s2.clock < lim && g++ < 20000) step(s2);
+  return s2.stats[side].xg - s2.stats[1 - side].xg;
+}
+function thinkStep(st: MatchState) {
+  const minute = st.clock / 60;
+  for (const side of [0, 1] as const) {
+    const depth = clamp(Math.round(st.teams[side].think ?? 0), 0, 4);
+    if (!depth) continue;
+    const ts = st.thinkSt[side];
+    if (minute < ts.nextMin) continue;
+    ts.nextMin = minute + THINK_WIN[depth];
+    const cands = thinkCandidates(st, side).slice(0, THINK_CANDS[depth]);
+    const ob = thinkObserve(st, side);
+    ts.last = { xg: ob.xg, xga: ob.xga, shotsA: ob.shotsA, turnOwn: ob.turnOwn };
+    // sezgisel modda (simulasyon yok) daha temkinli: yuksek esik ve mac basina sinirli degisiklik (dogrulanmamis fikir az denenir)
+    const nChanged = Object.values(ts.tried).reduce((a, b) => a + b, 0);
+    const thr = P.thinkSim ? 0.5 : 0.75, maxCh = P.thinkSim ? 6 : 1 + Math.ceil(depth / 2);
+    if (!cands.length || cands[0].score < thr || nChanged >= maxCh) { st.thinkLog.push({ t: st.t, side, label: 'değişiklik yok', cand: cands.map((c) => c.id) }); continue; }
+    let best = cands[0];
+    if (P.thinkSim) {
+      // ic simulasyon: her aday ve "degisiklik yok" ayni tohumla; en iyi xG farki
+      const seed = Math.floor(st.rng() * 1e9);
+      const base = thinkSim(st, side, {}, undefined, seed);
+      let bv = base + 0.05; let pick: Cand | null = null;
+      for (const c of cands) { const v = thinkSim(st, side, c.patch, c.duties, seed); if (v > bv) { bv = v; pick = c; } }
+      if (!pick) { st.thinkLog.push({ t: st.t, side, label: 'simülasyon: değişiklik yok', cand: cands.map((c) => c.id) }); continue; }
+      best = pick;
+    }
+    const t = st.teams[side];
+    t.tactic = applyDoctrine({ ...t.tactic, ...best.patch });
+    if (best.duties) for (const [num, d] of Object.entries(best.duties)) setDuty(st, side, +num, d);
+    ts.tried[best.id] = (ts.tried[best.id] ?? 0) + 1;
+    st.adaptUntil[side] = Math.max(st.adaptUntil[side], st.clock + 60);
+    st.thinkLog.push({ t: st.t, side, label: best.label, cand: cands.map((c) => c.id) });
+    st.events.push({ t: st.clock, type: 'rule', side, text: best.label });
+    dbg('bot_' + best.id);
+  }
+}
 export function setMentality(st: MatchState, side: 0 | 1, m: number): void {
   m = clamp(Math.round(m), -2, 2);
   const t = st.teams[side];
@@ -1922,6 +2015,7 @@ export function step(st: MatchState) {
   const famK: [number, number] = [0, 1].map((i) => { const t = st.teams[i]; return st.clock > 50 * 60 && t.mainTactic?.doctrine && t.tactic.doctrine && t.mainTactic.doctrine !== t.tactic.doctrine ? P.unfamiliarFat : 1; }) as [number, number];
   for (const p of st.players) if (!p.off) p.k = Math.max(0, p.k - (p.kDrop * famK[p.side] * dt * P.clockRate * rest) / 60);
   rulesStep(st);
+  thinkStep(st);
   injuryRoll(st);
 
   if (st.owner) st.stats[st.owner.side].possTicks++;
