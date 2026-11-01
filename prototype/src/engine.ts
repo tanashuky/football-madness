@@ -325,6 +325,7 @@ export const P = {
   rotPeriod: 7, // etkin rotasyon: en az bu kadar sure sonra yeni cevirme (s)
   rotProb: 0.5, // etkin rotasyon: periyot dolunca her 0,5 s kontrolde cevirme olasiligi
   rotHold: 6, // cevirmeden sonra tepkisel (mesafe) kuralin beklemesi (s)
+  markReacq: 1.0, // adam markaji: adam bolgeden cikinca yeni adam aramadan once pesinden gitme suresi (s, okuma B ile 0,6-1,6x)
   gkHandVz: 7, // elden uzun vurusun en az dikey hizi (m/s)
   headZ: [1.2, 2.35] as number[], // kafa/gogus yuksekligi araligi (m): bunun ustu kimseye ulasmaz
   gkReach: 1.4, // kalecinin topa ulasma yaricapi (m); dalista uzar
@@ -1667,8 +1668,22 @@ function updateAnchorsAndMove(st: MatchState) {
           }
           // adam markaji: evinin 12 m yakinindaki en yakin rakip hucumcuyu kale tarafindan 1,5 m'de tutar
           if (dutyOf(st, p).mark === 1) {
-            let mk: PState | null = null, md = 12;
-            for (const q of st.players) { if (q.side === s || q.off || q.pos === 'GK' || q === carrier) continue; const [qxf, qyf] = toFrame(s, q.x, q.y); const dq = hyp(qxf - txf, qyf - tyf); if (dq < md) { md = dq; mk = q; } }
+            // adamini tutar: 16 m icinde kaldikca birakmaz; bolgeden cikinca (rotasyon, cizgi degisimi) tepki gecikmesi kadar daha pesinden gider,
+            // sonra yeni adam arar; okumasi (B) iyi savunmaci daha cabuk birakir. Bu gecikme rotasyonun markaji sasirtma payidir.
+            const pa = p as any; const pc = percOf(p, true);
+            let mk: PState | null = null;
+            const cur = pa._mk as PState | undefined;
+            if (cur && !cur.off && cur !== carrier && cur.side !== s) {
+              const [cxf2, cyf2] = toFrame(s, cur.x, cur.y); const dc = hyp(cxf2 - txf, cyf2 - tyf);
+              if (dc < 16) { mk = cur; pa._mkLost = undefined; }
+              else { if (pa._mkLost === undefined) pa._mkLost = st.t; if (st.t - pa._mkLost < P.markReacq * (1.6 - pc.B)) { mk = cur; dbg('markaj_pesinde'); } }
+            }
+            if (!mk) {
+              let md = 12;
+              for (const q of st.players) { if (q.side === s || q.off || q.pos === 'GK' || q === carrier) continue; const [qxf, qyf] = toFrame(s, q.x, q.y); const dq = hyp(qxf - txf, qyf - tyf); if (dq < md) { md = dq; mk = q; } }
+              if (mk && mk !== cur) dbg('markaj_yeni_adam');
+              pa._mk = mk ?? undefined; pa._mkLost = undefined;
+            }
             if (mk) { const [qxf, qyf] = toFrame(s, mk.x, mk.y); txf = Math.max(2, qxf - 1.5); tyf = qyf; }
           }
           // yuksek preste hat uyumla birlikte yukari cikar; uyumu dusuk takimda pres ile hat arasinda bosluk acilir (pres boslugu)
