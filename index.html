@@ -255,7 +255,7 @@ label.chk { display: flex; flex-direction: row; gap: 8px; align-items: center; }
 <div id="tacPanel" hidden><div class="box" id="tacBox"></div></div>
 <div id="mentBar" aria-label="Taktik kaydırıcı"><button id="mentDown" type="button" aria-label="Savunma">◀</button><output id="mentOut">Dengeli</output><button id="mentUp" type="button" aria-label="Hücum">▶</button></div>
 <div id="pauseBox" hidden><div><b>Durduruldu</b><span>Devam etmek için ▶ ya da P</span></div></div>
-<div id="rotate">Telefonu yatay çevir.<br><span style="font-weight:400;font-size:14px;color:var(--muted)">Oyun yatay oynanır; uygulamada yön kilitli olacak.</span></div>
+<div id="rotate">Telefonu yatay çevir.<br><span style="font-weight:400;font-size:14px;color:var(--muted)">Football Madness yatay oynanır; ana ekrana kurulu uygulamada yön kendiliğinden kilitlenir.</span></div>
 <script>
 // Football Madness - mac motoru prototipi
 // Bagimsiz, deterministik, ekrandan habersiz. Ayni kod sunucuda, tarayicida ve simulasyon aracinda calisir.
@@ -6963,6 +6963,8 @@ requestAnimationFrame((t) => { last = t; frame(t); });
 <!-- Dilim 1 demo: uygulama katmani. page.html'in ustune biner; sahne (mac) page.html'deki oynama modudur (window.FM). -->
 <style>
 body.app { padding: 0; overflow: hidden; }
+/* oyun her yerde yatay (Ekranlar: temel karar): uygulama katmaninda dikeyde cevirme uyarisi */
+@media (orientation: portrait) and (pointer: coarse) { body.app #rotate { display: flex; } }
 body.app:not(.play) .wrap { display: none; }
 #app { display: none; position: fixed; inset: 0; z-index: 800; flex-direction: column; background: var(--night); color: var(--chalk); font-family: var(--font-body); }
 body.app #app { display: flex; }
