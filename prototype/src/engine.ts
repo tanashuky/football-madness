@@ -2011,9 +2011,18 @@ export function userSub(st: MatchState, side: 0 | 1, outNum: number, innNum: num
   return true;
 }
 export function pendingSubs(st: MatchState, side: 0 | 1) { return st.subQueue.filter((q) => q.side === side).map((q) => ({ out: q.out.num, inn: q.inn.num })); }
-function autoSubs(st: MatchState) {
+// kullanici takiminda sakatlik / kaleci atilmasi karari kullanicinin (kisa duraklama paneli); sure dolarsa sayfa autoSubsFor cagirir
+export function autoSubsFor(st: MatchState, side: 0 | 1) { autoSubs(st, side); }
+export function suggestedSub(st: MatchState, side: 0 | 1, outNum: number): number | null {
+  const out = st.players.find((p) => p.side === side && !p.off && p.num === outNum); if (!out) return null;
+  const bench = st.bench[side].filter((b) => b.off && !b.subbed);
+  const inn = (out.pos === 'GK' ? bench.find((b) => b.pos === 'GK') : undefined) ?? bench.find((b) => b.pos === out.pos && b.pos !== 'GK') ?? bench.find((b) => b.pos !== 'GK');
+  return inn ? inn.num : null;
+}
+function autoSubs(st: MatchState, force?: 0 | 1) {
   for (const side of [0, 1] as const) {
     if (st.subsLeft[side] <= 0) continue;
+    if (st.control[side] && force !== side) continue; // kullanici takimi: karar paneli (sayfa), sure dolunca force ile
     const live = liveTeam(st, side);
     const hasGk = live.some((p) => p.pos === 'GK' && !p.emergencyGk);
     if (!hasGk && st.bench[side].some((b) => b.off && !b.subbed && b.pos === 'GK')) {
@@ -2026,7 +2035,7 @@ function autoSubs(st: MatchState) {
     const inj = live.find((p) => p.injured && !st.subQueue.some((q) => q.out === p));
     if (inj && requestSub(st, side, inj, 'injury')) continue;
     // yorgunluk degisikligi: son pencere acil durumlar icin saklanir
-    if (!st.control[side] && st.clock >= 60 * 60 && st.subsLeft[side] > 1 && st.subWindowsLeft[side] > 1) { // kullanici takiminda yorgunluk degisikligi kullanicinin karari
+    if (force !== side && st.clock >= 60 * 60 && st.subsLeft[side] > 1 && st.subWindowsLeft[side] > 1) { // yorgunluk degisikligi: kullanici takiminda yalniz kullanici
       const tired = live.filter((p) => p.pos !== 'GK' && p.k < P.subTiredK && !st.subQueue.some((q) => q.out === p)).sort((a, b) => a.k - b.k)[0];
       if (tired) requestSub(st, side, tired, 'tired');
     }
