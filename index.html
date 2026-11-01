@@ -756,10 +756,12 @@ function validateTeam(t, label) {
         throw new Error(`${label}: bilinmeyen formasyon ${t.formation}`);
     if (!t.players || t.players.length !== 11)
         throw new Error(`${label}: ilk 11 ${t.players ? t.players.length : 0} oyuncu`);
+    // forma numarasi: 1-99 tam sayi, takimda (ilk 11 + yedekler) benzersiz; dizilimde rolu yok, motor icinde kimlik olarak kullanilir
     const nums = new Set();
-    t.players.forEach((p, i) => {
-        if (!p || !Number.isFinite(p.gg) || !Number.isFinite(p.num) || !p.pos)
-            throw new Error(`${label}: ${i + 1}. slotta gecersiz oyuncu (${p ? JSON.stringify({ num: p.num, gg: p.gg, pos: p.pos }) : 'yok'})`);
+    const all = [...t.players, ...(t.bench ?? [])];
+    all.forEach((p, i) => {
+        if (!p || !Number.isFinite(p.gg) || !Number.isInteger(p.num) || p.num < 1 || p.num > 99 || !p.pos)
+            throw new Error(`${label}: ${i < 11 ? i + 1 + '. slotta' : 'yedekte'} gecersiz oyuncu (${p ? JSON.stringify({ num: p.num, gg: p.gg, pos: p.pos }) : 'yok'})`);
         if (nums.has(p.num))
             throw new Error(`${label}: forma numarasi ${p.num} iki kez`);
         nums.add(p.num);
@@ -7077,7 +7079,7 @@ body.app.play #app { display: none; }
 // Kayit: localStorage. Ekranlar: giris (misafir) -> kulup kurulumu -> ana menu -> Mac Modu / Solo Lig / Takim / Ayarlar; mac odasi -> mac -> rapor.
 const APP = { key: 'fm.demo.v1', db: null, screen: 'login', stack: [], ctx: {} };
 const DEF_SETTINGS = { keys: 'arrows', assistP: 0, assistS: 1, autoSwitch: true, ball: 1.4, names: 'auto', cam: 'full', mode: 'team', minutes: 10 };
-function dbLoad() { try { APP.db = JSON.parse(localStorage.getItem(APP.key)) || null; } catch (e) { APP.db = null; } if (!APP.db) APP.db = { account: null, settings: { ...DEF_SETTINGS }, team: null, solo: null, mm: { elo: 1000, last: null, played: 0 } }; APP.db.settings = { ...DEF_SETTINGS, ...(APP.db.settings || {}) }; }
+function dbLoad() { try { APP.db = JSON.parse(localStorage.getItem(APP.key)) || null; } catch (e) { APP.db = null; } if (!APP.db) APP.db = { account: null, settings: { ...DEF_SETTINGS }, team: null, solo: null, roster: null, mm: { elo: 1000, last: null, played: 0 } }; APP.db.settings = { ...DEF_SETTINGS, ...(APP.db.settings || {}) }; }
 function dbSave() { try { localStorage.setItem(APP.key, JSON.stringify(APP.db)); } catch (e) {} }
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const $ = (id) => document.getElementById(id);
@@ -7092,18 +7094,38 @@ function mkSquad(club, base, names) {
   t.bench.forEach((p, i) => { p.gg = base + off[(i + 11) % off.length]; p.age = 19 + ((i * 5) % 14); });
   return t;
 }
-// Kullanicinin kadrosu formasyondan BAGIMSIZ sabit bir listedir (18 futbolcu, numaralar 1-18, dogal mevki natPos);
-// formasyon yalniz slotlarin mevkisini verir, lineup (11 forma numarasi, slot sirasinda) kimin nerede oynadigini.
-// 1 Kasim hatasi: kadro formasyona gore uretiliyordu; 5-3-2'de numaralar degisince diziliste olmayan oyuncu NaN olup herkesi yok etti.
-function userRoster() {
-  const club = APP.db.account.club;
-  const base = mkSquad({ ...club, formation: '4-3-3' }, club.gg || 62, NAMES_A);
-  return [...base.players, ...base.bench].map((p) => ({ ...p, natPos: p.pos }));
+// Kullanicinin kadrosu: kalici liste (db.roster, 18 futbolcu). Her futbolcunun sabit bir ic kimligi (id) var; forma numarasi
+// yalnizca bir ETIKETTIR (1-99, takim icinde benzersiz, futbolcu kartindan degistirilebilir) ve dizilimde hicbir rolu yoktur.
+// Formasyon slotlarin mevkisini verir; lineup = 11 futbolcu id'si (slot sirasinda); gorev kartlari id ile tutulur.
+// Motor icinde kimlik forma numarasidir (takimda benzersiz oldugu garanti), uygulama maca cikarken id -> numara cevirir.
+// 1 Kasim hatasi: kadro formasyona gore uretiliyor ve numara kimlik sayiliyordu; 5-3-2'de numaralar degisince oyuncu NaN olup herkesi yok etti.
+function ensureRoster() {
+  const db = APP.db;
+  if (!db.roster || !Array.isArray(db.roster) || db.roster.length < 11) {
+    const club = db.account.club;
+    const base = mkSquad({ ...club, formation: '4-3-3' }, club.gg || 62, NAMES_A);
+    db.roster = [...base.players, ...base.bench].map((p, i) => ({ id: 'p' + (i + 1), num: p.num, name: p.name, natPos: p.pos, gg: p.gg, age: p.age, traits: p.traits || [], fatigue: p.fatigue ?? 20 }));
+    // eski kayit: numaraya gore tutulan dizilis ve gorev kartlari kimlige cevrilir
+    const tt = db.team;
+    if (tt && Array.isArray(tt.lineup) && tt.lineup.some((n) => typeof n === 'number')) { tt.lineup = tt.lineup.map((n) => (typeof n === 'number' ? db.roster.find((p) => p.num === n)?.id : n)).filter(Boolean); if (tt.lineup.length === 11 && FORM_POS[tt.formation]) tt.lineup = defaultLineup(tt.lineup.map((id) => db.roster.find((p) => p.id === id)), FORM_POS[tt.formation]); }
+    if (tt && tt.duties) { const d2 = {}; for (const [k, v] of Object.entries(tt.duties)) { if (String(k).startsWith('p')) { d2[k] = v; continue; } const p = db.roster.find((q) => q.num === +k); if (p) d2[p.id] = v; } tt.duties = d2; }
+    dbSave();
+  }
+  return db.roster;
 }
-// varsayilan diziliş: her slota dogal mevkisi uyan en guclu bos oyuncu, kalan slotlara en guclu kalanlar
+const rosterById = () => Object.fromEntries(ensureRoster().map((p) => [p.id, p]));
+// forma numarasi degistir: 1-99 tam sayi, takimda benzersiz
+function setShirtNumber(id, num) {
+  const roster = ensureRoster(); num = Math.round(+num);
+  if (!Number.isFinite(num) || num < 1 || num > 99) return 'Numara 1 ile 99 arasında olmalı';
+  if (roster.some((p) => p.id !== id && p.num === num)) return `${num} numara ${roster.find((p) => p.num === num).name}'de`;
+  const p = roster.find((q) => q.id === id); if (!p) return 'Futbolcu bulunamadı';
+  p.num = num; dbSave(); return null;
+}
+// varsayilan diziliş: her slota dogal mevkisi uyan en guclu bos oyuncu, kalan slotlara en guclu kalanlar (numaradan bagimsiz)
 function defaultLineup(roster, slots) {
-  const free = new Set(roster.map((p) => p.num)); const out = new Array(slots.length).fill(null);
-  const pick = (pred) => { let best = null; for (const p of roster) if (free.has(p.num) && pred(p) && (!best || p.gg > best.gg)) best = p; if (best) free.delete(best.num); return best ? best.num : null; };
+  const free = new Set(roster.map((p) => p.id)); const out = new Array(slots.length).fill(null);
+  const pick = (pred) => { let best = null; for (const p of roster) if (free.has(p.id) && pred(p) && (!best || p.gg > best.gg)) best = p; if (best) free.delete(best.id); return best ? best.id : null; };
   slots.forEach((sp, i) => { out[i] = pick((p) => p.natPos === sp); });
   const near = { FB: ['W', 'CB'], CB: ['DM', 'FB'], DM: ['CM', 'CB'], CM: ['DM', 'W'], W: ['CM', 'ST', 'FB'], ST: ['W', 'CM'], GK: [] };
   slots.forEach((sp, i) => { if (out[i] === null) out[i] = pick((p) => p.natPos !== 'GK' && (near[sp] || []).includes(p.natPos)); });
@@ -7111,25 +7133,36 @@ function defaultLineup(roster, slots) {
   slots.forEach((sp, i) => { if (out[i] === null) out[i] = pick(() => true); });
   return out;
 }
+// formasyon degisince secili 11 korunur, slotlara dogal mevkiye gore yeniden dagitilir (bek stoper slotuna dusmesin)
+function reslot(ids, slots) {
+  const roster = rosterById(); const chosen = ids.map((id) => roster[id]).filter(Boolean);
+  if (chosen.length !== slots.length) return ids;
+  return defaultLineup(chosen, slots);
+}
 function userTeamIn() {
   const db = APP.db, club = db.account.club, tt = db.team;
   if (!FORMATIONS[tt.formation]) tt.formation = '4-3-3';
   if (tt.formationAtt && !FORMATIONS[tt.formationAtt]) delete tt.formationAtt;
   const t = mkSquad({ ...club, formation: tt.formation }, club.gg || 62, NAMES_A);
-  const roster = userRoster();
+  const roster = ensureRoster();
   const slots = FORM_POS[tt.formation];
-  const byNum = Object.fromEntries(roster.map((p) => [p.num, p]));
-  // diziliş dogrulama: 11 benzersiz, hepsi kadroda, kaleci slotunda kaleci; degilse varsayilana don
+  const byId = Object.fromEntries(roster.map((p) => [p.id, p]));
+  // diziliş dogrulama: 11 benzersiz kimlik, hepsi kadroda; degilse varsayilana don (numaranin dizilimde rolu yok)
   const lu = tt.lineup;
-  const valid = Array.isArray(lu) && lu.length === 11 && new Set(lu).size === 11 && lu.every((n) => byNum[n]) && byNum[lu[0]].natPos === 'GK';
+  const valid = Array.isArray(lu) && lu.length === 11 && new Set(lu).size === 11 && lu.every((id) => byId[id]);
   if (!valid) { tt.lineup = defaultLineup(roster, slots); dbSave(); }
-  const xi = tt.lineup.map((num, i) => ({ ...byNum[num], pos: slots[i] }));
-  const rest = roster.filter((p) => !tt.lineup.includes(p.num)).sort((a, b) => (a.natPos === 'GK' ? -1 : b.natPos === 'GK' ? 1 : 0));
+  // numara benzersizligi (eski kayit / bozulma): cakisanlara bos numara ver
+  { const used = new Set(); for (const p of roster) { if (used.has(p.num) || !Number.isFinite(p.num) || p.num < 1 || p.num > 99) { let n = 1; while (used.has(n) || roster.some((q) => q !== p && q.num === n)) n++; p.num = n; } used.add(p.num); } }
+  const mk = (p, pos) => ({ num: p.num, name: p.name, pos, natPos: p.natPos, gg: p.gg, age: p.age, traits: p.traits, fatigue: p.fatigue, id: p.id });
+  const xi = tt.lineup.map((id, i) => mk(byId[id], slots[i]));
+  const rest = roster.filter((p) => !tt.lineup.includes(p.id)).sort((a, b) => (a.natPos === 'GK' ? -1 : b.natPos === 'GK' ? 1 : 0)).map((p) => mk(p, p.natPos));
   t.players = xi; t.bench = rest;
+  // gorev kartlari: kimlikten o anki forma numarasina (motor numara ile calisir)
+  const duties = {}; for (const [id, d] of Object.entries(tt.duties || {})) { const p = byId[id]; if (p) duties[p.num] = d; }
   const sh = userShapes(tt);
   t.tactic = { ...tt.tactic, doctrine: tt.doctrine, shapeDef: sh.def, shapeAtt: sh.att };
   t.mainTactic = { ...tt.tactic, doctrine: tt.doctrine };
-  t.duties = tt.duties || {};
+  t.duties = duties;
   t.rules = (tt.rules || []).map((id) => RULE_TEMPLATES.find((r) => r.id === id)).filter(Boolean);
   t.U = 60; t.T = 60; t.F = 60; t.M = 70;
   return t;
@@ -7211,6 +7244,7 @@ SCREENS.setup = () => ({ title: 'Kulüp kurulumu', noBack: true, html: `
     const name = $('cName').value.trim() || 'Kartal SK', short = ($('cShort').value.trim() || name.slice(0, 3)).toUpperCase().slice(0, 3);
     APP.db.account = { guest: true, club: { name, short, city: $('cCity').value.trim(), stadium: $('cStad').value.trim(), color: $('cCol').value, color2: $('cCol2').value, gg: 62 } };
     APP.db.team = { formation: '4-3-3', doctrine: 'balanced', tactic: { ...DOCTRINES.balanced.tactic }, duties: {}, rules: ['counterpress', 'chase', 'protect', 'tired'] };
+    APP.db.roster = null; ensureRoster();
     dbSave(); go('home', {}, false); }; } });
 
 SCREENS.home = () => { const db = APP.db, c = db.account.club, s = db.solo; return { title: `${esc(c.name)}`, noBack: true, html: `
@@ -7381,25 +7415,27 @@ function soloApplyResultBye() { const s = APP.db.solo; for (const [x, y] of s.fi
 
 // --- Takim: kadro, futbolcu karti, taktik tahtasi ---
 const POS_TR = { GK: 'Kaleci', CB: 'Stoper', FB: 'Bek', DM: 'Defansif orta', CM: 'Orta saha', W: 'Kanat', ST: 'Forvet' };
-SCREENS.squad = (c) => { const tt = APP.db.team; const t = userTeamIn(); const sel = c.sel ?? null;
+SCREENS.squad = (c) => { const tt = APP.db.team; const t = userTeamIn(); const sel = c.sel ?? null; // sel, swap, target: futbolcu id'si
   const all = [...t.players.map((p, i) => ({ ...p, xi: true, slot: i })), ...t.bench.map((p) => ({ ...p, xi: false }))];
-  const p = sel !== null ? all.find((q) => q.num === sel) : null;
+  const p = sel !== null ? all.find((q) => q.id === sel) : null;
   const fit = (q) => (q.xi && q.natPos !== q.pos ? ` <span class="tag o">${POS_TR[q.natPos]} oynuyor: ${POS_TR[q.pos]}</span>` : '');
-  return { title: 'Takım · Kadro', html: `<p class="muted" style="margin:0 0 10px">Önce bir futbolcu seç; sonra "Yer değiştir" ile başka birini seç. Slotun mevkisi formasyondan gelir (${tt.formation}); doğal mevki dışında oynayan turuncu işaretlenir (mevki uyumu Faz 3).</p>
+  const row = (q) => `<div class="li ${q.id === sel ? 'sel' : ''}" data-go="squad" data-ctx='${JSON.stringify(c.swap ? { ...c, target: q.id } : { sel: q.id, from: c.from })}'><div class="num">${q.num}</div><div><div class="nm">${esc(q.name)}</div><div class="sub">${q.xi ? POS_TR[q.pos] : POS_TR[q.natPos] + ' · yedek'} · ${q.age} yaş${(q.traits || []).map((tr) => ` · ${tr}`).join('')}${fit(q)}</div></div><div class="gg">${q.gg}</div></div>`;
+  return { title: 'Takım · Kadro', html: `<p class="muted" style="margin:0 0 10px">Önce bir futbolcu seç; sonra "Yer değiştir" ile başka birini seç. Slotun mevkisi formasyondan gelir (${tt.formation}); doğal mevki dışında oynayan turuncu işaretlenir (mevki uyumu Faz 3). Forma numarası yalnız etikettir (1–99, takımda benzersiz), kartından değiştirilir.</p>
   <div class="cards" style="grid-template-columns: minmax(260px, 1fr) minmax(260px, 1.2fr)">
-    <div class="list"><div class="muted">İlk 11</div>${all.filter((q) => q.xi).map((q) => `<div class="li ${q.num === sel ? 'sel' : ''} ${c.swap && q.num !== c.swap ? '' : ''}" data-go="squad" data-ctx='${JSON.stringify(c.swap ? { ...c, target: q.num } : { sel: q.num, from: c.from })}'><div class="num">${q.num}</div><div><div class="nm">${esc(q.name)}</div><div class="sub">${POS_TR[q.pos]} · ${q.age} yaş${(q.traits || []).map((tr) => ` · ${tr}`).join('')}${fit(q)}</div></div><div class="gg">${q.gg}</div></div>`).join('')}
-      <div class="muted" style="margin-top:8px">Yedekler</div>${all.filter((q) => !q.xi).map((q) => `<div class="li ${q.num === sel ? 'sel' : ''}" data-go="squad" data-ctx='${JSON.stringify(c.swap ? { ...c, target: q.num } : { sel: q.num, from: c.from })}'><div class="num">${q.num}</div><div><div class="nm">${esc(q.name)}</div><div class="sub">${POS_TR[q.natPos]} · ${q.age} yaş · yedek${(q.traits || []).map((tr) => ` · ${tr}`).join('')}</div></div><div class="gg">${q.gg}</div></div>`).join('')}</div>
+    <div class="list"><div class="muted">İlk 11</div>${all.filter((q) => q.xi).map(row).join('')}
+      <div class="muted" style="margin-top:8px">Yedekler</div>${all.filter((q) => !q.xi).map(row).join('')}</div>
     <div>${p ? `<div class="card"><h3>${p.num} ${esc(p.name)} <small>${POS_TR[p.natPos]}${p.xi ? ` · slot: ${POS_TR[p.pos]}` : ' · yedek'}</small></h3>
       <div class="row"><span class="tag y">GG ${p.gg}</span><span class="tag">${p.age} yaş</span>${(p.traits || []).map((tr) => `<span class="tag g">${tr}</span>`).join('')}<span class="tag">Yorgunluk ${p.fatigue ?? 20}</span></div>
       <p>Roller, rol puanları, potansiyel, piyasa değeri, sözleşme ve sezon istatistikleri Faz 3'te. Özellikler motorda: Hızlı (hız ve tepki), Hava Hakimi, Oyun Kurucu (görme/beklenti), Duvar (savunma görme), Çalımcı, Dayanıklı, Bitirici, Refleks.</p>
-      <div class="row">${c.swap ? `<span class="muted">Şimdi yer değiştireceği futbolcuyu listeden seç</span><button class="btn sm ghost" data-go="squad" data-ctx='${JSON.stringify({ sel: p.num, from: c.from })}'>Vazgeç</button>` : `<button class="btn sm" data-go="squad" data-ctx='${JSON.stringify({ sel: p.num, swap: p.num, from: c.from })}'>Yer değiştir</button><button class="btn sm ghost" id="sqReset">Dizilişi sıfırla</button>`}</div></div>` : `<div class="card"><h3>Futbolcu kartı</h3><p>Listeden bir futbolcu seç.</p></div>`}</div></div>`,
+      <div class="row">${c.swap ? `<span class="muted">Şimdi yer değiştireceği futbolcuyu listeden seç</span><button class="btn sm ghost" data-go="squad" data-ctx='${JSON.stringify({ sel: p.id, from: c.from })}'>Vazgeç</button>` : `<button class="btn sm" data-go="squad" data-ctx='${JSON.stringify({ sel: p.id, swap: p.id, from: c.from })}'>Yer değiştir</button><label class="f" style="flex-direction:row;align-items:center;gap:6px">Forma no <input type="number" id="sqNum" min="1" max="99" value="${p.num}" style="width:72px;font:600 15px var(--font-body);color:var(--chalk);background:var(--night);border:1px solid var(--line);border-radius:8px;padding:8px;min-height:40px"><button class="btn sm" id="sqNumOk">Değiştir</button></label><button class="btn sm ghost" id="sqReset">Dizilişi sıfırla</button>`}</div><p class="muted" id="sqMsg"></p></div>` : `<div class="card"><h3>Futbolcu kartı</h3><p>Listeden bir futbolcu seç.</p></div>`}</div></div>`,
     tabs: c.from === 'solo' ? [{ lab: 'Kulüp', go: 'solo' }, { lab: 'Takım', go: 'squad', on: true }, { lab: 'Maç', go: 'solo' }] : null, after: () => {
-      if (c.swap && c.target && c.target !== c.swap) { // takas: iki numaranin yerini degistir (biri yedekteyse ilk 11'e girer)
+      if (c.swap && c.target && c.target !== c.swap) { // takas: iki kimligin yerini degistir (biri yedekteyse ilk 11'e girer)
         const lu = APP.db.team.lineup; const a = lu.indexOf(c.swap), b = lu.indexOf(c.target);
         if (a >= 0 && b >= 0) { lu[a] = c.target; lu[b] = c.swap; } else if (a >= 0) lu[a] = c.target; else if (b >= 0) lu[b] = c.swap;
         dbSave(); toast('Diziliş güncellendi'); go('squad', { sel: c.target, from: c.from }, false); return;
       }
       const r = $('sqReset'); if (r) r.onclick = () => { delete APP.db.team.lineup; dbSave(); go('squad', { from: c.from }, false); };
+      const nb = $('sqNumOk'); if (nb) nb.onclick = () => { const err = setShirtNumber(sel, $('sqNum').value); if (err) { $('sqMsg').textContent = err; $('sqMsg').style.color = '#e5483f'; } else { toast('Numara değişti'); go('squad', { sel, from: c.from }, false); } };
       if (c.from === 'solo') { const b = $('aTabs').querySelectorAll('button'); b[0].onclick = () => go('solo', { tab: 'club' }, false); b[2].onclick = () => go('solo', { tab: 'fixture' }, false); } } }; };
 
 const TAC_LABELS = { press: ['Pres', ['Düşük', 'Orta', 'Yüksek']], line: ['Savunma hattı', ['Derin', 'Orta', 'Önde']], style: ['Oyun stili', ['Kısa pas', 'Dengeli', 'Direkt']], tempo: ['Tempo', ['Yavaş', 'Normal', 'Hızlı']], width: ['Genişlik', ['Dar', 'Normal', 'Geniş']], compact: ['Hatlar arası', ['Kompakt', 'Normal', 'Açık']], fb: ['Bekler', ['Savunmada kal', 'Dengeli', 'Bindir']], cm: ['Merkez orta saha', ['Geride', 'Dengeli', 'Ceza sahasına']], runs: ['Forvet koşuları', ['Güvenli', 'Dengeli', 'Riskli']] };
@@ -7424,12 +7460,12 @@ SCREENS.tactics = (c) => { const tt = APP.db.team; const level = c.level || 'eas
     else right += `<div class="grid2" style="margin-top:6px">${Object.entries(TAC_LABELS).map(([k, [lab, opts]]) => `<label class="f">${lab}<select data-k="${k}" class="tk">${opts.map((o, i) => `<option value="${i}" ${i === (tt.tactic[k] ?? 1) ? 'selected' : ''}>${o}</option>`).join('')}</select></label>`).join('')}<label class="f">Ofsayt tuzağı<select data-k="trap" class="tk"><option value="0" ${!tt.tactic.trap ? 'selected' : ''}>Kapalı</option><option value="1" ${tt.tactic.trap ? 'selected' : ''}>Açık</option></select></label></div><p>Doktrin seçince talimatlar doktrinin varsayılanına döner; sonra tek tek değiştir. Ana taktikten iki kademe sapma taktik kapasite verimini düşürür (doktrin bedeli).</p>`;
   } else {
     right += `<h3>Görev kartları ve kurallar</h3><p>Oyuncu başına görev (rolün üstüne yazar):</p>
-        ${t.players.filter((p) => p.pos !== 'GK').map((p) => { const d = (tt.duties || {})[p.num] || {}; return `<div class="row" style="padding:4px 0;border-bottom:1px solid var(--line)"><span style="min-width:110px"><b>${p.num}</b> ${esc(p.name)} <span class="muted">${POS_TR[p.pos]}</span></span>
-          <select class="du" data-n="${p.num}" data-k="runs"><option value="">Koşu: rol</option><option value="0" ${d.runs === 0 ? 'selected' : ''}>Geride kal</option><option value="1" ${d.runs === 1 ? 'selected' : ''}>Ayağa</option><option value="2" ${d.runs === 2 ? 'selected' : ''}>Derin koşu</option></select>
-          <select class="du" data-n="${p.num}" data-k="press"><option value="">Pres: rol</option><option value="0" ${d.press === 0 ? 'selected' : ''}>Blokta kal</option><option value="1" ${d.press === 1 ? 'selected' : ''}>Normal</option><option value="2" ${d.press === 2 ? 'selected' : ''}>İlk basan</option></select>
-          <select class="du" data-n="${p.num}" data-k="pass"><option value="">Pas: rol</option><option value="0" ${d.pass === 0 ? 'selected' : ''}>Kısa</option><option value="1" ${d.pass === 1 ? 'selected' : ''}>Karışık</option><option value="2" ${d.pass === 2 ? 'selected' : ''}>Uzun</option></select>
-          <select class="du" data-n="${p.num}" data-k="mark"><option value="">Marke: alan</option><option value="1" ${d.mark === 1 ? 'selected' : ''}>Adam</option></select>
-          ${p.pos === 'FB' ? `<select class="du" data-n="${p.num}" data-k="overlap"><option value="">Bindirme: takım</option><option value="0" ${d.overlap === 0 ? 'selected' : ''}>Kal</option><option value="2" ${d.overlap === 2 ? 'selected' : ''}>Bindir</option></select>` : ''}</div>`; }).join('')}
+        ${t.players.filter((p) => p.pos !== 'GK').map((p) => { const d = (tt.duties || {})[p.id] || {}; return `<div class="row" style="padding:4px 0;border-bottom:1px solid var(--line)"><span style="min-width:110px"><b>${p.num}</b> ${esc(p.name)} <span class="muted">${POS_TR[p.pos]}</span></span>
+          <select class="du" data-n="${p.id}" data-k="runs"><option value="">Koşu: rol</option><option value="0" ${d.runs === 0 ? 'selected' : ''}>Geride kal</option><option value="1" ${d.runs === 1 ? 'selected' : ''}>Ayağa</option><option value="2" ${d.runs === 2 ? 'selected' : ''}>Derin koşu</option></select>
+          <select class="du" data-n="${p.id}" data-k="press"><option value="">Pres: rol</option><option value="0" ${d.press === 0 ? 'selected' : ''}>Blokta kal</option><option value="1" ${d.press === 1 ? 'selected' : ''}>Normal</option><option value="2" ${d.press === 2 ? 'selected' : ''}>İlk basan</option></select>
+          <select class="du" data-n="${p.id}" data-k="pass"><option value="">Pas: rol</option><option value="0" ${d.pass === 0 ? 'selected' : ''}>Kısa</option><option value="1" ${d.pass === 1 ? 'selected' : ''}>Karışık</option><option value="2" ${d.pass === 2 ? 'selected' : ''}>Uzun</option></select>
+          <select class="du" data-n="${p.id}" data-k="mark"><option value="">Marke: alan</option><option value="1" ${d.mark === 1 ? 'selected' : ''}>Adam</option></select>
+          ${p.pos === 'FB' ? `<select class="du" data-n="${p.id}" data-k="overlap"><option value="">Bindirme: takım</option><option value="0" ${d.overlap === 0 ? 'selected' : ''}>Kal</option><option value="2" ${d.overlap === 2 ? 'selected' : ''}>Bindir</option></select>` : ''}</div>`; }).join('')}
         <p style="margin-top:10px">Koşullu kurallar (en çok 4):</p>
         <div class="row">${RULE_TEMPLATES.map((r) => `<label class="tag" style="cursor:pointer;padding:6px 10px"><input type="checkbox" class="rl" value="${r.id}" ${(tt.rules || []).includes(r.id) ? 'checked' : ''}> ${r.label}</label>`).join('')}</div>`;
   }
@@ -7439,7 +7475,7 @@ SCREENS.tactics = (c) => { const tt = APP.db.team; const level = c.level || 'eas
     $('lvl').onclick = (e) => { const b = e.target.closest('button'); if (b) go('tactics', { ...c, level: b.dataset.l }, false); };
     $('shp').onclick = (e) => { const b = e.target.closest('button'); if (b) go('tactics', { ...c, shape: b.dataset.s }, false); };
     const rs = $('shReset'); if (rs) rs.onclick = () => { if (show === 'def') delete APP.db.team.shapeDef; else delete APP.db.team.shapeAtt; dbSave(); go('tactics', { ...c }, false); };
-    const lb = $('shLoadBtn'); if (lb) lb.onclick = () => { const f = $('shLoad').value; const tt2 = APP.db.team; if (show === 'def') { tt2.formation = f; delete tt2.shapeDef; } else { tt2.formationAtt = f; delete tt2.shapeAtt; } dbSave(); toast(f + ' yüklendi; oyuncuları sürükleyebilirsin'); go('tactics', { ...c }, false); };
+    const lb = $('shLoadBtn'); if (lb) lb.onclick = () => { const f = $('shLoad').value; const tt2 = APP.db.team; if (show === 'def') { if (f !== tt2.formation && Array.isArray(tt2.lineup)) tt2.lineup = reslot(tt2.lineup, FORM_POS[f]); tt2.formation = f; delete tt2.shapeDef; } else { tt2.formationAtt = f; delete tt2.shapeAtt; } dbSave(); toast(f + ' yüklendi; oyuncuları sürükleyebilirsin'); go('tactics', { ...c }, false); };
     if (level === 'deep') {
       // serbest surukleme: dot'lar sahada; birakinca cerceve koordinati (0..105, 0..68) kaydedilir (anlik; Kaydet gereksiz)
       const mini = $('mini'); let drag = null;
@@ -7454,7 +7490,7 @@ SCREENS.tactics = (c) => { const tt = APP.db.team; const level = c.level || 'eas
       if (level !== 'deep') {
         const nf = $('tForm').value, nfa = $('tFormAtt').value, nd = $('tDoc').value;
         const docChanged = nd !== tt2.doctrine;
-        if (nf !== tt2.formation) { delete tt2.shapeDef; } if (nfa !== (tt2.formationAtt || tt2.formation) || docChanged) { delete tt2.shapeAtt; }
+        if (nf !== tt2.formation) { delete tt2.shapeDef; if (Array.isArray(tt2.lineup)) tt2.lineup = reslot(tt2.lineup, FORM_POS[nf]); } if (nfa !== (tt2.formationAtt || tt2.formation) || docChanged) { delete tt2.shapeAtt; }
         tt2.formation = nf; tt2.formationAtt = nfa; tt2.doctrine = nd;
         if (level === 'easy') tt2.tactic = { ...DOCTRINES[nd].tactic, compact: +$('tCompact').value };
         else { if (docChanged) tt2.tactic = { ...DOCTRINES[nd].tactic }; for (const s of document.querySelectorAll('.tk')) tt2.tactic[s.dataset.k] = +s.value; }
@@ -7492,7 +7528,7 @@ function appInit() {
 window.addEventListener('hashchange', () => { if (location.hash !== '#dev') { document.body.classList.add('app'); render(); } });
 appInit();
 </script>
-<div class="dev">demo · sürüm 01.11 20:40 · <a href="#dev" style="color:inherit" onclick="document.body.classList.remove('app')">geliştirici</a></div>
+<div class="dev">demo · sürüm 01.11 21:00 · <a href="#dev" style="color:inherit" onclick="document.body.classList.remove('app')">geliştirici</a></div>
 
 </body>
 </html>

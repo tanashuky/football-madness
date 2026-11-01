@@ -772,9 +772,11 @@ export function doctrinePenalty(t: TeamIn): number {
 export function validateTeam(t: TeamIn, label: string) {
   if (!FORMATIONS[t.formation]) throw new Error(`${label}: bilinmeyen formasyon ${t.formation}`);
   if (!t.players || t.players.length !== 11) throw new Error(`${label}: ilk 11 ${t.players ? t.players.length : 0} oyuncu`);
+  // forma numarasi: 1-99 tam sayi, takimda (ilk 11 + yedekler) benzersiz; dizilimde rolu yok, motor icinde kimlik olarak kullanilir
   const nums = new Set<number>();
-  t.players.forEach((p, i) => {
-    if (!p || !Number.isFinite(p.gg) || !Number.isFinite(p.num) || !p.pos) throw new Error(`${label}: ${i + 1}. slotta gecersiz oyuncu (${p ? JSON.stringify({ num: p.num, gg: p.gg, pos: p.pos }) : 'yok'})`);
+  const all = [...t.players, ...(t.bench ?? [])];
+  all.forEach((p, i) => {
+    if (!p || !Number.isFinite(p.gg) || !Number.isInteger(p.num) || p.num < 1 || p.num > 99 || !p.pos) throw new Error(`${label}: ${i < 11 ? i + 1 + '. slotta' : 'yedekte'} gecersiz oyuncu (${p ? JSON.stringify({ num: p.num, gg: p.gg, pos: p.pos }) : 'yok'})`);
     if (nums.has(p.num)) throw new Error(`${label}: forma numarasi ${p.num} iki kez`);
     nums.add(p.num);
   });
