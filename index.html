@@ -290,6 +290,14 @@ const P = {
     kickMax: 30, // en sert vurus (m/s)
     ctrlSpeed: 19, // bu hizin ustundeki top ayakla kontrol edilemez: sekerek uzaklasir (blok)
     reach: 0.9, // oyuncunun topa ulasma yaricapi (m)
+    gkHoldR: 6, // elinde top tutan kaleciye rakip yaklasma mesafesi (m)
+    rotGain: 6, // rotasyon: kaydirma icin gereken toplam mesafe kazanci (m)
+    rotDelay: 0.6, // rotasyon kararinin uygulanma gecikmesi (s, U 100)
+    rotBackDelay: 0.3, // top kaybinda tabana donus gecikmesi (s, U 100)
+    rotPeriod: 7, // etkin rotasyon: en az bu kadar sure sonra yeni cevirme (s)
+    rotProb: 0.5, // etkin rotasyon: periyot dolunca her 0,5 s kontrolde cevirme olasiligi
+    rotHold: 6, // cevirmeden sonra tepkisel (mesafe) kuralin beklemesi (s)
+    gkHandVz: 7, // elden uzun vurusun en az dikey hizi (m/s)
     headZ: [1.2, 2.35], // kafa/gogus yuksekligi araligi (m): bunun ustu kimseye ulasmaz
     gkReach: 1.4, // kalecinin topa ulasma yaricapi (m); dalista uzar
     gkDive: 2.4, // kalecinin sut aninda en fazla uzanma (m)
@@ -772,6 +780,21 @@ function validateTeam(t, label) {
         if (sh && (sh.length !== 11 || sh.some((q) => !q || !Number.isFinite(q[0]) || !Number.isFinite(q[1]))))
             throw new Error(`${label}: ${k} bozuk`);
     }
+    if (t.tactic.rotations) {
+        const xi = new Set(t.players.map((p) => p.num));
+        const seen = new Set();
+        for (const c of t.tactic.rotations) {
+            if (!Array.isArray(c) || c.length < 2 || c.length > 6)
+                throw new Error(`${label}: rotasyon döngüsü 2–6 oyuncu olmalı`);
+            for (const n of c) {
+                if (!xi.has(n))
+                    throw new Error(`${label}: rotasyonda ilk 11'de olmayan oyuncu (${n})`);
+                if (seen.has(n))
+                    throw new Error(`${label}: ${n} numara birden çok rotasyonda`);
+                seen.add(n);
+            }
+        }
+    }
 }
 function createMatch(a0, b0, seed, opts) {
     validateTeam(a0, a0.name ?? 'A');
@@ -875,6 +898,8 @@ function createMatch(a0, b0, seed, opts) {
         adaptUntil: [-1, -1],
         tacticChanges: [0, 0],
         phase: [0, 0],
+        rot: [[], []],
+        rotHome: new Map(),
         reads: [null, null],
         zoneShots: [[0, 0, 0], [0, 0, 0]],
         zoneEntries: [[0, 0, 0], [0, 0, 0]],
@@ -911,6 +936,9 @@ function createMatch(a0, b0, seed, opts) {
         seed,
         dt: P.dt,
     };
+    for (const sd of [0, 1])
+        if (st.teams[sd].tactic.rotations)
+            setRotations(st, sd, st.teams[sd].tactic.rotations);
     kickoff(st, 0);
     return st;
 }
@@ -982,6 +1010,132 @@ const s_stats = (st, side) => st.stats[side];
 // etkin taktik kapasite: uyum suresinde -10
 const NO_DUTY = {};
 function dutyOf(st, p) { return st.teams[p.side].duties?.[p.num] ?? NO_DUTY; }
+function setRotations(st, side, cycles) {
+    const t = st.teams[side];
+    t.tactic = { ...t.tactic, rotations: cycles && cycles.length ? cycles.map((c) => [...c]) : undefined };
+    const live = st.players.filter((p) => p.side === side && !p.off);
+    const used = new Set();
+    st.rot[side] = [];
+    for (const c of cycles ?? []) {
+        const ps = [];
+        for (const n of c) {
+            const p = live.find((q) => q.num === n);
+            if (p && !used.has(p) && p.pos !== 'GK') {
+                ps.push(p);
+                used.add(p);
+            }
+        }
+        if (ps.length >= 2)
+            st.rot[side].push({ players: ps, shift: 0, pending: null, pendingAt: 0, lastT: -99 });
+    }
+    applyRot(st, side);
+}
+function applyRot(st, side) {
+    for (const [p, q] of [...st.rotHome])
+        if (p.side === side)
+            st.rotHome.delete(p);
+    for (const r of st.rot[side]) {
+        const n = r.players.length;
+        for (let i = 0; i < n; i++) {
+            const q = r.players[(i + r.shift) % n];
+            if (q !== r.players[i])
+                st.rotHome.set(r.players[i], q);
+        }
+    }
+}
+function rotHomeOf(st, p) { return st.rotHome.get(p) ?? p; }
+function rotStep(st) {
+    for (let s = 0; s < 2; s = (s + 1)) {
+        const rs = st.rot[s];
+        if (!rs.length)
+            continue;
+        const t = st.teams[s];
+        const ph = st.phase[s];
+        const dead = st.t < st.restartUntil || !!st.pending;
+        const inPoss = st.owner ? st.owner.side === s : st.lastPossSide === s;
+        let changed = false;
+        for (const r of rs) {
+            const n = r.players.length;
+            if (r.players.some((p) => p.off)) { // degisiklik: cikan oyuncunun yerine gireni koy
+                for (let i = 0; i < n; i++)
+                    if (r.players[i].off) {
+                        const rep = st.players.find((q) => q.side === s && !q.off && q.idx === r.players[i].idx);
+                        if (rep)
+                            r.players[i] = rep;
+                    }
+                if (r.players.some((p) => p.off)) {
+                    r.shift = 0;
+                    r.pending = null;
+                    changed = true;
+                    continue;
+                }
+            }
+            let target = r.shift;
+            if (dead) {
+                target = 0;
+                if (r.shift !== 0) {
+                    r.shift = 0;
+                    r.pending = null;
+                    changed = true;
+                    dbg('rotasyon_sifir_olutop');
+                }
+                continue;
+            }
+            if (inPoss && ph > 0.6) {
+                // en az toplam mesafeli dairesel kaydirma (mevcut kaydirmaya P.rotGain m histerezis)
+                const cost = (k) => { let c = 0; for (let i = 0; i < n; i++) {
+                    const q = r.players[(i + k) % n];
+                    const [hx, hy] = fromFrame(s, q.ax + (q.ox - q.ax) * ph, q.ay + (q.oy - q.ay) * ph);
+                    c += hyp(r.players[i].x - hx, r.players[i].y - hy);
+                } return c; };
+                let best = r.shift, bc = cost(r.shift) - P.rotGain;
+                if (st.t - r.lastT > P.rotHold)
+                    for (let k = 0; k < n; k++) {
+                        if (k === r.shift)
+                            continue;
+                        const c = cost(k);
+                        if (c < bc) {
+                            bc = c;
+                            best = k;
+                        }
+                    } // yeni cevirmeden sonra oyuncular yeni evlere varana kadar tepkisel kural beklemez
+                target = best;
+                // etkin rotasyon: top rakip yarida ve donguye yakinken, P.rotPeriod s'de bir donguyu bir adim cevir (markaji dagitir);
+                // tasiyici dongudeyse beklenir
+                if (target === r.shift && st.t - r.lastT > P.rotPeriod && r.pending === null) {
+                    const [bxf] = toFrame(s, st.ball.x, st.ball.y);
+                    const nearBall = r.players.some((p) => hyp(p.x - st.ball.x, p.y - st.ball.y) < 30);
+                    const carrierIn = st.owner ? r.players.includes(st.owner) : false;
+                    if (bxf > 55 && nearBall && !carrierIn && st.rng() < P.rotProb)
+                        target = (r.shift + 1) % n;
+                }
+                if (target === r.shift && r.pending !== null && r.pending !== 0)
+                    target = r.pending; // verilen karar hucum surdukce gecerli
+            }
+            else if (!inPoss || ph < 0.4)
+                target = 0;
+            if (target === r.shift) {
+                r.pending = null;
+                continue;
+            }
+            if (r.pending !== target) {
+                r.pending = target;
+                const slow = 1 + Math.max(0, 100 - t.U) / 60; // U 100 -> 1x, U 60 -> 1.67x, U 40 -> 2x
+                r.pendingAt = st.t + (target === 0 ? P.rotBackDelay : P.rotDelay) * slow;
+            }
+            else if (st.t >= r.pendingAt) {
+                r.shift = target;
+                r.pending = null;
+                changed = true;
+                r.lastT = st.t;
+                dbg(target === 0 ? 'rotasyon_eve' : 'rotasyon');
+                st.events.push({ t: st.clock, type: 'adjust', side: s, text: target === 0 ? 'rotasyon eve' : 'rotasyon' });
+            }
+        }
+        if (changed)
+            applyRot(st, s);
+    }
+}
 function setDuty(st, side, num, d) { const t = st.teams[side]; t.duties = { ...(t.duties ?? {}), [num]: { ...(t.duties?.[num] ?? {}), ...d } }; }
 function tEff(st, side) {
     return st.teams[side].T - (st.clock < st.adaptUntil[side] ? 10 : 0);
@@ -1490,7 +1644,9 @@ function updateAnchorsAndMove(st) {
     const carrier = st.owner;
     // tum hareketler once hesaplanir, sonra birlikte uygulanir: islem sirasi bir tarafa avantaj vermez
     const moves = new Map();
-    const guard = restartGuard(st);
+    // elinde top tutan kaleci: rakip P.gkHoldR m'den yakina gelmez, pres yapmaz (gercekte de kimse eldeki topa basmaz; pas yollarini kapatir)
+    const gkHoldGuard = carrier && carrier.pos === 'GK' && !st.gkFeet && toFrame(carrier.side, carrier.x, carrier.y)[0] < 16.5 ? { side: carrier.side, r: P.gkHoldR, x: carrier.x, y: carrier.y } : null;
+    const guard = restartGuard(st) ?? gkHoldGuard;
     // sahipsiz / yolda top: her takimdan topa en erken yetisebilecek oyuncular topa kosar (hedeflenen alici her zaman)
     const chase = new Map();
     const loose = !carrier && !st.pending && !st.celebrate && st.t >= st.restartUntil;
@@ -1562,7 +1718,7 @@ function updateAnchorsAndMove(st) {
         // savunma hatti derinligi esas olarak topsuz oyunda gecerlidir; topa sahipken takim yine ileri cikar
         // sekil fazi: topu kazaninca hucum sekline, kaybedince savunma sekline kademeli gecis (2-4 s; iki sekil uzaksa ve uyum dusukse daha yavas)
         const shp = shapesOf(t);
-        const trans = P.shapeTrans > 0 ? clamp(P.shapeTrans + shapeDist(shp.def, shp.att) / 8, P.shapeTrans, P.shapeTrans * 2) * (1 + Math.max(0, 60 - t.U) / 100) : 1e-6;
+        const trans = P.shapeTrans > 0 ? clamp(P.shapeTrans + shapeDist(shp.def, shp.att) / 8, P.shapeTrans, P.shapeTrans * 2) * clamp(1 + (60 - t.U) / 100, 0.7, 1.4) : 1e-6; // uyum: U 100 -> 0,7x (hizli gecis), U 60 -> 1x, U 40 -> 1,2x
         // duran top beklenirken topu kullanacak takim hucum sekline, digeri savunma sekline gecer (eskiden son sahiplik esas alindigi icin
         // tac/serbest vurus kullanacak takim savunma seklinde bekliyordu)
         const restartSide = st.pending ? st.pending.side : (st.restartTaker && st.owner === st.restartTaker ? st.restartTaker.side : null);
@@ -1584,7 +1740,7 @@ function updateAnchorsAndMove(st) {
         // baskida en yakin 1-2 oyuncu topa gider
         const pressers = [];
         const deadBall = st.t < st.restartUntil; // yeniden baslatma bekleniyor: rakip 9,15 m uzakta durur, pres yok
-        if (!inPoss && !deadBall && carrier && st.restartTaker !== carrier) { // duran topu kullanacak oyuncuya pres yok (Kural 13-17 mesafe)
+        if (!inPoss && !deadBall && carrier && st.restartTaker !== carrier && !gkHoldGuard) { // duran topu kullanacak oyuncuya pres yok (Kural 13-17 mesafe)
             const tx = carrier.x;
             const ty = carrier.y;
             // gorev karti: ilk basan 6 m yakin sayilir, blokta kalan yalniz 5 m icindeyse basar
@@ -1681,8 +1837,9 @@ function updateAnchorsAndMove(st) {
             }
             else {
                 // ev: savunma ve hucum sekli arasinda faza gore
-                let ax = p.ax + (p.ox - p.ax) * ph;
-                let ay = p.ay + (p.oy - p.ay) * ph;
+                const hm = st.rotHome.get(p) ?? p; // rotasyonda baskasinin evi
+                let ax = hm.ax + (hm.ox - hm.ax) * ph;
+                let ay = hm.ay + (hm.oy - hm.ay) * ph;
                 // 3'lu savunmada kanat bekleri topsuz oyunda savunmaya donup 5'li hat olusturur
                 if (!inPoss && threeBack && p.pos === 'FB')
                     ax -= 13 * (1 - ph);
@@ -2068,6 +2225,8 @@ function setTactic(st, side, patch, formation) {
             p.pos = pos[p.idx];
         }
     }
+    if (formChange || patch.rotations !== undefined)
+        setRotations(st, side, patch.rotations ?? t.tactic.rotations);
     st.tacticChanges[side]++;
     st.adaptUntil[side] = st.clock + P.adaptMin * 60;
     st.events.push({ t: st.clock, type: 'tactic', side, text: formation ?? '' });
@@ -2514,6 +2673,8 @@ function step(st) {
         if (!p.off)
             p.k = Math.max(0, p.k - (p.kDrop * famK[p.side] * dt * P.clockRate * rest) / 60);
     rulesStep(st);
+    if (Math.round(st.t / st.dt) % Math.max(1, Math.round(0.5 / st.dt)) === 0)
+        rotStep(st);
     thinkStep(st);
     injuryRoll(st);
     if (st.owner)
@@ -4080,6 +4241,14 @@ function kickBall(st, p, dx, dy, speed, vz, sw, kind, o = {}) {
     b.fromRestart = b.noTouch ? (st.takerKind || st.restartKind || 'restart') : undefined;
     if (p.pos === 'GK' && hyp(b.vx, b.vy) > 17)
         st.ruleSt[p.side === 0 ? 1 : 0].gkLongT = st.t; // rakip kaleci uzun vurdu (kural tetigi)
+    if (p.pos === 'GK' && !st.gkFeet && !b.noTouch && toFrame(p.side, p.x, p.y)[0] < 16.5) {
+        // elden vurus / atis: top el yuksekliginden cikar; uzun vurusta (degaj) en az P.gkHandVz dikligi: 6 m'de kafa yuksekligini asar
+        b.z = Math.max(b.z, 1.0);
+        const spH = hyp(b.vx, b.vy);
+        if (spH > 12)
+            b.vz = Math.max(b.vz, P.gkHandVz);
+        dbg('kaleci_elden');
+    }
     if (b.noTouch && st.takerKind === 'throw') {
         // tac: top elle, bas ustunden atilir; en cok ~25 m, hafif yukselen
         b.z = 2.0;
@@ -7093,6 +7262,9 @@ body.app.play #app { display: none; }
 #app .pitchmini::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; border-left: 2px solid rgba(233,239,233,.5); }
 #app .pitchmini .dot { touch-action: none; position: absolute; width: 26px; height: 26px; margin: -13px 0 0 -13px; border-radius: 50%; border: 2px solid #fff; display: flex; align-items: center; justify-content: center; font: 700 11px/1 var(--font-display); color: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.5); }
 #app .pitchmini .dot.att { opacity: .55; border-style: dashed; }
+#app .pitchmini svg.rot { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+#app .pitchmini .dot.inrot { box-shadow: 0 0 0 3px var(--warn), 0 1px 3px rgba(0,0,0,.5); }
+#app .pitchmini.rotmode .dot { cursor: pointer; }
 #app .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
 #app .toast { position: fixed; left: 50%; bottom: 76px; transform: translateX(-50%); background: rgba(10,12,16,.92); color: var(--chalk); border: 1px solid var(--line); padding: 10px 14px; border-radius: 10px; font-size: 13px; z-index: 850; }
 #app .center { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100%; gap: 14px; text-align: center; }
@@ -7192,7 +7364,8 @@ function userTeamIn() {
   // gorev kartlari: kimlikten o anki forma numarasina (motor numara ile calisir)
   const duties = {}; for (const [id, d] of Object.entries(tt.duties || {})) { const p = byId[id]; if (p) duties[p.num] = d; }
   const sh = userShapes(tt);
-  t.tactic = { ...tt.tactic, doctrine: tt.doctrine, shapeDef: sh.def, shapeAtt: sh.att };
+  const rotations = (tt.rotations || []).map((c) => c.filter((id) => tt.lineup.includes(id) && byId[id]).map((id) => byId[id].num)).filter((c) => c.length >= 2);
+  t.tactic = { ...tt.tactic, doctrine: tt.doctrine, shapeDef: sh.def, shapeAtt: sh.att, rotations: rotations.length ? rotations : undefined };
   t.mainTactic = { ...tt.tactic, doctrine: tt.doctrine };
   t.duties = duties;
   t.rules = (tt.rules || []).map((id) => RULE_TEMPLATES.find((r) => r.id === id)).filter(Boolean);
@@ -7481,7 +7654,15 @@ function userShapes(tt) {
 SCREENS.tactics = (c) => { const tt = APP.db.team; const level = c.level || 'easy'; const t = userTeamIn(); const show = c.shape || 'def'; const sh = userShapes(tt);
   const shape = show === 'def' ? sh.def : sh.att;
   const dots = shape.map(([x, y], i) => `<div class="dot ${show === 'att' ? 'att' : ''}" data-i="${i}" style="left:${x / 105 * 100}%;top:${y / 68 * 100}%;background:${t.color}">${t.players[i].num}</div>`).join('');
-  const shapeCard = `<div class="card"><h3>Şekil <small>${show === 'def' ? 'savunma (topsuz)' : 'hücum (toplu)'}${level === 'deep' ? ' · sürükle' : ''}</small></h3><div class="pitchmini" id="mini">${dots}</div><div class="row"><div class="seg" id="shp"><button aria-pressed="${show === 'def'}" data-s="def">Savunma şekli</button><button aria-pressed="${show === 'att'}" data-s="att">Hücum şekli</button></div></div>${level === 'deep' ? `<div class="row"><label class="f">Hazır şekil<select id="shLoad">${FORMATION_LIST.map((f) => `<option ${f === (show === 'def' ? tt.formation : (tt.formationAtt || tt.formation)) ? 'selected' : ''}>${f}</option>`).join('')}</select></label><button class="btn sm" id="shLoadBtn">Yükle, sonra sürükle</button><button class="btn sm ghost" id="shReset">Sıfırla</button></div>` : ''}<p>${level === 'deep' ? 'Oyuncuyu sürükle; iki şekil ayrı ayrı kaydedilir. Kaleci sol tarafta kalır. Şekil ne kadar cesursa geçiş o kadar uzun sürer ve arkada boşluk kalır.' : 'Hücum şekli seçilen formasyon ve doktrinden türetilir; Derin seviyede elle çizilir.'}</p></div>`;
+  const rotMode = level === 'deep' && !!c.rot; const curRot = (c.rot && c.rot.cur) || [];
+  const idOf = (i) => tt.lineup[i], idxOf = (id) => tt.lineup.indexOf(id);
+  const arrow = (a, b, dashed) => { const [x1, y1] = shape[a], [x2, y2] = shape[b]; const dx = x2 - x1, dy = y2 - y1, d = Math.hypot(dx, dy) || 1; const sx = x1 + dx / d * 2.2, sy = y1 + dy / d * 2.2, ex = x2 - dx / d * 2.6, ey = y2 - dy / d * 2.6; return `<line x1="${sx}" y1="${sy}" x2="${ex}" y2="${ey}" stroke="${dashed ? 'var(--warn)' : '#fff'}" stroke-width="0.7" ${dashed ? 'stroke-dasharray="1.5 1"' : ''} marker-end="url(#ah)"/>`; };
+  let rotSvg = '';
+  if (level === 'deep') { const parts = []; for (const cyc of tt.rotations || []) { const ix = cyc.map(idxOf).filter((i) => i >= 0); for (let k = 0; k < ix.length; k++) parts.push(arrow(ix[k], ix[(k + 1) % ix.length], false)); } const ci = curRot.map(idxOf).filter((i) => i >= 0); for (let k = 0; k + 1 < ci.length; k++) parts.push(arrow(ci[k], ci[k + 1], true)); rotSvg = `<svg class="rot" viewBox="0 0 105 68" preserveAspectRatio="none"><defs><marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#fff"/></marker></defs>${parts.join('')}</svg>`; }
+  const inRot = new Set([...(tt.rotations || []).flat(), ...curRot]);
+  const dots2 = level === 'deep' ? shape.map(([x, y], i) => `<div class="dot ${show === 'att' ? 'att' : ''} ${inRot.has(idOf(i)) ? 'inrot' : ''}" data-i="${i}" style="left:${x / 105 * 100}%;top:${y / 68 * 100}%;background:${t.color}">${t.players[i].num}</div>`).join('') : dots;
+  const rotList = level === 'deep' ? `<div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px">${(tt.rotations || []).map((cyc, k) => `<span class="tag">↻ ${cyc.map((id) => { const i = idxOf(id); return i >= 0 ? t.players[i].num : '?'; }).join(' → ')} <button class="btn sm ghost rotDel" data-k="${k}" style="padding:0 6px;margin-left:4px">×</button></span>`).join('')}${rotMode ? `<span class="muted">${curRot.length ? `Seçildi: ${curRot.map((id) => t.players[idxOf(id)].num).join(' → ')} · ilk oyuncuya tekrar dokun ya da Kapat` : 'Sırayla oyunculara dokun (A → B → C …)'}</span> ${curRot.length >= 2 ? '<button class="btn sm" id="rotClose">Döngüyü kapat</button>' : ''}<button class="btn sm ghost" id="rotCancel">Vazgeç</button>` : `<button class="btn sm ghost" id="rotStart">Rotasyon çiz</button>`}</div>` : '';
+  const shapeCard = `<div class="card"><h3>Şekil <small>${show === 'def' ? 'savunma (topsuz)' : 'hücum (toplu)'}${level === 'deep' ? (rotMode ? ' · rotasyon: oyunculara dokun' : ' · sürükle') : ''}</small></h3><div class="pitchmini ${rotMode ? 'rotmode' : ''}" id="mini">${rotSvg}${dots2}</div>${rotList}<div class="row"><div class="seg" id="shp"><button aria-pressed="${show === 'def'}" data-s="def">Savunma şekli</button><button aria-pressed="${show === 'att'}" data-s="att">Hücum şekli</button></div></div>${level === 'deep' ? `<div class="row"><label class="f">Hazır şekil<select id="shLoad">${FORMATION_LIST.map((f) => `<option ${f === (show === 'def' ? tt.formation : (tt.formationAtt || tt.formation)) ? 'selected' : ''}>${f}</option>`).join('')}</select></label><button class="btn sm" id="shLoadBtn">Yükle, sonra sürükle</button><button class="btn sm ghost" id="shReset">Sıfırla</button></div>` : ''}<p>${level === 'deep' ? 'Oyuncuyu sürükle; iki şekil ayrı ayrı kaydedilir. Kaleci sol tarafta kalır. Şekil ne kadar cesursa geçiş o kadar uzun sürer ve arkada boşluk kalır. Rotasyon: A → B → C döngüsü çiz; hücumda yer değiştirirler (A, B bölgesine girince B C bölgesine, C A bölgesine kayar), top kaybında eve dönerler — dönüş hızı uyuma bağlıdır, uyumsuz takım terste kalır.' : 'Hücum şekli seçilen formasyon ve doktrinden türetilir; Derin seviyede elle çizilir.'}</p></div>`;
   let right = '';
   if (level !== 'deep') {
     right += `<h3>${level === 'easy' ? 'Preset <small>tek seçim</small>' : 'Şekiller ve talimatlar'}</h3>
@@ -7509,6 +7690,16 @@ SCREENS.tactics = (c) => { const tt = APP.db.team; const level = c.level || 'eas
     const rs = $('shReset'); if (rs) rs.onclick = () => { if (show === 'def') delete APP.db.team.shapeDef; else delete APP.db.team.shapeAtt; dbSave(); go('tactics', { ...c }, false); };
     const lb = $('shLoadBtn'); if (lb) lb.onclick = () => { const f = $('shLoad').value; const tt2 = APP.db.team; if (show === 'def') { if (f !== tt2.formation && Array.isArray(tt2.lineup)) tt2.lineup = reslot(tt2.lineup, FORM_POS[f]); tt2.formation = f; delete tt2.shapeDef; } else { tt2.formationAtt = f; delete tt2.shapeAtt; } dbSave(); toast(f + ' yüklendi; oyuncuları sürükleyebilirsin'); go('tactics', { ...c }, false); };
     if (level === 'deep') {
+      const rs = $('rotStart'); if (rs) rs.onclick = () => go('tactics', { ...c, rot: { cur: [] } }, false);
+      const rc = $('rotCancel'); if (rc) rc.onclick = () => { const c2 = { ...c }; delete c2.rot; go('tactics', c2, false); };
+      const rk = $('rotClose'); if (rk) rk.onclick = () => { const tt2 = APP.db.team; tt2.rotations = [...(tt2.rotations || []), curRot]; dbSave(); const c2 = { ...c }; delete c2.rot; toast('Rotasyon kaydedildi'); go('tactics', c2, false); };
+      for (const b of document.querySelectorAll('.rotDel')) b.onclick = () => { const tt2 = APP.db.team; tt2.rotations = (tt2.rotations || []).filter((_, k) => k !== +b.dataset.k); dbSave(); go('tactics', { ...c }, false); };
+      if (rotMode) {
+        $('mini').addEventListener('click', (ev) => { const d = ev.target.closest('.dot'); if (!d) return; const i = +d.dataset.i; const id = idOf(i); if (t.players[i].pos === 'GK') { toast('Kaleci rotasyona giremez'); return; } if ((tt.rotations || []).flat().includes(id)) { toast('Bu oyuncu zaten bir döngüde'); return; }
+          if (curRot.length >= 2 && id === curRot[0]) { const tt2 = APP.db.team; tt2.rotations = [...(tt2.rotations || []), curRot]; dbSave(); const c2 = { ...c }; delete c2.rot; toast('Rotasyon kaydedildi'); go('tactics', c2, false); return; }
+          if (curRot.includes(id)) return; if (curRot.length >= 6) { toast('En çok 6 oyuncu'); return; }
+          go('tactics', { ...c, rot: { cur: [...curRot, id] } }, false); });
+      } else {
       // serbest surukleme: dot'lar sahada; birakinca cerceve koordinati (0..105, 0..68) kaydedilir (anlik; Kaydet gereksiz)
       const mini = $('mini'); let drag = null;
       const toFrameXY = (ev) => { const r = mini.getBoundingClientRect(); return [Math.max(2, Math.min(103, (ev.clientX - r.left) / r.width * 105)), Math.max(2, Math.min(66, (ev.clientY - r.top) / r.height * 68))]; };
@@ -7516,6 +7707,7 @@ SCREENS.tactics = (c) => { const tt = APP.db.team; const level = c.level || 'eas
       mini.addEventListener('pointermove', (ev) => { if (!drag) return; const [x, y] = toFrameXY(ev); drag.style.left = (x / 105 * 100) + '%'; drag.style.top = (y / 68 * 100) + '%'; });
       const drop = (ev) => { if (!drag) return; const i = +drag.dataset.i; const [x0, y0] = toFrameXY(ev); const x = i === 0 ? Math.min(x0, 14) : x0, y = y0; const key = show === 'def' ? 'shapeDef' : 'shapeAtt'; const cur = (APP.db.team[key] || (show === 'def' ? sh.def : sh.att)).map((q) => [q[0], q[1]]); cur[i] = [Math.round(x * 10) / 10, Math.round(y * 10) / 10]; APP.db.team[key] = cur; dbSave(); drag = null; };
       mini.addEventListener('pointerup', drop); mini.addEventListener('pointercancel', () => { drag = null; });
+      }
     }
     $('tSave').onclick = () => {
       const tt2 = APP.db.team;
@@ -7562,7 +7754,7 @@ function appInit() {
 window.addEventListener('hashchange', () => { if (location.hash !== '#dev') { document.body.classList.add('app'); render(); } });
 appInit();
 </script>
-<div class="dev">demo · sürüm 01.11 21:58 · <a href="#dev" style="color:inherit" onclick="document.body.classList.remove('app')">geliştirici</a></div>
+<div class="dev">demo · sürüm 01.11 23:08 · <a href="#dev" style="color:inherit" onclick="document.body.classList.remove('app')">geliştirici</a></div>
 
 </body>
 </html>

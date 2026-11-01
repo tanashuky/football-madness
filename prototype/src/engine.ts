@@ -34,6 +34,7 @@ export interface TacticIn {
   doctrine?: Doctrine; // oyun anlayisi: eksik alanlari doldurur ve hucum seklinin cesaretini belirler
   shapeDef?: Shape; // savunma sekli (topsuz); yoksa formasyondan
   shapeAtt?: Shape; // hucum sekli (toplu); yoksa formasyon + doktrinden turetilir
+  rotations?: number[][]; // rotasyon donguleri (forma no, 2..6 oyuncu): hucumda yer degistirirler, top kaybinda eve donerler
 }
 // Gorev karti (oyuncu basina; takim talimatlarinin ustune yazar)
 export interface Duty {
@@ -266,6 +267,8 @@ export interface MatchState {
   adaptUntil: [number, number]; // taktik degisikligi sonrasi uyum suresi (oyun saniyesi): T -10
   tacticChanges: [number, number];
   phase: [number, number]; // sekil fazi: 0 savunma sekli, 1 hucum sekli (gecis kademeli)
+  rot: [RotState[], RotState[]]; // rotasyon donguleri (takim basina)
+  rotHome: Map<PState, PState>; // oyuncu -> evini kullandigi oyuncu (rotasyonda); yoksa kendisi
   reads: [ReadResult | null, ReadResult | null]; // rakibi okuma sonucu
   zoneShots: [number[], number[]]; // hucum eden tarafin sutlari bolgeye gore (sol/orta/sag, kendi cercevesinde)
   zoneEntries: [number[], number[]]; // hucum ucuncu bolgeye girisler bolgeye gore (sol/orta/sag) - baskin atak yonu bundan okunur
@@ -315,6 +318,14 @@ export const P = {
   kickMax: 30, // en sert vurus (m/s)
   ctrlSpeed: 19, // bu hizin ustundeki top ayakla kontrol edilemez: sekerek uzaklasir (blok)
   reach: 0.9, // oyuncunun topa ulasma yaricapi (m)
+  gkHoldR: 6, // elinde top tutan kaleciye rakip yaklasma mesafesi (m)
+  rotGain: 6, // rotasyon: kaydirma icin gereken toplam mesafe kazanci (m)
+  rotDelay: 0.6, // rotasyon kararinin uygulanma gecikmesi (s, U 100)
+  rotBackDelay: 0.3, // top kaybinda tabana donus gecikmesi (s, U 100)
+  rotPeriod: 7, // etkin rotasyon: en az bu kadar sure sonra yeni cevirme (s)
+  rotProb: 0.5, // etkin rotasyon: periyot dolunca her 0,5 s kontrolde cevirme olasiligi
+  rotHold: 6, // cevirmeden sonra tepkisel (mesafe) kuralin beklemesi (s)
+  gkHandVz: 7, // elden uzun vurusun en az dikey hizi (m/s)
   headZ: [1.2, 2.35] as number[], // kafa/gogus yuksekligi araligi (m): bunun ustu kimseye ulasmaz
   gkReach: 1.4, // kalecinin topa ulasma yaricapi (m); dalista uzar
   gkDive: 2.4, // kalecinin sut aninda en fazla uzanma (m)
@@ -784,6 +795,13 @@ export function validateTeam(t: TeamIn, label: string) {
     const sh = t.tactic[k];
     if (sh && (sh.length !== 11 || sh.some((q) => !q || !Number.isFinite(q[0]) || !Number.isFinite(q[1])))) throw new Error(`${label}: ${k} bozuk`);
   }
+  if (t.tactic.rotations) {
+    const xi = new Set(t.players.map((p) => p.num)); const seen = new Set<number>();
+    for (const c of t.tactic.rotations) {
+      if (!Array.isArray(c) || c.length < 2 || c.length > 6) throw new Error(`${label}: rotasyon döngüsü 2–6 oyuncu olmalı`);
+      for (const n of c) { if (!xi.has(n)) throw new Error(`${label}: rotasyonda ilk 11'de olmayan oyuncu (${n})`); if (seen.has(n)) throw new Error(`${label}: ${n} numara birden çok rotasyonda`); seen.add(n); }
+    }
+  }
 }
 export function createMatch(a0: TeamIn, b0: TeamIn, seed: number, opts?: { knockout?: boolean }): MatchState {
   validateTeam(a0, a0.name ?? 'A'); validateTeam(b0, b0.name ?? 'B');
@@ -885,6 +903,8 @@ export function createMatch(a0: TeamIn, b0: TeamIn, seed: number, opts?: { knock
     adaptUntil: [-1, -1],
     tacticChanges: [0, 0],
     phase: [0, 0],
+    rot: [[], []],
+    rotHome: new Map(),
     reads: [null, null],
     zoneShots: [[0, 0, 0], [0, 0, 0]],
     zoneEntries: [[0, 0, 0], [0, 0, 0]],
@@ -921,6 +941,7 @@ export function createMatch(a0: TeamIn, b0: TeamIn, seed: number, opts?: { knock
     seed,
     dt: P.dt,
   };
+  for (const sd of [0, 1] as const) if (st.teams[sd].tactic.rotations) setRotations(st, sd, st.teams[sd].tactic.rotations);
   kickoff(st, 0);
   return st;
 }
@@ -975,6 +996,79 @@ const s_stats = (st: MatchState, side: 0 | 1) => st.stats[side];
 // etkin taktik kapasite: uyum suresinde -10
 const NO_DUTY: Duty = {};
 function dutyOf(st: MatchState, p: PState): Duty { return st.teams[p.side].duties?.[p.num] ?? NO_DUTY; }
+// ---------- Rotasyon ----------
+// Dongu A->B->C: hucum fazinda oyuncular, toplam kosu mesafesini en cok azaltan dairesel kaydirmayla ev degistirir
+// (A, B'nin bolgesine girince B C'nin, C A'nin evini alir). Top kaybinda hedef taban dizilis; gecikme uyuma (U) baglidir:
+// uyumsuz takim gec doner ve terste kalir. Olu topta aninda tabana doner.
+export interface RotState { players: PState[]; shift: number; pending: number | null; pendingAt: number; lastT: number }
+export function setRotations(st: MatchState, side: 0 | 1, cycles: number[][] | undefined) {
+  const t = st.teams[side];
+  t.tactic = { ...t.tactic, rotations: cycles && cycles.length ? cycles.map((c) => [...c]) : undefined };
+  const live = st.players.filter((p) => p.side === side && !p.off);
+  const used = new Set<PState>();
+  st.rot[side] = [];
+  for (const c of cycles ?? []) {
+    const ps: PState[] = [];
+    for (const n of c) { const p = live.find((q) => q.num === n); if (p && !used.has(p) && p.pos !== 'GK') { ps.push(p); used.add(p); } }
+    if (ps.length >= 2) st.rot[side].push({ players: ps, shift: 0, pending: null, pendingAt: 0, lastT: -99 });
+  }
+  applyRot(st, side);
+}
+function applyRot(st: MatchState, side: 0 | 1) {
+  for (const [p, q] of [...st.rotHome]) if (p.side === side) st.rotHome.delete(p);
+  for (const r of st.rot[side]) {
+    const n = r.players.length;
+    for (let i = 0; i < n; i++) { const q = r.players[(i + r.shift) % n]; if (q !== r.players[i]) st.rotHome.set(r.players[i], q); }
+  }
+}
+export function rotHomeOf(st: MatchState, p: PState): PState { return st.rotHome.get(p) ?? p; }
+function rotStep(st: MatchState) {
+  for (let s = 0 as 0 | 1; s < 2; s = (s + 1) as 0 | 1) {
+    const rs = st.rot[s];
+    if (!rs.length) continue;
+    const t = st.teams[s];
+    const ph = st.phase[s];
+    const dead = st.t < st.restartUntil || !!st.pending;
+    const inPoss = st.owner ? st.owner.side === s : st.lastPossSide === s;
+    let changed = false;
+    for (const r of rs) {
+      const n = r.players.length;
+      if (r.players.some((p) => p.off)) { // degisiklik: cikan oyuncunun yerine gireni koy
+        for (let i = 0; i < n; i++) if (r.players[i].off) { const rep = st.players.find((q) => q.side === s && !q.off && q.idx === r.players[i].idx); if (rep) r.players[i] = rep; }
+        if (r.players.some((p) => p.off)) { r.shift = 0; r.pending = null; changed = true; continue; }
+      }
+      let target = r.shift;
+      if (dead) { target = 0; if (r.shift !== 0) { r.shift = 0; r.pending = null; changed = true; dbg('rotasyon_sifir_olutop'); } continue; }
+      if (inPoss && ph > 0.6) {
+        // en az toplam mesafeli dairesel kaydirma (mevcut kaydirmaya P.rotGain m histerezis)
+        const cost = (k: number) => { let c = 0; for (let i = 0; i < n; i++) { const q = r.players[(i + k) % n]; const [hx, hy] = fromFrame(s, q.ax + (q.ox - q.ax) * ph, q.ay + (q.oy - q.ay) * ph); c += hyp(r.players[i].x - hx, r.players[i].y - hy); } return c; };
+        let best = r.shift, bc = cost(r.shift) - P.rotGain;
+        if (st.t - r.lastT > P.rotHold) for (let k = 0; k < n; k++) { if (k === r.shift) continue; const c = cost(k); if (c < bc) { bc = c; best = k; } } // yeni cevirmeden sonra oyuncular yeni evlere varana kadar tepkisel kural beklemez
+        target = best;
+        // etkin rotasyon: top rakip yarida ve donguye yakinken, P.rotPeriod s'de bir donguyu bir adim cevir (markaji dagitir);
+        // tasiyici dongudeyse beklenir
+        if (target === r.shift && st.t - r.lastT > P.rotPeriod && r.pending === null) {
+          const [bxf] = toFrame(s, st.ball.x, st.ball.y);
+          const nearBall = r.players.some((p) => hyp(p.x - st.ball.x, p.y - st.ball.y) < 30);
+          const carrierIn = st.owner ? r.players.includes(st.owner) : false;
+          if (bxf > 55 && nearBall && !carrierIn && st.rng() < P.rotProb) target = (r.shift + 1) % n;
+        }
+        if (target === r.shift && r.pending !== null && r.pending !== 0) target = r.pending; // verilen karar hucum surdukce gecerli
+      } else if (!inPoss || ph < 0.4) target = 0;
+      if (target === r.shift) { r.pending = null; continue; }
+      if (r.pending !== target) {
+        r.pending = target;
+        const slow = 1 + Math.max(0, 100 - t.U) / 60; // U 100 -> 1x, U 60 -> 1.67x, U 40 -> 2x
+        r.pendingAt = st.t + (target === 0 ? P.rotBackDelay : P.rotDelay) * slow;
+      } else if (st.t >= r.pendingAt) {
+        r.shift = target; r.pending = null; changed = true; r.lastT = st.t;
+        dbg(target === 0 ? 'rotasyon_eve' : 'rotasyon');
+        st.events.push({ t: st.clock, type: 'adjust', side: s, text: target === 0 ? 'rotasyon eve' : 'rotasyon' });
+      }
+    }
+    if (changed) applyRot(st, s);
+  }
+}
 export function setDuty(st: MatchState, side: 0 | 1, num: number, d: Duty) { const t = st.teams[side]; t.duties = { ...(t.duties ?? {}), [num]: { ...(t.duties?.[num] ?? {}), ...d } }; }
 function tEff(st: MatchState, side: 0 | 1): number {
   return st.teams[side].T - (st.clock < st.adaptUntil[side] ? 10 : 0);
@@ -1365,7 +1459,9 @@ function updateAnchorsAndMove(st: MatchState) {
   const carrier = st.owner;
   // tum hareketler once hesaplanir, sonra birlikte uygulanir: islem sirasi bir tarafa avantaj vermez
   const moves = new Map<PState, [number, number, number, number]>();
-  const guard = restartGuard(st);
+  // elinde top tutan kaleci: rakip P.gkHoldR m'den yakina gelmez, pres yapmaz (gercekte de kimse eldeki topa basmaz; pas yollarini kapatir)
+  const gkHoldGuard = carrier && carrier.pos === 'GK' && !st.gkFeet && toFrame(carrier.side, carrier.x, carrier.y)[0] < 16.5 ? { side: carrier.side, r: P.gkHoldR, x: carrier.x, y: carrier.y } : null;
+  const guard = restartGuard(st) ?? gkHoldGuard;
   // sahipsiz / yolda top: her takimdan topa en erken yetisebilecek oyuncular topa kosar (hedeflenen alici her zaman)
   const chase = new Map<PState, { x: number; y: number; t: number }>();
   const loose = !carrier && !st.pending && !st.celebrate && st.t >= st.restartUntil;
@@ -1429,7 +1525,7 @@ function updateAnchorsAndMove(st: MatchState) {
     // savunma hatti derinligi esas olarak topsuz oyunda gecerlidir; topa sahipken takim yine ileri cikar
     // sekil fazi: topu kazaninca hucum sekline, kaybedince savunma sekline kademeli gecis (2-4 s; iki sekil uzaksa ve uyum dusukse daha yavas)
     const shp = shapesOf(t);
-    const trans = P.shapeTrans > 0 ? clamp(P.shapeTrans + shapeDist(shp.def, shp.att) / 8, P.shapeTrans, P.shapeTrans * 2) * (1 + Math.max(0, 60 - t.U) / 100) : 1e-6;
+    const trans = P.shapeTrans > 0 ? clamp(P.shapeTrans + shapeDist(shp.def, shp.att) / 8, P.shapeTrans, P.shapeTrans * 2) * clamp(1 + (60 - t.U) / 100, 0.7, 1.4) : 1e-6; // uyum: U 100 -> 0,7x (hizli gecis), U 60 -> 1x, U 40 -> 1,2x
     // duran top beklenirken topu kullanacak takim hucum sekline, digeri savunma sekline gecer (eskiden son sahiplik esas alindigi icin
     // tac/serbest vurus kullanacak takim savunma seklinde bekliyordu)
     const restartSide = st.pending ? st.pending.side : (st.restartTaker && st.owner === st.restartTaker ? st.restartTaker.side : null);
@@ -1451,7 +1547,7 @@ function updateAnchorsAndMove(st: MatchState) {
     // baskida en yakin 1-2 oyuncu topa gider
     const pressers: PState[] = [];
     const deadBall = st.t < st.restartUntil; // yeniden baslatma bekleniyor: rakip 9,15 m uzakta durur, pres yok
-    if (!inPoss && !deadBall && carrier && st.restartTaker !== carrier) { // duran topu kullanacak oyuncuya pres yok (Kural 13-17 mesafe)
+    if (!inPoss && !deadBall && carrier && st.restartTaker !== carrier && !gkHoldGuard) { // duran topu kullanacak oyuncuya pres yok (Kural 13-17 mesafe)
       const tx = carrier.x;
       const ty = carrier.y;
       // gorev karti: ilk basan 6 m yakin sayilir, blokta kalan yalniz 5 m icindeyse basar
@@ -1522,8 +1618,9 @@ function updateAnchorsAndMove(st: MatchState) {
         tyf = 34 + (byf - 34) * 0.15;
       } else {
         // ev: savunma ve hucum sekli arasinda faza gore
-        let ax = p.ax + (p.ox - p.ax) * ph;
-        let ay = p.ay + (p.oy - p.ay) * ph;
+        const hm = st.rotHome.get(p) ?? p; // rotasyonda baskasinin evi
+        let ax = hm.ax + (hm.ox - hm.ax) * ph;
+        let ay = hm.ay + (hm.oy - hm.ay) * ph;
         // 3'lu savunmada kanat bekleri topsuz oyunda savunmaya donup 5'li hat olusturur
         if (!inPoss && threeBack && p.pos === 'FB') ax -= 13 * (1 - ph);
         // gorev kartlari (sekle ek): bekler bindirir / kalir, merkez orta saha ceza sahasina kosar / geride kalir, kanat ice kat
@@ -1786,6 +1883,7 @@ export function setTactic(st: MatchState, side: 0 | 1, patch: Partial<TacticIn>,
       p.pos = pos[p.idx];
     }
   }
+  if (formChange || patch.rotations !== undefined) setRotations(st, side, patch.rotations ?? t.tactic.rotations);
   st.tacticChanges[side]++;
   st.adaptUntil[side] = st.clock + P.adaptMin * 60;
   st.events.push({ t: st.clock, type: 'tactic', side, text: formation ?? '' });
@@ -2137,6 +2235,7 @@ export function step(st: MatchState) {
   const famK: [number, number] = [0, 1].map((i) => { const t = st.teams[i]; return st.clock > 50 * 60 && t.mainTactic?.doctrine && t.tactic.doctrine && t.mainTactic.doctrine !== t.tactic.doctrine ? P.unfamiliarFat : 1; }) as [number, number];
   for (const p of st.players) if (!p.off) p.k = Math.max(0, p.k - (p.kDrop * famK[p.side] * dt * P.clockRate * rest) / 60);
   rulesStep(st);
+  if (Math.round(st.t / st.dt) % Math.max(1, Math.round(0.5 / st.dt)) === 0) rotStep(st);
   thinkStep(st);
   injuryRoll(st);
 
@@ -3356,6 +3455,13 @@ function kickBall(st: MatchState, p: PState, dx: number, dy: number, speed: numb
   if (b.noTouch && st.takerKind === 'goalkick') st.lastGoalKickT = st.t;
   b.fromRestart = b.noTouch ? (st.takerKind || st.restartKind || 'restart') : undefined;
   if (p.pos === 'GK' && hyp(b.vx, b.vy) > 17) st.ruleSt[p.side === 0 ? 1 : 0].gkLongT = st.t; // rakip kaleci uzun vurdu (kural tetigi)
+  if (p.pos === 'GK' && !st.gkFeet && !b.noTouch && toFrame(p.side, p.x, p.y)[0] < 16.5) {
+    // elden vurus / atis: top el yuksekliginden cikar; uzun vurusta (degaj) en az P.gkHandVz dikligi: 6 m'de kafa yuksekligini asar
+    b.z = Math.max(b.z, 1.0);
+    const spH = hyp(b.vx, b.vy);
+    if (spH > 12) b.vz = Math.max(b.vz, P.gkHandVz);
+    dbg('kaleci_elden');
+  }
   if (b.noTouch && st.takerKind === 'throw') {
     // tac: top elle, bas ustunden atilir; en cok ~25 m, hafif yukselen
     b.z = 2.0;

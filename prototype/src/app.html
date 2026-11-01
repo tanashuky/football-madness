@@ -74,6 +74,9 @@ body.app.play #app { display: none; }
 #app .pitchmini::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; border-left: 2px solid rgba(233,239,233,.5); }
 #app .pitchmini .dot { touch-action: none; position: absolute; width: 26px; height: 26px; margin: -13px 0 0 -13px; border-radius: 50%; border: 2px solid #fff; display: flex; align-items: center; justify-content: center; font: 700 11px/1 var(--font-display); color: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.5); }
 #app .pitchmini .dot.att { opacity: .55; border-style: dashed; }
+#app .pitchmini svg.rot { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+#app .pitchmini .dot.inrot { box-shadow: 0 0 0 3px var(--warn), 0 1px 3px rgba(0,0,0,.5); }
+#app .pitchmini.rotmode .dot { cursor: pointer; }
 #app .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
 #app .toast { position: fixed; left: 50%; bottom: 76px; transform: translateX(-50%); background: rgba(10,12,16,.92); color: var(--chalk); border: 1px solid var(--line); padding: 10px 14px; border-radius: 10px; font-size: 13px; z-index: 850; }
 #app .center { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100%; gap: 14px; text-align: center; }
@@ -173,7 +176,8 @@ function userTeamIn() {
   // gorev kartlari: kimlikten o anki forma numarasina (motor numara ile calisir)
   const duties = {}; for (const [id, d] of Object.entries(tt.duties || {})) { const p = byId[id]; if (p) duties[p.num] = d; }
   const sh = userShapes(tt);
-  t.tactic = { ...tt.tactic, doctrine: tt.doctrine, shapeDef: sh.def, shapeAtt: sh.att };
+  const rotations = (tt.rotations || []).map((c) => c.filter((id) => tt.lineup.includes(id) && byId[id]).map((id) => byId[id].num)).filter((c) => c.length >= 2);
+  t.tactic = { ...tt.tactic, doctrine: tt.doctrine, shapeDef: sh.def, shapeAtt: sh.att, rotations: rotations.length ? rotations : undefined };
   t.mainTactic = { ...tt.tactic, doctrine: tt.doctrine };
   t.duties = duties;
   t.rules = (tt.rules || []).map((id) => RULE_TEMPLATES.find((r) => r.id === id)).filter(Boolean);
@@ -462,7 +466,15 @@ function userShapes(tt) {
 SCREENS.tactics = (c) => { const tt = APP.db.team; const level = c.level || 'easy'; const t = userTeamIn(); const show = c.shape || 'def'; const sh = userShapes(tt);
   const shape = show === 'def' ? sh.def : sh.att;
   const dots = shape.map(([x, y], i) => `<div class="dot ${show === 'att' ? 'att' : ''}" data-i="${i}" style="left:${x / 105 * 100}%;top:${y / 68 * 100}%;background:${t.color}">${t.players[i].num}</div>`).join('');
-  const shapeCard = `<div class="card"><h3>Şekil <small>${show === 'def' ? 'savunma (topsuz)' : 'hücum (toplu)'}${level === 'deep' ? ' · sürükle' : ''}</small></h3><div class="pitchmini" id="mini">${dots}</div><div class="row"><div class="seg" id="shp"><button aria-pressed="${show === 'def'}" data-s="def">Savunma şekli</button><button aria-pressed="${show === 'att'}" data-s="att">Hücum şekli</button></div></div>${level === 'deep' ? `<div class="row"><label class="f">Hazır şekil<select id="shLoad">${FORMATION_LIST.map((f) => `<option ${f === (show === 'def' ? tt.formation : (tt.formationAtt || tt.formation)) ? 'selected' : ''}>${f}</option>`).join('')}</select></label><button class="btn sm" id="shLoadBtn">Yükle, sonra sürükle</button><button class="btn sm ghost" id="shReset">Sıfırla</button></div>` : ''}<p>${level === 'deep' ? 'Oyuncuyu sürükle; iki şekil ayrı ayrı kaydedilir. Kaleci sol tarafta kalır. Şekil ne kadar cesursa geçiş o kadar uzun sürer ve arkada boşluk kalır.' : 'Hücum şekli seçilen formasyon ve doktrinden türetilir; Derin seviyede elle çizilir.'}</p></div>`;
+  const rotMode = level === 'deep' && !!c.rot; const curRot = (c.rot && c.rot.cur) || [];
+  const idOf = (i) => tt.lineup[i], idxOf = (id) => tt.lineup.indexOf(id);
+  const arrow = (a, b, dashed) => { const [x1, y1] = shape[a], [x2, y2] = shape[b]; const dx = x2 - x1, dy = y2 - y1, d = Math.hypot(dx, dy) || 1; const sx = x1 + dx / d * 2.2, sy = y1 + dy / d * 2.2, ex = x2 - dx / d * 2.6, ey = y2 - dy / d * 2.6; return `<line x1="${sx}" y1="${sy}" x2="${ex}" y2="${ey}" stroke="${dashed ? 'var(--warn)' : '#fff'}" stroke-width="0.7" ${dashed ? 'stroke-dasharray="1.5 1"' : ''} marker-end="url(#ah)"/>`; };
+  let rotSvg = '';
+  if (level === 'deep') { const parts = []; for (const cyc of tt.rotations || []) { const ix = cyc.map(idxOf).filter((i) => i >= 0); for (let k = 0; k < ix.length; k++) parts.push(arrow(ix[k], ix[(k + 1) % ix.length], false)); } const ci = curRot.map(idxOf).filter((i) => i >= 0); for (let k = 0; k + 1 < ci.length; k++) parts.push(arrow(ci[k], ci[k + 1], true)); rotSvg = `<svg class="rot" viewBox="0 0 105 68" preserveAspectRatio="none"><defs><marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#fff"/></marker></defs>${parts.join('')}</svg>`; }
+  const inRot = new Set([...(tt.rotations || []).flat(), ...curRot]);
+  const dots2 = level === 'deep' ? shape.map(([x, y], i) => `<div class="dot ${show === 'att' ? 'att' : ''} ${inRot.has(idOf(i)) ? 'inrot' : ''}" data-i="${i}" style="left:${x / 105 * 100}%;top:${y / 68 * 100}%;background:${t.color}">${t.players[i].num}</div>`).join('') : dots;
+  const rotList = level === 'deep' ? `<div class="row" style="margin-top:6px;flex-wrap:wrap;gap:6px">${(tt.rotations || []).map((cyc, k) => `<span class="tag">↻ ${cyc.map((id) => { const i = idxOf(id); return i >= 0 ? t.players[i].num : '?'; }).join(' → ')} <button class="btn sm ghost rotDel" data-k="${k}" style="padding:0 6px;margin-left:4px">×</button></span>`).join('')}${rotMode ? `<span class="muted">${curRot.length ? `Seçildi: ${curRot.map((id) => t.players[idxOf(id)].num).join(' → ')} · ilk oyuncuya tekrar dokun ya da Kapat` : 'Sırayla oyunculara dokun (A → B → C …)'}</span> ${curRot.length >= 2 ? '<button class="btn sm" id="rotClose">Döngüyü kapat</button>' : ''}<button class="btn sm ghost" id="rotCancel">Vazgeç</button>` : `<button class="btn sm ghost" id="rotStart">Rotasyon çiz</button>`}</div>` : '';
+  const shapeCard = `<div class="card"><h3>Şekil <small>${show === 'def' ? 'savunma (topsuz)' : 'hücum (toplu)'}${level === 'deep' ? (rotMode ? ' · rotasyon: oyunculara dokun' : ' · sürükle') : ''}</small></h3><div class="pitchmini ${rotMode ? 'rotmode' : ''}" id="mini">${rotSvg}${dots2}</div>${rotList}<div class="row"><div class="seg" id="shp"><button aria-pressed="${show === 'def'}" data-s="def">Savunma şekli</button><button aria-pressed="${show === 'att'}" data-s="att">Hücum şekli</button></div></div>${level === 'deep' ? `<div class="row"><label class="f">Hazır şekil<select id="shLoad">${FORMATION_LIST.map((f) => `<option ${f === (show === 'def' ? tt.formation : (tt.formationAtt || tt.formation)) ? 'selected' : ''}>${f}</option>`).join('')}</select></label><button class="btn sm" id="shLoadBtn">Yükle, sonra sürükle</button><button class="btn sm ghost" id="shReset">Sıfırla</button></div>` : ''}<p>${level === 'deep' ? 'Oyuncuyu sürükle; iki şekil ayrı ayrı kaydedilir. Kaleci sol tarafta kalır. Şekil ne kadar cesursa geçiş o kadar uzun sürer ve arkada boşluk kalır. Rotasyon: A → B → C döngüsü çiz; hücumda yer değiştirirler (A, B bölgesine girince B C bölgesine, C A bölgesine kayar), top kaybında eve dönerler — dönüş hızı uyuma bağlıdır, uyumsuz takım terste kalır.' : 'Hücum şekli seçilen formasyon ve doktrinden türetilir; Derin seviyede elle çizilir.'}</p></div>`;
   let right = '';
   if (level !== 'deep') {
     right += `<h3>${level === 'easy' ? 'Preset <small>tek seçim</small>' : 'Şekiller ve talimatlar'}</h3>
@@ -490,6 +502,16 @@ SCREENS.tactics = (c) => { const tt = APP.db.team; const level = c.level || 'eas
     const rs = $('shReset'); if (rs) rs.onclick = () => { if (show === 'def') delete APP.db.team.shapeDef; else delete APP.db.team.shapeAtt; dbSave(); go('tactics', { ...c }, false); };
     const lb = $('shLoadBtn'); if (lb) lb.onclick = () => { const f = $('shLoad').value; const tt2 = APP.db.team; if (show === 'def') { if (f !== tt2.formation && Array.isArray(tt2.lineup)) tt2.lineup = reslot(tt2.lineup, FORM_POS[f]); tt2.formation = f; delete tt2.shapeDef; } else { tt2.formationAtt = f; delete tt2.shapeAtt; } dbSave(); toast(f + ' yüklendi; oyuncuları sürükleyebilirsin'); go('tactics', { ...c }, false); };
     if (level === 'deep') {
+      const rs = $('rotStart'); if (rs) rs.onclick = () => go('tactics', { ...c, rot: { cur: [] } }, false);
+      const rc = $('rotCancel'); if (rc) rc.onclick = () => { const c2 = { ...c }; delete c2.rot; go('tactics', c2, false); };
+      const rk = $('rotClose'); if (rk) rk.onclick = () => { const tt2 = APP.db.team; tt2.rotations = [...(tt2.rotations || []), curRot]; dbSave(); const c2 = { ...c }; delete c2.rot; toast('Rotasyon kaydedildi'); go('tactics', c2, false); };
+      for (const b of document.querySelectorAll('.rotDel')) b.onclick = () => { const tt2 = APP.db.team; tt2.rotations = (tt2.rotations || []).filter((_, k) => k !== +b.dataset.k); dbSave(); go('tactics', { ...c }, false); };
+      if (rotMode) {
+        $('mini').addEventListener('click', (ev) => { const d = ev.target.closest('.dot'); if (!d) return; const i = +d.dataset.i; const id = idOf(i); if (t.players[i].pos === 'GK') { toast('Kaleci rotasyona giremez'); return; } if ((tt.rotations || []).flat().includes(id)) { toast('Bu oyuncu zaten bir döngüde'); return; }
+          if (curRot.length >= 2 && id === curRot[0]) { const tt2 = APP.db.team; tt2.rotations = [...(tt2.rotations || []), curRot]; dbSave(); const c2 = { ...c }; delete c2.rot; toast('Rotasyon kaydedildi'); go('tactics', c2, false); return; }
+          if (curRot.includes(id)) return; if (curRot.length >= 6) { toast('En çok 6 oyuncu'); return; }
+          go('tactics', { ...c, rot: { cur: [...curRot, id] } }, false); });
+      } else {
       // serbest surukleme: dot'lar sahada; birakinca cerceve koordinati (0..105, 0..68) kaydedilir (anlik; Kaydet gereksiz)
       const mini = $('mini'); let drag = null;
       const toFrameXY = (ev) => { const r = mini.getBoundingClientRect(); return [Math.max(2, Math.min(103, (ev.clientX - r.left) / r.width * 105)), Math.max(2, Math.min(66, (ev.clientY - r.top) / r.height * 68))]; };
@@ -497,6 +519,7 @@ SCREENS.tactics = (c) => { const tt = APP.db.team; const level = c.level || 'eas
       mini.addEventListener('pointermove', (ev) => { if (!drag) return; const [x, y] = toFrameXY(ev); drag.style.left = (x / 105 * 100) + '%'; drag.style.top = (y / 68 * 100) + '%'; });
       const drop = (ev) => { if (!drag) return; const i = +drag.dataset.i; const [x0, y0] = toFrameXY(ev); const x = i === 0 ? Math.min(x0, 14) : x0, y = y0; const key = show === 'def' ? 'shapeDef' : 'shapeAtt'; const cur = (APP.db.team[key] || (show === 'def' ? sh.def : sh.att)).map((q) => [q[0], q[1]]); cur[i] = [Math.round(x * 10) / 10, Math.round(y * 10) / 10]; APP.db.team[key] = cur; dbSave(); drag = null; };
       mini.addEventListener('pointerup', drop); mini.addEventListener('pointercancel', () => { drag = null; });
+      }
     }
     $('tSave').onclick = () => {
       const tt2 = APP.db.team;
