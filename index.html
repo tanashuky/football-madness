@@ -107,6 +107,7 @@ body.play #tacBtn { display: block; }
 #pauseBox div { background: rgba(10,12,16,.85); border-radius: 10px; padding: 16px 22px; display: flex; flex-direction: column; gap: 4px; text-align: center; font: 500 14px/1.4 var(--font-body); color: var(--chalk); }
 #pauseBox b { font: 700 22px/1.2 var(--font-display); letter-spacing: .06em; text-transform: uppercase; }
 #sa { position: fixed; top: 0; left: 0; width: 0; height: 0; visibility: hidden; pointer-events: none; padding-top: env(safe-area-inset-top, 0px); padding-right: env(safe-area-inset-right, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); padding-left: env(safe-area-inset-left, 0px); }
+#errBox { position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 3000; background: #2a1414; color: #fff; border: 1px solid #e5483f; border-radius: 10px; padding: 10px 12px; font: 13px/1.35 var(--font-body); max-height: 45vh; overflow: auto; } #errBox pre { white-space: pre-wrap; word-break: break-word; font-size: 11px; margin: 6px 0; } #errBox .row { display: flex; gap: 8px; } #errBox[hidden] { display: none; }
 #rotate { position: fixed; inset: 0; z-index: 980; display: none; align-items: center; justify-content: center; text-align: center; background: var(--night); color: var(--chalk); font: 600 18px/1.4 var(--font-body); padding: 24px; }
 body.play.portrait #rotate { display: flex; }
 .playbox label { display: block; margin: 6px 0; }
@@ -5809,7 +5810,34 @@ for (const b of document.querySelectorAll('[data-sp]')) b.addEventListener('clic
 const WATCH_SPEED = 1.39; // izleme: 1x %39 hizli (mac ~11 dk); motor adimi st.dt (0,1 s)
 const PLAY_DT = 0.05; // oynarken motor 20 adim/s (girdi gecikmesi 50 ms alti); izleme ve kalibrasyon 0,1 s
 const isDead = () => st.t < st.restartUntil && !ballMoving(st);
+// Hata kaydi: kare dongusu bir istisnada olmez; hata ekranda gosterilir ve localStorage'a yazilir (kullanici raporlayabilsin)
+const ERR = { n: 0, last: 0 };
+function reportError(where, e) {
+  ERR.n++;
+  const msg = (e && e.message ? e.message : String(e)) + '\n' + String(e && e.stack ? e.stack : '').split('\n').slice(0, 6).join('\n');
+  const txt = `[${where}] ${msg}`;
+  console.error(txt);
+  try { localStorage.setItem('fm.lastError', JSON.stringify({ t: Date.now(), where, msg, build: document.querySelector('.dev')?.textContent || '', ua: navigator.userAgent })); } catch (e2) {}
+  const nowMs = performance.now();
+  if (nowMs - ERR.last < 2000 && ERR.n > 1) return; // ayni hatayi her karede tekrar gosterme
+  ERR.last = nowMs;
+  let box = document.getElementById('errBox');
+  if (!box) { box = document.createElement('div'); box.id = 'errBox'; box.innerHTML = '<b>Bir hata oluştu</b><pre></pre><div class="row"><button class="btn sm" id="errCopy">Kopyala</button><button class="btn sm" id="errExit">Maçtan çık</button><button class="btn sm ghost" id="errHide">Kapat</button></div>'; document.body.appendChild(box);
+    box.querySelector('#errHide').onclick = () => { box.hidden = true; };
+    box.querySelector('#errCopy').onclick = () => { try { navigator.clipboard.writeText(box.querySelector('pre').textContent); } catch (e3) {} };
+    box.querySelector('#errExit').onclick = () => { box.hidden = true; try { exitPlay(); } catch (e4) { console.error(e4); } };
+  }
+  box.querySelector('pre').textContent = txt + (ERR.n > 1 ? `\n(${ERR.n}. hata)` : '');
+  box.querySelector('#errExit').hidden = !PLAY.on;
+  box.hidden = false;
+}
+addEventListener('error', (ev) => { if (ev.error) reportError('window', ev.error); });
+addEventListener('unhandledrejection', (ev) => reportError('promise', ev.reason));
 function frame(now) {
+  try { frameBody(now); } catch (e) { reportError(PLAY.on ? 'oyun' : 'sayfa', e); if (PLAY.on && playing) { try { setPlaying(false); } catch (e2) {} } }
+  requestAnimationFrame(frame);
+}
+function frameBody(now) {
   const dtReal = Math.min(0.1, (now - last) / 1000);
   last = now;
   if (PLAY.on && (cv.clientWidth !== lastW || cv.clientHeight !== lastH)) onResize();
@@ -5833,7 +5861,6 @@ function frame(now) {
   if (false) {
   }
   draw(playing && !reduce ? alpha : 1, now);
-  requestAnimationFrame(frame);
 }
 
 // ---------- Olay yazilari ----------
@@ -7513,9 +7540,11 @@ SCREENS.settings = () => { const s = APP.db.settings; const sel = (id, k, opts) 
       ${sel('Kamera', 'cam', [['full', 'Tam saha'], ['length', 'Tam boy'], ['near', 'Yakın']])}
       ${sel('Varsayılan oyun modu', 'mode', [['team', 'Team play'], ['sim', 'Total simulation']])}
     </div></div>
+    <div class="card"><h3>Tanı <small>hata kaydı</small></h3>${(() => { let e = null; try { e = JSON.parse(localStorage.getItem('fm.lastError') || 'null'); } catch (x) {} return e ? `<p class="muted">${new Date(e.t).toLocaleString('tr-TR')} · ${esc(e.build || '')}</p><pre style="white-space:pre-wrap;word-break:break-word;font-size:11px;background:rgba(0,0,0,.25);padding:8px;border-radius:8px;max-height:180px;overflow:auto">${esc('[' + e.where + '] ' + e.msg)}</pre><div class="row"><button class="btn sm" id="errClr">Kaydı sil</button></div>` : '<p>Kayıtlı hata yok.</p>'; })()}</div>
     <div class="card"><h3>Hesap</h3><p>Misafir hesabı · ${esc(APP.db.account?.club.name || '')}. Ses, dil, bildirimler, medya izinleri ve hesap silme Faz 3'te.</p><div class="row"><button class="btn ghost" id="reset">Demoyu sıfırla</button><button class="btn ghost" id="devp">Geliştirici sayfası</button></div></div>
   </div>`, after: () => { for (const el of document.querySelectorAll('.sk')) el.onchange = () => { let v = el.value; if (v === 'true') v = true; else if (v === 'false') v = false; else if (!isNaN(+v) && el.dataset.k !== 'keys') v = +v; APP.db.settings[el.dataset.k] = v; dbSave(); };
     $('reset').onclick = () => { if (confirm('Tüm demo kaydı silinsin mi?')) { localStorage.removeItem(APP.key); location.reload(); } };
+    const ec = $('errClr'); if (ec) ec.onclick = () => { localStorage.removeItem('fm.lastError'); go('settings', {}, false); };
     $('devp').onclick = () => { document.body.classList.remove('app'); location.hash = '#dev'; }; } }; };
 
 // --- baslangic ---
@@ -7528,7 +7557,7 @@ function appInit() {
 window.addEventListener('hashchange', () => { if (location.hash !== '#dev') { document.body.classList.add('app'); render(); } });
 appInit();
 </script>
-<div class="dev">demo · sürüm 01.11 21:00 · <a href="#dev" style="color:inherit" onclick="document.body.classList.remove('app')">geliştirici</a></div>
+<div class="dev">demo · sürüm 01.11 21:21 · <a href="#dev" style="color:inherit" onclick="document.body.classList.remove('app')">geliştirici</a></div>
 
 </body>
 </html>
