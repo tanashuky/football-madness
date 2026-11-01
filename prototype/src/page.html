@@ -273,13 +273,6 @@ const AI_LEVELS = [
   { n: 'Dünya klası (×0,8, %75, 0,42 s)', ai: { noiseMult: 0.8, readAcc: 0.75, react: 0.42, timing: 0.8 } },
   { n: 'Efsane (×0,6, %90, 0,35 s)', ai: { noiseMult: 0.6, readAcc: 0.9, react: 0.35, timing: 0.9 } },
 ];
-// durum taktikleri: koşul tutunca yedek taktiğe geçiş (5 dk uyum cezası)
-const SIT_RULES = [
-  { n: 'Yok', s: null },
-  { n: "70'ten sonra öndeysen kapan (derin hat, düşük pres, 5-3-2)", s: [{ when: 'leading', fromMinute: 70, tactic: { line: 0, press: 0, tempo: 0 }, formation: '5-3-2' }] },
-  { n: "70'ten sonra gerideysen bastır (önde hat, yüksek pres, hızlı)", s: [{ when: 'trailing', fromMinute: 70, tactic: { line: 2, press: 2, tempo: 2, runs: 2 } }] },
-  { n: "60'tan sonra berabereysen risk al (bindiren bek, ceza sahasına orta saha)", s: [{ when: 'drawing', fromMinute: 60, tactic: { fb: 2, cm: 2, runs: 2 } }] },
-];
 // kural setleri (Taktik 2.0): sablonlardan 4'erli paketler
 const RULE_SETS = [
   { n: 'Yok', ids: [] },
@@ -317,7 +310,6 @@ function renderSetup() {
     for (const [k, lab] of mets) h += `<label for="${k}${i}">${lab} <output id="${k}o${i}">${c[k]}</output><input type="range" id="${k}${i}" min="20" max="100" value="${c[k]}"></label>`;
     h += `<label class="chk" for="home${i}"><input type="checkbox" id="home${i}" ${c.home ? 'checked' : ''}> İç saha (stadyum 8, taraftar morali 85)</label>`;
     h += `<label for="ai${i}">Zekâ (bot seviyesi)<select id="ai${i}">${AI_LEVELS.map((o, j) => `<option value="${j}" ${j === (c.ai ?? 0) ? 'selected' : ''}>${o.n}</option>`).join('')}</select></label>`;
-    h += `<label for="sit${i}">Durum taktiği (eski)<select id="sit${i}">${SIT_RULES.map((o, j) => `<option value="${j}" ${j === (c.sit ?? 0) ? 'selected' : ''}>${o.n}</option>`).join('')}</select></label>`;
     h += `<label for="doc${i}">Doktrin (Taktik 2.0; eksik talimatları doldurur, hücum şeklini belirler)<select id="doc${i}"><option value="">Yok (yalnız talimatlar)</option>${DOCTRINE_LIST.map((d) => `<option value="${d}" ${d === (c.doctrine ?? '') ? 'selected' : ''}>${DOCTRINES[d].label}</option>`).join('')}</select></label>`;
     h += `<label for="rul${i}">Kural seti<select id="rul${i}">${RULE_SETS.map((o, j) => `<option value="${j}" ${j === (c.rul ?? 0) ? 'selected' : ''}>${o.n}</option>`).join('')}</select></label>`;
     col.innerHTML = h;
@@ -335,7 +327,6 @@ function readSetup() {
     for (const [k] of mets) c[k] = +document.getElementById(k + i).value;
     c.home = document.getElementById('home' + i).checked;
     c.ai = +document.getElementById('ai' + i).value;
-    c.sit = +document.getElementById('sit' + i).value;
     c.doctrine = document.getElementById('doc' + i).value || undefined;
     c.rul = +document.getElementById('rul' + i).value;
   });
@@ -343,7 +334,7 @@ function readSetup() {
 }
 function buildTeams() {
   return cfg.map((c, i) =>
-    makeTeam(c.name, c.short, c.gg, { formation: c.formation, U: c.U, T: c.T, F: c.F, M: c.M, ...(c.home ? { home: true, stadium: 8, TM: 85 } : {}), ...(AI_LEVELS[c.ai ?? 0].ai ? { ai: AI_LEVELS[c.ai ?? 0].ai } : {}), ...(SIT_RULES[c.sit ?? 0].s ? { situational: SIT_RULES[c.sit ?? 0].s } : {}),
+    makeTeam(c.name, c.short, c.gg, { formation: c.formation, U: c.U, T: c.T, F: c.F, M: c.M, ...(c.home ? { home: true, stadium: 8, TM: 85 } : {}), ...(AI_LEVELS[c.ai ?? 0].ai ? { ai: AI_LEVELS[c.ai ?? 0].ai } : {}),
       // kurallar: secilen set; bot (zeka seviyesi) secildiyse ve set yoksa seviyeye gore (Amator 0 .. Efsane 4)
       rules: c.rul ? rulesOf(c.rul) : (c.ai ? botRules(c.ai - 1) : []),
       tactic: { ...Object.fromEntries(Object.keys(opts).map((k) => [k, c[k] ?? optDefault[k]])), ...(c.doctrine ? { doctrine: c.doctrine } : {}) } }, i === 0 ? NAMES_A : NAMES_B, i === 0 ? css('--home') : css('--away'))
