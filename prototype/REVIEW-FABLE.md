@@ -111,3 +111,12 @@ Commit sırası: 8ee1406 hız/pencereler → dd51833 şekiller → 7402036 göre
 - Motor: `userSub`, `pendingSubs`; kullanıcı takımında yorgunluk otomatik değişikliği kapalı (sakatlık ve kaleci otomatik kalır).
 - Uygulama: `db.team.lineup` (11 forma numarası, slot sırası); `userTeamIn` ilk 11'i buna göre kurar, slot mevkisi formasyondan, doğal mevki `natPos` (uyumsuzluk turuncu etiket; mevki uyumu Faz 3). Kadro ekranında "Yer değiştir" → hedef seç; "Dizilişi sıfırla".
 - Karar paneli: kullanıcı takımında sakatlık (10 s), kırmızı kart (15 s) ve kaleci atılması (15 s) otomatik değil; oyun durur, panel açılır, geri sayım, önerilen yedek işaretli (`suggestedSub`); süre dolunca ya da "Devam" basılınca değişiklik seçilmediyse sistem uygular (`autoSubsFor`; kırmızıda 10 kişi devam). Motor: `autoSubs(st, force)` kullanıcı takımını atlar.
+
+## Motor turu (1 Kasım akşam, kullanıcı test ederken)
+
+- 9,15 m: ihlaller baraja geç kalan oyuncuların çemberden geçmesiydi; barajdakiler ayrılma itmesinden muaf (rakip yaslanınca baraj kaymasın) ve hedefe 3 m'den uzaksa koşuyor → crit 100 → 1 ihlal; baraj 2,5 s sonra 0,21 m/s.
+- Müdahale topu her zaman temiz almaz: `P.tackleLoose` 0,5 ile top açılır (müdahale yönünde, çizgi yakınında dışarı, kendi kale çizgisi yakınında kornere); maç başı ~7 açılan top. Taç 1,8 → 2,1.
+- Bulgu: oyun merkez ağırlıklı — top kenar koridorda (çizgiye <10 m) zamanın %9'unda (gerçekte ~%25), çizgiye <4 m %2,5. Taç/korner düşüklüğünün kökü bu; kanatları genişletmek (hücum şekli W/FB ×1,15–1,25) kenar kullanımını %11'e çıkardı ama golü 2,8 → 2,0 düşürdü (pas kararı kenarı değerlendirmiyor) → geri alındı. Kenar oyunu (pas değerleme + kanat koşuları + orta) ayrı mekanik turu.
+- Ayağa/kanada koşular: pas değerlemesi koşu hedefini kullanıyor artık (`_run` hedefi), yine de 'all' 2,37 vs 'b' 2,88 → kapalı kalıyor.
+- 11–16 m dönüşüm %18 (gerçek ~%12–15): kabul edilebilir aralıkta, dokunulmadı.
+- 200 maç: gol 2,48 · beraberlik %27 · golsüz %7 · 5+ %10 · şut 8,7 · korner 0,72 · ofsayt 0,39 · duran top payı %22.

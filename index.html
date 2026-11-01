@@ -385,6 +385,7 @@ const P = {
     thinkSimMin: 12, // ic simulasyon suresi (oyun dk)
     thruAirPower: 0.7, // kullanici ara pasi bu gucun ustunde havadan (asirtma)
     thruAirDist: 28, // ya da nisan bu mesafeden uzunsa (m)
+    tackleLoose: 0.5, // kazanilan mudahalede topun acilma (sahipsiz kalma) orani
     stepUp: 1.8, // ofsayt duellosunda savunmacinin erken adimi (m, G*B ile)
     timingErr: 1.5, // forvetin cizgi zamanlama hatasi (m, (1-B) ile)
     trackB: 0.55, // bu beklentinin altindaki savunmaci yem kosusunu takip eder
@@ -1975,8 +1976,10 @@ function separate(st) {
             }
             // itme adim suresiyle olceklenir (saniye basina ayni etki)
             const push = (((a.side === b.side ? sameD : minD) - d) / 2) * Math.min(1, st.dt / 0.1);
-            const wa = st.owner === a ? 0.3 : 1;
-            const wb = st.owner === b ? 0.3 : 1;
+            // barajdaki oyuncu yerinden itilmez (rakip baraja yaslaninca baraj topa dogru kaymasin); iten taraf geri gider
+            const inWa = !!wall && wall.includes(a), inWb = !!wall && wall.includes(b);
+            const wa = st.owner === a || inWa ? (inWa ? 0 : 0.3) : 1;
+            const wb = st.owner === b || inWb ? (inWb ? 0 : 0.3) : 1;
             mx[i] -= nx * push * wa;
             my[i] -= ny * push * wa;
             mx[j] += nx * push * wb;
@@ -2790,14 +2793,22 @@ function aiDecide(st, c) {
         const d = hyp(m.x - c.x, m.y - c.y);
         if (d < 4 || d > 55)
             continue;
-        const [mxf, myf] = toFrame(side, m.x, m.y);
+        let [mxf, myf] = toFrame(side, m.x, m.y);
         if (m.pos === 'GK' && mxf > 20)
             continue;
         if (mxf > offLine0 + 0.3)
             continue; // ofsaytta olana pas verilmez
         const pe = passEval(st, c, m);
         const ps = pe.p;
-        const recvPress = pressureOn(st, m, m.x, m.y, 4);
+        // kosudaki arkadas: pas kosunun hedefine degerlendirilir (ayaga / kanada kosan oyuncu bos alana varacak)
+        const rp = m._run;
+        let recvPress = pressureOn(st, m, m.x, m.y, 4);
+        if (rp && st.t < rp.until && rp.kind !== 'behind') {
+            const [rx, ry] = fromFrame(side, rp.txf, rp.tyf);
+            mxf = rp.txf;
+            myf = rp.tyf;
+            recvPress = pressureOn(st, m, rx, ry, 4);
+        }
         const v = threat(mxf, myf) * (1 - 0.25 * recvPress);
         const lossV = threat(105 - mxf, 68 - myf);
         let ev = ps * v - (1 - ps) * lossV;
@@ -5177,7 +5188,8 @@ function setPieceTarget(st, p) {
             const wx = spotX + (vx / len) * 9.45 + (-vy / len) * (i - (nWall - 1) / 2) * 0.9;
             const wy = spotY + (vy / len) * 9.45 + (vx / len) * (i - (nWall - 1) / 2) * 0.9;
             const [x, y] = fromFrame(A, wx, wy);
-            return [x, y, 0.5];
+            // baraja gec kalan (3 m'den uzak) kosar, yakinsa yavas yerlesir
+            return [x, y, hyp(x - p.x, y - p.y) > 3 ? 0.85 : 0.5];
         }
         if (crowd) {
             // savunma: kalanlar ceza sahasinda markaj
@@ -5390,7 +5402,56 @@ function tackle(st, d, c, behind = false) {
         say(st, 'tackle', d.side, d, c);
         const [zx] = toFrame(c.side, c.x, c.y);
         dbg(zx < 35 ? 'kayip_mud_kendi' : zx < 70 ? 'kayip_mud_orta' : 'kayip_mud_hucum');
-        giveBall(st, d, 0.7);
+        // mudahale topu her zaman temiz almaz: yarisinda top acilir (mudahale yonunde, sapmali) - sahipsiz top, cizgi yakininda tac
+        if (st.rng() < P.tackleLoose) {
+            const b = st.ball;
+            let ux = c.x - d.x, uy = c.y - d.y;
+            const un = hyp(ux, uy) || 1;
+            ux /= un;
+            uy /= un;
+            // cizgi yakininda top disari dogru acilir (taca attirma); kendi kale cizgisi yakininda savunmacinin mudahalesi kornere
+            if (c.y < 4) {
+                ux = ux * 0.4;
+                uy = -1;
+            }
+            else if (c.y > W - 4) {
+                ux = ux * 0.4;
+                uy = 1;
+            }
+            {
+                const [cxf] = toFrame(c.side, c.x, c.y);
+                const [gx] = fromFrame(d.side, 0, 34);
+                if (cxf > 100 && st.rng() < 0.6) {
+                    ux = Math.sign(gx - c.x) || 1;
+                    uy = (c.y < 34 ? -1 : 1) * 0.6;
+                }
+            }
+            const nn = hyp(ux, uy) || 1;
+            ux /= nn;
+            uy /= nn;
+            const ang = Math.atan2(uy, ux) + gauss(st.rng) * 0.5, sp = 3 + st.rng() * 4;
+            st.owner = null;
+            st.dribbling = false;
+            b.vx = Math.cos(ang) * sp;
+            b.vy = Math.sin(ang) * sp;
+            b.vz = 0.3 + st.rng() * 0.8;
+            b.sw = 0;
+            b.dip = 0;
+            b.kind = 'loose';
+            b.kicker = d;
+            b.kickT = st.t;
+            b.touch = d;
+            b.intended = null;
+            b.shot = null;
+            b.offside = null;
+            b.noTouch = null;
+            st.lastPossSide = d.side;
+            st.stats[d.side].turnovers++;
+            st.lastTurnoverT = st.t;
+            dbg('mudahale_top_acildi');
+        }
+        else
+            giveBall(st, d, 0.7);
     }
     else {
         // basarisiz mudahale: tasiyici bir adim kazanir
