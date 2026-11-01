@@ -4,7 +4,7 @@
 // ---------- Tipler ----------
 export type Pos = 'GK' | 'CB' | 'FB' | 'DM' | 'CM' | 'W' | 'ST';
 export type Lvl = 0 | 1 | 2;
-export type Formation = '4-3-3' | '4-4-2' | '4-2-3-1' | '3-5-2' | '5-3-2';
+export type Formation = '4-3-3' | '4-4-2' | '4-2-3-1' | '3-5-2' | '5-3-2' | '4-1-4-1' | '4-3-1-2' | '3-4-3' | '4-2-2-2' | '5-4-1' | '3-4-2-1' | '4-4-1-1';
 // Taktik 2.0 (karar 1 Kasim): doktrin (oyun anlayisi), iki sekil (savunma / hucum), gorev kartlari, kosullu kurallar
 export type Doctrine = 'gegenpress' | 'bus' | 'possession' | 'counter' | 'direct' | 'wings' | 'balanced';
 export type Shape = [number, number][]; // 11 nokta, hucum cercevesinde (x 0..105 kendi kaleden rakip kaleye, y 0..68); 0 = kaleci
@@ -536,6 +536,54 @@ const FORMATIONS: Record<string, [number, number][]> = {
     [40, 23], [35, 34], [40, 45],
     [64, 28], [64, 40],
   ],
+  // 1 Kasim: ek formasyonlar (Taktik 2.0; savunma sekli; hucum sekli doktrinden turetilir)
+  '4-1-4-1': [
+    [4, 34],
+    [30, 9], [22, 26], [22, 42], [30, 59],
+    [36, 34],
+    [50, 10], [46, 25], [46, 43], [50, 58],
+    [68, 34],
+  ],
+  '4-3-1-2': [
+    [4, 34],
+    [30, 9], [22, 26], [22, 42], [30, 59],
+    [38, 34], [44, 21], [44, 47],
+    [56, 34],
+    [66, 27], [66, 41],
+  ],
+  '3-4-3': [
+    [4, 34],
+    [20, 18], [18, 34], [20, 50],
+    [38, 7], [36, 25], [36, 43], [38, 61],
+    [64, 12], [70, 34], [64, 56],
+  ],
+  '4-2-2-2': [
+    [4, 34],
+    [30, 9], [22, 26], [22, 42], [30, 59],
+    [36, 26], [36, 42],
+    [54, 16], [54, 52],
+    [66, 27], [66, 41],
+  ],
+  '5-4-1': [
+    [4, 34],
+    [27, 6], [20, 21], [18, 34], [20, 47], [27, 62],
+    [44, 10], [38, 26], [38, 42], [44, 58],
+    [66, 34],
+  ],
+  '3-4-2-1': [
+    [4, 34],
+    [20, 18], [18, 34], [20, 50],
+    [38, 7], [36, 25], [36, 43], [38, 61],
+    [58, 22], [58, 46],
+    [70, 34],
+  ],
+  '4-4-1-1': [
+    [4, 34],
+    [30, 9], [22, 26], [22, 42], [30, 59],
+    [39, 27], [39, 41], [50, 10], [50, 58],
+    [58, 34],
+    [68, 34],
+  ],
 };
 // formasyon -> mevkiler ve forma numaralari (sira FORMATIONS ile ayni)
 const FORM_POS: Record<Formation, Pos[]> = {
@@ -544,6 +592,13 @@ const FORM_POS: Record<Formation, Pos[]> = {
   '4-2-3-1': ['GK', 'FB', 'CB', 'CB', 'FB', 'DM', 'DM', 'W', 'CM', 'W', 'ST'],
   '3-5-2': ['GK', 'CB', 'CB', 'CB', 'FB', 'DM', 'CM', 'CM', 'FB', 'ST', 'ST'],
   '5-3-2': ['GK', 'FB', 'CB', 'CB', 'CB', 'FB', 'CM', 'DM', 'CM', 'ST', 'ST'],
+  '4-1-4-1': ['GK', 'FB', 'CB', 'CB', 'FB', 'DM', 'W', 'CM', 'CM', 'W', 'ST'],
+  '4-3-1-2': ['GK', 'FB', 'CB', 'CB', 'FB', 'DM', 'CM', 'CM', 'CM', 'ST', 'ST'],
+  '3-4-3': ['GK', 'CB', 'CB', 'CB', 'FB', 'CM', 'CM', 'FB', 'W', 'ST', 'W'],
+  '4-2-2-2': ['GK', 'FB', 'CB', 'CB', 'FB', 'DM', 'DM', 'W', 'W', 'ST', 'ST'],
+  '5-4-1': ['GK', 'FB', 'CB', 'CB', 'CB', 'FB', 'W', 'CM', 'CM', 'W', 'ST'],
+  '3-4-2-1': ['GK', 'CB', 'CB', 'CB', 'FB', 'CM', 'CM', 'FB', 'CM', 'CM', 'ST'],
+  '4-4-1-1': ['GK', 'FB', 'CB', 'CB', 'FB', 'CM', 'CM', 'W', 'W', 'CM', 'ST'],
 };
 const FORM_NUM: Record<Formation, number[]> = {
   '4-3-3': [1, 3, 4, 5, 2, 6, 8, 10, 11, 9, 7],
@@ -551,6 +606,13 @@ const FORM_NUM: Record<Formation, number[]> = {
   '4-2-3-1': [1, 3, 4, 5, 2, 6, 8, 11, 10, 7, 9],
   '3-5-2': [1, 4, 5, 6, 3, 8, 10, 7, 2, 9, 11],
   '5-3-2': [1, 3, 4, 5, 6, 2, 8, 14, 10, 9, 11],
+  '4-1-4-1': [1, 3, 4, 5, 2, 6, 11, 8, 10, 7, 9],
+  '4-3-1-2': [1, 3, 4, 5, 2, 6, 8, 7, 10, 9, 11],
+  '3-4-3': [1, 4, 5, 6, 3, 8, 10, 2, 11, 9, 7],
+  '4-2-2-2': [1, 3, 4, 5, 2, 6, 8, 11, 7, 9, 10],
+  '5-4-1': [1, 3, 4, 5, 6, 2, 11, 8, 10, 7, 9],
+  '3-4-2-1': [1, 4, 5, 6, 3, 8, 14, 2, 10, 11, 9],
+  '4-4-1-1': [1, 3, 4, 5, 2, 8, 6, 11, 7, 10, 9],
 };
 export const FORMATION_LIST = Object.keys(FORM_POS) as Formation[];
 // Doktrinler: eksik talimatlari doldurur; attK hucum seklinin cesareti (1 = dengeli), wingIn kanatlarin ice katma orani, stUp forvetin ek cikisi
@@ -649,7 +711,7 @@ export const EDGE_RULES: { me: TeamCond; op: TeamCond; w: number; note: string }
   { me: tc.form('5-3-2'), op: tc.wing(0), w: 0.5, note: '5-3-2 ortalara karsi guclu' },
 ];
 // formasyon eslesmeleri: satir = benim dizilisim, sutun = rakip; deger benim lehime (tas-kagit-makas dongusu)
-export const FORM_EDGE: Record<Formation, Partial<Record<Formation, number>>> = {
+export const FORM_EDGE: Partial<Record<Formation, Partial<Record<Formation, number>>>> = {
   '4-3-3': { '3-5-2': 1, '5-3-2': -0.5, '4-4-2': 0, '4-2-3-1': 1 },
   '4-4-2': { '4-3-3': 0, '3-5-2': 0.5, '4-2-3-1': -1, '5-3-2': -0.5 },
   '4-2-3-1': { '4-4-2': 1, '5-3-2': 0, '3-5-2': -1, '4-3-3': -1 },
@@ -699,7 +761,7 @@ export function doctrinePenalty(t: TeamIn): number {
   const m = t.mainTactic, c = t.tactic;
   let pen = 0;
   for (const k of ['style', 'press', 'line', 'tempo'] as const) if (Math.abs((c[k] ?? 1) - (m[k] ?? 1)) >= 2) pen += 0.04;
-  const back = (f: Formation) => (f === '3-5-2' ? 3 : f === '5-3-2' ? 5 : 4);
+  const back = (f: Formation) => +f.split('-')[0];
   const mf = t.mainFormation ?? t.formation;
   if (mf !== t.formation) pen += back(mf) === back(t.formation) ? 0.02 : 0.08;
   pen = Math.min(0.15, pen);
@@ -1349,7 +1411,7 @@ function updateAnchorsAndMove(st: MatchState) {
     const shiftX = (bxf - 52.5) * 0.5 + (-5 + 9 * ph) + lineOff;
     const centerX = 45;
     const noDM = !live.some((q) => q.pos === 'DM');
-    const threeBack = live.filter((q) => q.pos === 'CB').length >= 3 && live.filter((q) => q.pos === 'FB').length === 2 && t.formation === '3-5-2';
+    const threeBack = live.filter((q) => q.pos === 'CB').length >= 3 && live.filter((q) => q.pos === 'FB').length === 2 && t.formation.startsWith('3-');
     const offL = inPoss ? offsideLine(st, s) : 0;
     // baskida en yakin 1-2 oyuncu topa gider
     const pressers: PState[] = [];
