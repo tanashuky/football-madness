@@ -103,6 +103,13 @@ body.play #tacBtn { display: block; }
 #tacPanel .pl { display: grid; grid-template-columns: 28px 1fr 44px; gap: 6px; align-items: center; font-size: 13px; padding: 2px 0; min-height: 30px; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,.06); }
 #tacPanel .pl .k { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; } #tacPanel .pl .k i { display: block; height: 100%; background: var(--good); }
 #tacPanel .pl.sel { outline: 1px solid var(--flood); border-radius: 6px; }
+#tacPanel .pitchmini { position: relative; background: var(--grass); border: 2px solid rgba(233,239,233,.6); border-radius: 6px; aspect-ratio: 105 / 68; width: 100%; max-width: 440px; overflow: hidden; touch-action: none; }
+#tacPanel .pitchmini::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; border-left: 2px solid rgba(233,239,233,.5); }
+#tacPanel .pitchmini .dot { touch-action: none; position: absolute; width: 24px; height: 24px; margin: -12px 0 0 -12px; border-radius: 50%; border: 2px solid #fff; display: flex; align-items: center; justify-content: center; font: 700 11px/1 var(--font-display); color: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.5); cursor: grab; }
+#tacPanel .pitchmini .dot.att { opacity: .6; border-style: dashed; }
+#tacPanel .pitchmini .dot.inrot { box-shadow: 0 0 0 3px var(--warn), 0 1px 3px rgba(0,0,0,.5); }
+#tacPanel .pitchmini svg.rot { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+#tacPanel .du { font-size: 12px; padding: 4px 6px; min-height: 30px; }
 #tacPanel .foot { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
 #pauseBox div { background: rgba(10,12,16,.85); border-radius: 10px; padding: 16px 22px; display: flex; flex-direction: column; gap: 4px; text-align: center; font: 500 14px/1.4 var(--font-body); color: var(--chalk); }
 #pauseBox b { font: 700 22px/1.2 var(--font-display); letter-spacing: .06em; text-transform: uppercase; }
@@ -6612,11 +6619,12 @@ document.getElementById('pausePlay').addEventListener('click', togglePause);
 // ---------- Mac ici taktik paneli ve devre arasi (Dilim 1) ----------
 // Acilinca oyun durur (tek oyunculu modlar); taktik: kaydirici (serbest), talimat/formasyon (3 degisiklik hakki, 1 dk uyum),
 // oyun modu (Team play / Total simulation), degisiklik (ilk olu topta uygulanir). Devre arasinda ayni panel otomatik acilir.
-const TAC = { open: false, half: false, subOut: null, decide: null, timer: null, msg: '' }; // decide: { kind: 'injury'|'red'|'gk', player, until(ms) }
+const TAC = { open: false, half: false, subOut: null, decide: null, timer: null, msg: '', tab: 'yaklasim', draft: null }; // decide: { kind: 'injury'|'red'|'gk', player, until(ms) }
 const TL = { press: ['Düşük', 'Orta', 'Yüksek'], line: ['Derin', 'Orta', 'Önde'], tempo: ['Yavaş', 'Normal', 'Hızlı'], style: ['Kısa pas', 'Dengeli', 'Direkt'], width: ['Dar', 'Normal', 'Geniş'] };
 function openTac(half = false, decide = null) {
   if (!PLAY.on || st.done) return;
-  TAC.open = true; TAC.half = half; TAC.subOut = decide ? decide.player : null; TAC.decide = decide;
+  TAC.open = true; TAC.half = half; TAC.subOut = decide ? decide.player : null; TAC.decide = decide; TAC.draft = null; TAC.msg = '';
+  TAC.tab = decide ? 'degisiklik' : (TAC.tab || 'yaklasim');
   if (TAC.timer) { clearInterval(TAC.timer); TAC.timer = null; }
   if (decide) TAC.timer = setInterval(() => { if (!TAC.open) { clearInterval(TAC.timer); TAC.timer = null; return; } const left = TAC.decide.until - performance.now(); const el = document.getElementById('tLeft'); if (el) el.textContent = Math.max(0, Math.ceil(left / 1000)) + ' sn'; if (left <= 0) { // sure doldu: sistem karar verir (sakatlik/kaleci: en uygun yedek; kirmizi: degisiklik yok)
       if (TAC.decide.kind !== 'red') autoSubsFor(st, PLAY.side); banner('SİSTEM KARAR VERDİ', 'rule', TAC.decide.kind === 'red' ? '10 kişi devam' : 'en uygun yedek'); closeTac(); } }, 250);
@@ -6626,6 +6634,16 @@ function openTac(half = false, decide = null) {
   document.getElementById('pauseBox').hidden = true;
 }
 function closeTac() { TAC.open = false; TAC.decide = null; if (TAC.timer) { clearInterval(TAC.timer); TAC.timer = null; } document.getElementById('tacPanel').hidden = true; if (PLAY.paused) togglePause(); }
+const TAC_UI = { press: ['Pres', ['Düşük', 'Orta', 'Yüksek']], line: ['Savunma hattı', ['Derin', 'Orta', 'Önde']], style: ['Oyun stili', ['Kısa pas', 'Dengeli', 'Direkt']], tempo: ['Tempo', ['Yavaş', 'Normal', 'Hızlı']], width: ['Genişlik', ['Dar', 'Normal', 'Geniş']], compact: ['Hatlar arası', ['Kompakt', 'Normal', 'Açık']], fb: ['Bekler', ['Savunmada kal', 'Dengeli', 'Bindir']], cm: ['Merkez orta saha', ['Geride', 'Dengeli', 'Ceza sahasına']], runs: ['Forvet koşuları', ['Güvenli', 'Dengeli', 'Riskli']] };
+const TAC_TABS = [['yaklasim', 'Yaklaşım'], ['talimat', 'Talimatlar'], ['sekil', 'Şekil'], ['gorev', 'Görevler'], ['degisiklik', 'Değişiklik']];
+// panel taslagi: sekil sekmesinde surukleme ve rotasyon cizimi, uygulanana kadar taslakta kalir
+function tacDraft(side) {
+  const t = st.teams[side];
+  if (TAC.draft && TAC.draft.side === side && TAC.draft.changes === st.tacticChanges[side]) return TAC.draft;
+  const sh = shapesOf(t);
+  TAC.draft = { side, changes: st.tacticChanges[side], formation: t.formation, formAtt: t.formation, shapeDef: sh.def.map((q) => [q[0], q[1]]), shapeAtt: sh.att.map((q) => [q[0], q[1]]), rotations: (t.tactic.rotations || []).map((c) => [...c]), show: TAC.draft?.show || 'def', rot: null };
+  return TAC.draft;
+}
 function renderTac() {
   const side = PLAY.side, t = st.teams[side], tac = t.tactic, opp = st.teams[1 - side];
   const left = 3 - st.tacticChanges[side];
@@ -6633,32 +6651,100 @@ function renderTac() {
   const bench = st.bench[side].filter((b) => b.off && !b.subbed);
   const pend = pendingSubs(st, side);
   const S = st.stats[side], O = st.stats[1 - side], poss = S.possTicks + O.possTicks || 1;
-  const sel = (k, opts) => `<label>${{ press: 'Pres', line: 'Savunma hattı', tempo: 'Tempo', style: 'Oyun stili', width: 'Genişlik' }[k]}<select data-k="${k}" class="tk">${opts.map((o, i) => `<option value="${i}" ${i === (tac[k] ?? 1) ? 'selected' : ''}>${o}</option>`).join('')}</select></label>`;
+  if (!TAC.tab) TAC.tab = 'yaklasim';
+  const tab = TAC.tab;
   const panelEl = document.getElementById('tacPanel'); const keepScroll = [panelEl.scrollTop, document.getElementById('tacBox').scrollTop];
-  document.getElementById('tacBox').innerHTML = `
-    <h3>${TAC.decide ? (TAC.decide.kind === 'injury' ? 'Sakatlık' : TAC.decide.kind === 'gk' ? 'Kaleci atıldı' : 'Kırmızı kart') + ' · <span id="tLeft"></span>' : TAC.half ? 'Devre arası' : 'Taktik'} <small>${t.short} ${S.goals} : ${O.goals} ${opp.short} · topa sahip olma %${Math.round(100 * S.possTicks / poss)} · şut ${S.shots}–${O.shots} · xG ${S.xg.toFixed(2)}–${O.xg.toFixed(2)}</small></h3>
-    <div class="cols">
-      <div class="col"><h4>Yaklaşım</h4>
-        <div class="seg" id="tMent">${[-2, -1, 0, 1, 2].map((m) => `<button aria-pressed="${st.mentality[side] === m}" data-m="${m}">${MENT_LABEL[String(m)]}</button>`).join('')}</div>
-        <div class="seg" id="tMode"><button aria-pressed="${PLAY.mode === 'team'}" data-mode="team">Team play</button><button aria-pressed="${PLAY.mode === 'sim'}" data-mode="sim">Total simulation</button></div>
-        <span style="font-size:12px;color:var(--muted)">Kaydırıcı serbest (1 dk uyum). Talimat ve formasyon değişikliği hakkı: <b style="color:var(--chalk)">${left}</b> · 1 dk uyum (T −10).</span></div>
-      <div class="col"><h4>Talimatlar</h4>${sel('press', TL.press)}${sel('line', TL.line)}${sel('tempo', TL.tempo)}${sel('style', TL.style)}${sel('width', TL.width)}
-        <label>Formasyon (savunma şekli)<select id="tForm">${FORMATION_LIST.map((f) => `<option ${f === t.formation ? 'selected' : ''}>${f}</option>`).join('')}</select></label>
-        <button id="tApply" ${left <= 0 ? 'disabled' : ''}>${left <= 0 ? 'Hak kalmadı' : `Talimatları uygula · kalan ${left} hak`}</button><div id="tMsg" style="font-size:12px;color:var(--good);min-height:16px;margin-top:4px">${TAC.msg || ''}</div></div>
-      <div class="col"><h4>Değişiklik <small style="color:var(--muted)">kalan ${st.subsLeft[side]} · pencere ${st.subWindowsLeft[side]}</small></h4>
+  const sel = (k, lab, opts) => `<label>${lab}<select data-k="${k}" class="tk">${opts.map((o, i) => `<option value="${i}" ${i === (tac[k] ?? 1) ? 'selected' : ''}>${o}</option>`).join('')}</select></label>`;
+  const hakTxt = `<span style="font-size:12px;color:var(--muted)">Değişiklik hakkı: <b style="color:var(--chalk)">${left}</b> · her uygulama 1 hak, 1 dk uyum (T −10). Kaydırıcı ve oyun modu serbest.</span>`;
+  let body = '';
+  if (tab === 'yaklasim') {
+    body = `<div class="col"><h4>Yaklaşım</h4>
+      <div class="seg" id="tMent">${[-2, -1, 0, 1, 2].map((m) => `<button aria-pressed="${st.mentality[side] === m}" data-m="${m}">${MENT_LABEL[String(m)]}</button>`).join('')}</div>
+      <div class="seg" id="tMode"><button aria-pressed="${PLAY.mode === 'team'}" data-mode="team">Team play</button><button aria-pressed="${PLAY.mode === 'sim'}" data-mode="sim">Total simulation</button></div>
+      <span style="font-size:12px;color:var(--muted)">Kaydırıcı savunma ↔ hücum: hat, pres ve koşuları taktiğin üstüne biner (1 dk uyum). Team play: topu olan oyuncuyu sen yönetirsin; Total simulation: izlersin.</span>${hakTxt}</div>
+      <div class="col"><h4>Durum</h4><div style="font-size:13px">${t.short} ${S.goals} : ${O.goals} ${opp.short}<br>Topa sahip olma %${Math.round(100 * S.possTicks / poss)} · şut ${S.shots}–${O.shots} · isabet ${S.onTarget}–${O.onTarget}<br>xG ${S.xg.toFixed(2)}–${O.xg.toFixed(2)} · pas %${Math.round(100 * S.passesOk / Math.max(1, S.passes))}–%${Math.round(100 * O.passesOk / Math.max(1, O.passes))}<br>Korner ${S.corners}–${O.corners} · faul ${S.fouls}–${O.fouls} · ofsayt ${S.offsides}–${O.offsides}</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:6px">Taktik: ${t.formation} · ${DOCTRINES[tac.doctrine || 'balanced'].label} · ${(tac.rotations || []).length ? (tac.rotations.length + ' rotasyon') : 'rotasyon yok'} · uyum ${Math.round(t.U)}</div></div>`;
+  } else if (tab === 'talimat') {
+    body = `<div class="col"><h4>Doktrin ve talimatlar</h4>
+      <label>Doktrin (oyun anlayışı)<select id="tDoc">${DOCTRINE_LIST.map((d) => `<option value="${d}" ${d === (tac.doctrine || 'balanced') ? 'selected' : ''}>${DOCTRINES[d].label}</option>`).join('')}</select></label>
+      ${sel('press', ...TAC_UI.press)}${sel('line', ...TAC_UI.line)}${sel('tempo', ...TAC_UI.tempo)}${sel('style', ...TAC_UI.style)}${sel('width', ...TAC_UI.width)}</div>
+      <div class="col"><h4>Ayrıntı</h4>${sel('compact', ...TAC_UI.compact)}${sel('fb', ...TAC_UI.fb)}${sel('cm', ...TAC_UI.cm)}${sel('runs', ...TAC_UI.runs)}
+      <label>Kanatlar<select data-k="wing" class="tk"><option value="0" ${!tac.wing ? 'selected' : ''}>Çizgide kal</option><option value="1" ${tac.wing ? 'selected' : ''}>İçe kat</option></select></label>
+      <label>Ofsayt tuzağı<select data-k="trap" class="tk"><option value="0" ${!tac.trap ? 'selected' : ''}>Kapalı</option><option value="1" ${tac.trap ? 'selected' : ''}>Açık</option></select></label>
+      <button id="tApply" ${left <= 0 ? 'disabled' : ''}>${left <= 0 ? 'Hak kalmadı' : `Talimatları uygula · kalan ${left} hak`}</button><div id="tMsg" style="font-size:12px;color:var(--good);min-height:16px">${TAC.msg || ''}</div>${hakTxt}</div>`;
+  } else if (tab === 'sekil') {
+    const d = tacDraft(side);
+    const show = d.show, shape = show === 'def' ? d.shapeDef : d.shapeAtt;
+    const byIdx = (i) => live.find((p) => p.idx === i);
+    const rotMode = !!d.rot, curRot = d.rot ? d.rot.cur : [];
+    const numOf = (i) => byIdx(i)?.num ?? '?';
+    const idxOfNum = (n) => byIdx11(n);
+    function byIdx11(n) { const p = live.find((q) => q.num === n); return p ? p.idx : -1; }
+    const arrow = (a, b, dashed) => { const [x1, y1] = shape[a], [x2, y2] = shape[b]; const dx = x2 - x1, dy = y2 - y1, dd = Math.hypot(dx, dy) || 1; return `<line x1="${x1 + dx / dd * 2.2}" y1="${y1 + dy / dd * 2.2}" x2="${x2 - dx / dd * 2.6}" y2="${y2 - dy / dd * 2.6}" stroke="${dashed ? 'var(--warn)' : '#fff'}" stroke-width="0.7" ${dashed ? 'stroke-dasharray="1.5 1"' : ''} marker-end="url(#ahP)"/>`; };
+    const parts = []; for (const cyc of d.rotations) { const ix = cyc.map(idxOfNum).filter((i) => i >= 0); for (let k = 0; k < ix.length; k++) parts.push(arrow(ix[k], ix[(k + 1) % ix.length], false)); } const ci = curRot.map(idxOfNum).filter((i) => i >= 0); for (let k = 0; k + 1 < ci.length; k++) parts.push(arrow(ci[k], ci[k + 1], true));
+    const inRot = new Set([...d.rotations.flat(), ...curRot]);
+    const dots = shape.map(([x, y], i) => `<div class="dot ${show === 'att' ? 'att' : ''} ${inRot.has(numOf(i)) ? 'inrot' : ''}" data-i="${i}" style="left:${x / 105 * 100}%;top:${y / 68 * 100}%;background:${t.color}">${numOf(i)}</div>`).join('');
+    const changed = JSON.stringify([d.shapeDef, d.shapeAtt, d.rotations, d.formation]) !== JSON.stringify([shapesOf(t).def, shapesOf(t).att, t.tactic.rotations || [], t.formation]);
+    body = `<div class="col" style="min-width:min(100%,420px)"><h4>Şekil <small style="color:var(--muted)">${show === 'def' ? 'savunma (topsuz)' : 'hücum (toplu)'} · ${rotMode ? 'rotasyon: oyunculara sırayla dokun' : 'sürükle'}</small></h4>
+      <div class="pitchmini ${rotMode ? 'rotmode' : ''}" id="tMini"><svg class="rot" viewBox="0 0 105 68" preserveAspectRatio="none"><defs><marker id="ahP" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#fff"/></marker></defs>${parts.join('')}</svg>${dots}</div>
+      <div class="seg" id="tShp"><button aria-pressed="${show === 'def'}" data-s="def">Savunma şekli</button><button aria-pressed="${show === 'att'}" data-s="att">Hücum şekli</button></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:flex-end"><label>Hazır şekil<select id="tShLoad">${FORMATION_LIST.map((f) => `<option ${f === (show === 'def' ? d.formation : d.formAtt) ? 'selected' : ''}>${f}</option>`).join('')}</select></label><button id="tShLoadBtn">Yükle</button></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--muted)">${d.rotations.map((cyc, k) => `<span>↻ ${cyc.join(' → ')} <button class="rotDel" data-k="${k}" style="padding:2px 6px;min-height:0">×</button></span>`).join('')}${rotMode ? `<span>${curRot.length ? 'Seçildi: ' + curRot.join(' → ') + ' · ilkine tekrar dokun' : 'A → B → C …'}</span>${curRot.length >= 2 ? '<button id="rotClose">Döngüyü kapat</button>' : ''}<button id="rotCancel">Vazgeç</button>` : '<button id="rotStart">Rotasyon çiz</button>'}</div></div>
+      <div class="col"><h4>Uygula</h4><span style="font-size:12px;color:var(--muted)">Savunma şekli formasyonu belirler (mevkiler hazır şekilden). Hücum şekli topluyken alınan yer. Rotasyon: hücumda döngü yer değiştirir, top kaybında eve döner (uyum). ${changed ? '<b style="color:var(--warn)">Taslakta uygulanmamış değişiklik var.</b>' : ''}</span>
+      <button id="tApplyShape" ${left <= 0 || !changed ? 'disabled' : ''}>${left <= 0 ? 'Hak kalmadı' : `Şekli uygula · kalan ${left} hak`}</button><button id="tShapeReset" ${changed ? '' : 'disabled'}>Taslağı geri al</button><div id="tMsg" style="font-size:12px;color:var(--good);min-height:16px">${TAC.msg || ''}</div>${hakTxt}</div>`;
+  } else if (tab === 'gorev') {
+    const du = (p) => (t.duties || {})[p.num] || {};
+    const opt = (p, k, labs) => `<select class="du" data-n="${p.num}" data-k="${k}">${labs.map(([v, l]) => `<option value="${v}" ${String(du(p)[k] ?? '') === String(v) ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
+    body = `<div class="col" style="min-width:min(100%,460px)"><h4>Görev kartları <small style="color:var(--muted)">rolün üstüne yazar</small></h4>
+      ${live.filter((p) => p.pos !== 'GK').map((p) => `<div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;padding:3px 0;border-bottom:1px solid var(--line);font-size:13px"><span style="min-width:110px"><b>${p.num}</b> ${p.name} <span style="color:var(--muted)">${p.pos}</span></span>
+        ${opt(p, 'runs', [['', 'Koşu: rol'], [0, 'Geride kal'], [1, 'Ayağa'], [2, 'Derin koşu']])}${opt(p, 'press', [['', 'Pres: rol'], [0, 'Blokta kal'], [1, 'Normal'], [2, 'İlk basan']])}${opt(p, 'pass', [['', 'Pas: rol'], [0, 'Kısa'], [1, 'Karışık'], [2, 'Uzun']])}${opt(p, 'mark', [['', 'Marke: alan'], [1, 'Adam']])}${p.pos === 'FB' ? opt(p, 'overlap', [['', 'Bindirme: takım'], [0, 'Kal'], [2, 'Bindir']]) : ''}</div>`).join('')}</div>
+      <div class="col"><h4>Koşullu kurallar <small style="color:var(--muted)">en çok ${RULES_MAX}</small></h4>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">${RULE_TEMPLATES.map((r) => `<label style="flex-direction:row;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:6px 10px;cursor:pointer"><input type="checkbox" class="rl" value="${r.id}" ${(t.rules || []).some((x) => x.id === r.id) ? 'checked' : ''}> ${r.label}</label>`).join('')}</div>
+      <button id="tApplyDuty" ${left <= 0 ? 'disabled' : ''}>${left <= 0 ? 'Hak kalmadı' : `Görev ve kuralları uygula · kalan ${left} hak`}</button><div id="tMsg" style="font-size:12px;color:var(--good);min-height:16px">${TAC.msg || ''}</div>${hakTxt}</div>`;
+  } else {
+    body = `<div class="col"><h4>Değişiklik <small style="color:var(--muted)">kalan ${st.subsLeft[side]} · pencere ${st.subWindowsLeft[side]}</small></h4>
         <div style="font-size:12px;color:var(--muted)">${TAC.decide ? (TAC.decide.kind === 'red' ? `<b style="color:#e5483f">${TAC.decide.player} numara atıldı.</b> Taktiği ayarla; istersen değişiklik yap. Süre dolunca 10 kişiyle devam.` : `<b style="color:var(--warn)">${TAC.decide.player} numara ${TAC.decide.kind === 'injury' ? 'sakatlandı' : 'kaleci atıldı'}.</b> Önerilen yedek işaretli; başka birini seçebilirsin. Süre dolunca sistem öneriyi uygular.`) : 'Çıkacak oyuncuyu seç, sonra yedeği. İlk ölü topta uygulanır.'}</div>
-        ${live.filter((p) => p.pos !== 'GK' || true).map((p) => `<div class="pl ${TAC.subOut === p.num ? 'sel' : ''}" data-out="${p.num}"><b>${p.num}</b><span>${p.name} <span style="color:var(--muted)">${p.pos}</span>${pend.some((q) => q.out === p.num) ? ' <span style="color:var(--warn)">çıkıyor</span>' : ''}${p.injured ? ' <span style="color:#e5483f">sakat</span>' : ''}</span><div class="k" title="kondisyon"><i style="width:${Math.round(p.k)}%"></i></div></div>`).join('')}
-        <div style="font-size:12px;color:var(--muted);margin-top:4px">Yedekler</div>
-        ${bench.map((b) => `<div class="pl ${TAC.decide && TAC.subOut !== null && suggestedSub(st, side, TAC.subOut) === b.num ? 'sel' : ''}" data-in="${b.num}"><b>${b.num}</b><span>${b.name} <span style="color:var(--muted)">${b.pos}</span>${pend.some((q) => q.inn === b.num) ? ' <span style="color:var(--good)">giriyor</span>' : ''}</span><div class="k"><i style="width:${Math.round(b.k)}%"></i></div></div>`).join('')}</div>
-    </div>
+        ${live.map((p) => `<div class="pl ${TAC.subOut === p.num ? 'sel' : ''}" data-out="${p.num}"><b>${p.num}</b><span>${p.name} <span style="color:var(--muted)">${p.pos}</span>${pend.some((q) => q.out === p.num) ? ' <span style="color:var(--warn)">çıkıyor</span>' : ''}${p.injured ? ' <span style="color:#e5483f">sakat</span>' : ''}</span><div class="k" title="kondisyon"><i style="width:${Math.round(p.k)}%"></i></div></div>`).join('')}</div>
+      <div class="col"><h4>Yedekler</h4>
+        ${bench.map((b) => `<div class="pl ${TAC.decide && TAC.subOut !== null && suggestedSub(st, side, TAC.subOut) === b.num ? 'sel' : ''}" data-in="${b.num}"><b>${b.num}</b><span>${b.name} <span style="color:var(--muted)">${b.pos}</span>${pend.some((q) => q.inn === b.num) ? ' <span style="color:var(--good)">giriyor</span>' : ''}</span><div class="k"><i style="width:${Math.round(b.k)}%"></i></div></div>`).join('')}${bench.length ? '' : '<span style="color:var(--muted);font-size:12px">Yedek kalmadı.</span>'}</div>`;
+  }
+  document.getElementById('tacBox').innerHTML = `
+    <h3>${TAC.decide ? (TAC.decide.kind === 'injury' ? 'Sakatlık' : TAC.decide.kind === 'gk' ? 'Kaleci atıldı' : 'Kırmızı kart') + ' · <span id="tLeft"></span>' : TAC.half ? 'Devre arası' : 'Taktik'} <small>${t.short} ${S.goals} : ${O.goals} ${opp.short} · %${Math.round(100 * S.possTicks / poss)} · şut ${S.shots}–${O.shots} · xG ${S.xg.toFixed(2)}–${O.xg.toFixed(2)}</small></h3>
+    <div class="seg" id="tTabs">${TAC_TABS.map(([id, lab]) => `<button aria-pressed="${tab === id}" data-tab="${id}">${lab}</button>`).join('')}</div>
+    <div class="cols">${body}</div>
     <div class="foot"><button class="prim" id="tClose">${TAC.half ? 'İkinci yarıya başla' : TAC.decide ? 'Devam (kararı uygula)' : 'Devam'}</button></div>`;
   const box = document.getElementById('tacBox');
   panelEl.scrollTop = keepScroll[0]; box.scrollTop = keepScroll[1];
-  box.querySelector('#tMent').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; setMent(+b.dataset.m); renderTac(); };
-  box.querySelector('#tMode').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; FM.setMode(b.dataset.mode); renderTac(); };
-  box.querySelector('#tApply').onclick = () => { const patch = {}; for (const s2 of box.querySelectorAll('.tk')) patch[s2.dataset.k] = +s2.value; const f = box.querySelector('#tForm').value; const ok = setTactic(st, side, patch, f !== t.formation ? f : undefined); banner(ok ? 'TAKTİK DEĞİŞTİ' : 'HAK KALMADI', 'rule', ok ? '1 dk uyum' : ''); TAC.msg = ok ? `Uygulandı: ${f} · pres ${TL.press[patch.press].toLowerCase()} · hat ${TL.line[patch.line].toLowerCase()} · tempo ${TL.tempo[patch.tempo].toLowerCase()} · 1 dk uyum süresi` : 'Değişiklik hakkı kalmadı'; renderTac(); setTimeout(() => { if (TAC.msg) { TAC.msg = ''; const m = document.getElementById('tMsg'); if (m) m.textContent = ''; } }, 6000); };
+  const flash = (msg) => { TAC.msg = msg; renderTac(); setTimeout(() => { if (TAC.msg === msg) { TAC.msg = ''; const m = document.getElementById('tMsg'); if (m) m.textContent = ''; } }, 6000); };
+  box.querySelector('#tTabs').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; TAC.tab = b.dataset.tab; renderTac(); };
+  const q = (id) => box.querySelector(id);
+  if (q('#tMent')) q('#tMent').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; setMent(+b.dataset.m); renderTac(); };
+  if (q('#tMode')) q('#tMode').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; FM.setMode(b.dataset.mode); renderTac(); };
+  if (q('#tApply')) q('#tApply').onclick = () => { const patch = {}; for (const s2 of box.querySelectorAll('.tk')) patch[s2.dataset.k] = +s2.value; const doc = q('#tDoc').value; if (doc !== (tac.doctrine || 'balanced')) patch.doctrine = doc; const ok = setTactic(st, side, patch); banner(ok ? 'TAKTİK DEĞİŞTİ' : 'HAK KALMADI', 'rule', ok ? '1 dk uyum' : ''); flash(ok ? `Uygulandı: ${DOCTRINES[doc].label} · pres ${TAC_UI.press[1][patch.press].toLowerCase()} · hat ${TAC_UI.line[1][patch.line].toLowerCase()} · tempo ${TAC_UI.tempo[1][patch.tempo].toLowerCase()} · 1 dk uyum` : 'Değişiklik hakkı kalmadı'); };
+  if (q('#tMini')) {
+    const d = tacDraft(side); const mini = q('#tMini'); const show = d.show; const shape = show === 'def' ? d.shapeDef : d.shapeAtt;
+    q('#tShp').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; d.show = b.dataset.s; renderTac(); };
+    q('#tShLoadBtn').onclick = () => { const f = q('#tShLoad').value; if (show === 'def') { d.formation = f; d.shapeDef = FORMATIONS[f].map((x) => [x[0], x[1]]); } else { d.formAtt = f; d.shapeAtt = attackShapeOf(FORMATIONS[f], FORM_POS[f], tac.doctrine).map((x) => [x[0], x[1]]); } renderTac(); };
+    if (q('#rotStart')) q('#rotStart').onclick = () => { d.rot = { cur: [] }; renderTac(); };
+    if (q('#rotCancel')) q('#rotCancel').onclick = () => { d.rot = null; renderTac(); };
+    if (q('#rotClose')) q('#rotClose').onclick = () => { d.rotations.push(d.rot.cur); d.rot = null; renderTac(); };
+    for (const b of box.querySelectorAll('.rotDel')) b.onclick = () => { d.rotations.splice(+b.dataset.k, 1); renderTac(); };
+    if (d.rot) {
+      mini.onclick = (e) => { const dot = e.target.closest('.dot'); if (!dot) return; const i = +dot.dataset.i; const p = live.find((x) => x.idx === i); if (!p || p.pos === 'GK') return; const n = p.num; const cur = d.rot.cur; if (d.rotations.flat().includes(n)) return; if (cur.length >= 2 && n === cur[0]) { d.rotations.push(cur); d.rot = null; renderTac(); return; } if (cur.includes(n) || cur.length >= 6) return; cur.push(n); renderTac(); };
+    } else {
+      let drag = null;
+      const toXY = (ev) => { const r = mini.getBoundingClientRect(); return [Math.max(2, Math.min(103, (ev.clientX - r.left) / r.width * 105)), Math.max(2, Math.min(66, (ev.clientY - r.top) / r.height * 68))]; };
+      mini.onpointerdown = (ev) => { const dot = ev.target.closest('.dot'); if (!dot) return; drag = dot; dot.setPointerCapture(ev.pointerId); ev.preventDefault(); ev.stopPropagation(); };
+      mini.onpointermove = (ev) => { if (!drag) return; const [x, y] = toXY(ev); drag.style.left = (x / 105 * 100) + '%'; drag.style.top = (y / 68 * 100) + '%'; ev.stopPropagation(); };
+      const drop = (ev) => { if (!drag) return; const i = +drag.dataset.i; const [x0, y] = toXY(ev); const x = i === 0 ? Math.min(x0, 14) : x0; shape[i] = [Math.round(x * 10) / 10, Math.round(y * 10) / 10]; drag = null; renderTac(); };
+      mini.onpointerup = drop; mini.onpointercancel = () => { drag = null; };
+    }
+    q('#tShapeReset').onclick = () => { TAC.draft = null; renderTac(); };
+    q('#tApplyShape').onclick = () => { const patch = { shapeDef: d.shapeDef.map((x) => [x[0], x[1]]), shapeAtt: d.shapeAtt.map((x) => [x[0], x[1]]), rotations: d.rotations.length ? d.rotations.map((c) => [...c]) : undefined }; const ok = setTactic(st, side, patch, d.formation !== t.formation ? d.formation : undefined); if (ok && !patch.rotations) { /* rotasyonlar temizlendi */ setRotations(st, side, undefined); } TAC.draft = null; banner(ok ? 'ŞEKİL DEĞİŞTİ' : 'HAK KALMADI', 'rule', ok ? '1 dk uyum' : ''); flash(ok ? `Uygulandı: ${d.formation} · ${d.rotations.length} rotasyon · 1 dk uyum` : 'Değişiklik hakkı kalmadı'); };
+  }
+  if (q('#tApplyDuty')) q('#tApplyDuty').onclick = () => { if (st.tacticChanges[side] >= 3) { flash('Değişiklik hakkı kalmadı'); return; } const du = {}; for (const s2 of box.querySelectorAll('.du')) { if (s2.value === '') continue; du[s2.dataset.n] = du[s2.dataset.n] || {}; du[s2.dataset.n][s2.dataset.k] = +s2.value; } t.duties = du; const rl = [...box.querySelectorAll('.rl:checked')].map((x) => x.value); if (rl.length > RULES_MAX) { flash(`En çok ${RULES_MAX} kural`); return; } setRules(st, side, rl.map((id) => RULE_TEMPLATES.find((r) => r.id === id)).filter(Boolean)); st.tacticChanges[side]++; st.adaptUntil[side] = st.clock + P.adaptMin * 60; st.events.push({ t: st.clock, type: 'tactic', side, text: 'görev' }); banner('GÖREVLER DEĞİŞTİ', 'rule', '1 dk uyum'); flash(`Uygulandı: ${Object.keys(du).length} görev kartı · ${rl.length} kural · 1 dk uyum`); };
   box.onclick = (e) => { const o = e.target.closest('[data-out]'); const i = e.target.closest('[data-in]'); if (o) { TAC.subOut = TAC.subOut === +o.dataset.out ? null : +o.dataset.out; renderTac(); } else if (i && TAC.subOut !== null) { const ok = userSub(st, side, TAC.subOut, +i.dataset.in); banner(ok ? 'DEĞİŞİKLİK SIRADA' : 'DEĞİŞİKLİK YAPILAMADI', 'rule', ok ? 'ilk ölü topta' : ''); TAC.subOut = null; renderTac(); } };
-  box.querySelector('#tClose').onclick = () => { if (TAC.decide && TAC.decide.kind !== 'red' && !pendingSubs(st, side).some((q) => q.out === TAC.decide.player)) autoSubsFor(st, side); closeTac(); };
+  q('#tClose').onclick = () => { if (TAC.decide && TAC.decide.kind !== 'red' && !pendingSubs(st, side).some((q2) => q2.out === TAC.decide.player)) autoSubsFor(st, side); closeTac(); };
 }
 document.getElementById('tacBtn').addEventListener('click', () => (TAC.open ? closeTac() : openTac(false)));
 
@@ -7754,7 +7840,7 @@ function appInit() {
 window.addEventListener('hashchange', () => { if (location.hash !== '#dev') { document.body.classList.add('app'); render(); } });
 appInit();
 </script>
-<div class="dev">demo · sürüm 01.11 23:08 · <a href="#dev" style="color:inherit" onclick="document.body.classList.remove('app')">geliştirici</a></div>
+<div class="dev">demo · sürüm 01.11 23:12 · <a href="#dev" style="color:inherit" onclick="document.body.classList.remove('app')">geliştirici</a></div>
 
 </body>
 </html>
