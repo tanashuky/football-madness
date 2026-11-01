@@ -403,6 +403,7 @@ export const P = {
   gkFarSave: 0, // uzak suttan (18-32 m) ek kurtaris (kalibrasyon 2)
   pressLineUp: 4, // yuksek preste hattin yukari cikisi (m, uyum/100 ile)
   unfamiliarFat: 1.35, // aliskin olunmayan doktrinde 50. dk sonrasi yorulma carpani
+  runsMask: 'b' as any, // etkin kosu turleri: 'b' arkaya, 'f' ayaga, 'w' kanada; bos = hepsi. Simdilik yalniz arkaya: ayaga ve kanada kosulari pas karariyla butunlesmeden hucumu zayiflatiyor (not)
   stepUp: 1.8, // ofsayt duellosunda savunmacinin erken adimi (m, G*B ile)
   timingErr: 1.5, // forvetin cizgi zamanlama hatasi (m, (1-B) ile)
   trackB: 0.55, // bu beklentinin altindaki savunmaci yem kosusunu takip eder
@@ -932,6 +933,81 @@ function threatRunner(st: MatchState, s: 0 | 1): boolean {
   for (const q of st.players) { if (q.side === s || q.off || q === c || q.pos === 'GK') continue; const [qxf] = toFrame(c.side, q.x, q.y); if (qxf > line - 6 && qxf > 60) return true; }
   return false;
 }
+// topsuz kosu secimi: her 0,5 s'de bir secenekler puanlanir; secilen kosu suresince hedef sabit kalir
+type RunKind = 'behind' | 'feet' | 'wide';
+interface RunPlan { kind: RunKind; txf: number; tyf: number; until: number; urg: number }
+function spaceAt(st: MatchState, side: 0 | 1, x: number, y: number): number {
+  let d = 9;
+  for (const o of st.players) { if (o.side === side || o.off) continue; const dd = hyp(o.x - x, o.y - y); if (dd < d) d = dd; }
+  return d / 9; // 0..1
+}
+function laneFree(st: MatchState, side: 0 | 1, x0: number, y0: number, x1: number, y1: number, r: number): boolean {
+  const dx = x1 - x0, dy = y1 - y0, d = hyp(dx, dy) || 1, ux = dx / d, uy = dy / d;
+  for (const o of st.players) { if (o.side === side || o.off) continue; const u = (o.x - x0) * ux + (o.y - y0) * uy; if (u < 0.5 || u > d) continue; if (Math.abs((o.x - x0) * uy - (o.y - y0) * ux) < r) return false; }
+  return true;
+}
+function runChoice(st: MatchState, p: PState, carrier: PState, offL: number, homeXf: number, homeYf: number, count: { behind: number; feet: number; wide: number }): RunPlan | null {
+  const cur = (p as any)._run as RunPlan | undefined;
+  if (cur && st.t < cur.until) return cur;
+  const slot = Math.floor(st.t * 2);
+  if ((p as any)._runSlot === slot) return null;
+  (p as any)._runSlot = slot;
+  const s = p.side;
+  const duty = dutyOf(st, p);
+  const [cxf, cyf] = toFrame(s, carrier.x, carrier.y);
+  const [pxf, pyf] = toFrame(s, p.x, p.y);
+  // rol agirliklari (gorev karti ustune yazar)
+  const w = { behind: p.pos === 'ST' ? 1.0 : p.pos === 'W' ? 0.7 : p.pos === 'CM' ? 0.35 : p.pos === 'FB' ? 0.25 : 0, feet: p.pos === 'ST' ? 0.5 : p.pos === 'CM' || p.pos === 'DM' ? 0.8 : p.pos === 'W' ? 0.5 : 0.3, wide: p.pos === 'W' ? 0.5 : p.pos === 'FB' ? 0.4 : 0.1 };
+  if (duty.runs === 2) w.behind += 0.4; if (duty.runs === 0) { w.behind *= 0.3; w.feet += 0.3; }
+  if (duty.overlap === 2 && p.pos === 'FB') w.wide += 0.4;
+  const t = st.teams[s];
+  if ((t.tactic.runs ?? 1) === 2) w.behind *= 1.2; if ((t.tactic.runs ?? 1) === 0) w.behind *= 0.7;
+  if (t.tactic.width === 2) w.wide *= 1.3;
+  const B = percOf(p, false).B;
+  const opts: { kind: RunKind; txf: number; tyf: number; v: number; urg: number }[] = [];
+  // kosular tasiyicinin durumuna cevaptir: arkaya kosu tasiyici rahat ve one bakarken (pas gelebilir), ayaga kosu tasiyici sikisikken (destek),
+  // kanada kosu top diger kanattayken (oyunu cevirme)
+  const cPress = pressureOn(st, carrier, carrier.x, carrier.y, 4);
+  const cFwd = carrier.hx * (fromFrame(s, 1, 0)[0] - fromFrame(s, 0, 0)[0]) + carrier.hy * (fromFrame(s, 1, 0)[1] - fromFrame(s, 0, 0)[1]) > 0.2;
+  // arkaya: cizginin hemen gerisinde, savunmacilarin arasindaki bosluga; tasiyici rahat, one bakiyor ve 35 m icindeyse
+  if (w.behind > 0 && count.behind < 2 && cxf > 35 && cxf < 78 && cPress < 0.5 && cFwd && hyp(cxf - pxf, cyf - pyf) < 35 && pxf > cxf - 8) {
+    for (const dy of [-10, -4, 4, 10]) {
+      const tyf = clamp(pyf + dy, 6, 62), txf = Math.min(offL - 1.8, 98);
+      const [wx, wy] = fromFrame(s, txf + 6, tyf);
+      const sp = spaceAt(st, s, wx, wy);
+      const v = w.behind * (0.4 + 0.6 * sp) * (0.6 + 0.4 * B) * (txf > pxf + 3 ? 1 : 0.5);
+      opts.push({ kind: 'behind', txf, tyf, v, urg: 1 });
+    }
+  }
+  // ayaga: tasiyiciya 8-12 m, bos ve pas yolu acik bir nokta
+  if (count.feet < 2 && cPress >= 0.5 && cxf < 70 && hyp(cxf - pxf, cyf - pyf) > 6) {
+    for (const ang of [-0.9, -0.45, 0, 0.45, 0.9]) {
+      const txf = clamp(cxf + Math.cos(ang) * 10, 8, Math.min(offL - 0.6, 100)), tyf = clamp(cyf + Math.sin(ang) * 10, 4, 64);
+      const [wx, wy] = fromFrame(s, txf, tyf);
+      if (!laneFree(st, s, carrier.x, carrier.y, wx, wy, 1.6)) continue;
+      const sp = spaceAt(st, s, wx, wy);
+      const near = hyp(txf - homeXf, tyf - homeYf) < 18 ? 1 : 0.5; // kendi bolgesinden cok uzaklasmaz
+      opts.push({ kind: 'feet', txf, tyf, v: w.feet * (0.3 + 0.7 * sp) * near, urg: 0.85 });
+    }
+  }
+  // kanada: cizgiye yakin, kendi evinin onunde
+  if (w.wide > 0.2 && count.wide < 2 && cxf < 70 && (pyf - 34) * (cyf - 34) < 0 && Math.abs(cyf - 34) > 10) {
+    const tyf = pyf < 34 ? 4 : 64, txf = clamp(Math.max(homeXf, cxf + 5), 20, Math.min(offL - 0.6, 96));
+    const [wx, wy] = fromFrame(s, txf, tyf);
+    opts.push({ kind: 'wide', txf, tyf, v: w.wide * (0.3 + 0.7 * spaceAt(st, s, wx, wy)) * (Math.abs(pyf - 34) > 14 ? 1 : 0.6), urg: 0.8 });
+  }
+  if (!opts.length) return null;
+  if (P.runsMask) { for (let i = opts.length - 1; i >= 0; i--) if (!(P.runsMask as string).includes(opts[i].kind[0])) opts.splice(i, 1); if (!opts.length) return null; }
+  let best = opts[0]; for (const o of opts) if (o.v > best.v) best = o;
+  // evde kalma degeri: bosluk ve rol; kosu ancak evden belirgin iyiyse
+  const [hx, hy] = fromFrame(s, homeXf, homeYf);
+  const homeV = 0.62 * (0.4 + 0.6 * spaceAt(st, s, hx, hy)) + gauss(st.rng) * 0.08;
+  if (best.v <= homeV) { (p as any)._run = undefined; return null; }
+  const plan: RunPlan = { kind: best.kind, txf: best.txf, tyf: best.tyf, until: st.t + (best.kind === 'behind' ? 1.2 : 1.5) + st.rng() * 0.8, urg: best.urg };
+  (p as any)._run = plan;
+  dbg('kosu_' + best.kind);
+  return plan;
+}
 // savunmacinin 7 m yakininda kaleye dogru kosan topsuz rakip (yem kosusu)
 function decoyNear(st: MatchState, p: PState): PState | null {
   const [gx, gy] = fromFrame(p.side, 0, 34);
@@ -1298,6 +1374,8 @@ function updateAnchorsAndMove(st: MatchState) {
     }
     // kendi ucuncu bolgesinde 1-2 savunmaci top ile kale arasina girer (derin blokta 2)
     const coverMap = new Map<PState, [number, number]>();
+    const runCount = { behind: 0, feet: 0, wide: 0 };
+    for (const q of live) { const r = (q as any)._run as { kind: 'behind' | 'feet' | 'wide'; until: number } | undefined; if (r && st.t < r.until && inPoss) runCount[r.kind]++; }
     if (!inPoss && carrier && bxf < 40) {
       const nCover = t.tactic.line === 0 ? 2 : 1;
       const cands = live.filter((p) => !pressers.includes(p) && (p.pos === 'CB' || p.pos === 'DM' || p.pos === 'FB' || (p.pos === 'CM' && noDM)));
@@ -1411,6 +1489,12 @@ function updateAnchorsAndMove(st: MatchState) {
       }
       let [tx, ty] = fromFrame(s, txf, tyf);
       let urg = P.offBallUrg;
+      // topsuz kosular (mimari 2.1, 3. katman): hucumcu birkac kosu secenegini (arkaya, ayaga, kanada) rolu, gorev karti ve bosluga gore tartar;
+      // secilen kosu 1,5-2,5 s surer. Sekil iskelet, kosular ustundeki kas.
+      if (inPoss && p.pos !== 'GK' && carrier && carrier.side === s && ph > 0.4) {
+        const run = runChoice(st, p, carrier, offL, txf, tyf, runCount);
+        if (run) { const lim = offL - 0.4 + Math.max(0, timingErr(st, p)); [tx, ty] = fromFrame(s, Math.min(run.txf, lim), run.tyf); urg = Math.max(urg, run.urg); }
+      }
       // topsuz hucum oyuncusu markajdan siyrilir: yakin rakipten 2 m uzaga kayar
       if (inPoss && p.pos !== 'GK') {
         const mk = nearestOpp(st, p);
@@ -2852,7 +2936,8 @@ function throughOptions(st: MatchState, c: PState, mates: PState[]) {
       if (txf < P.thruMinX) continue; // orta sahaya atilan top ara pas degil, normal pastir
       const tyf = 34 + clamp((myf - 34) * 0.4, -14, 14); // kosu ice dogru kirilir
       const [tx, ty] = fromFrame(side, txf, tyf);
-      const tRec = hyp(tx - m.x, ty - m.y) / (m.speedBase * kf(m.k)) - P.runsHead[runs] - (fastR ? 0.15 : 0);
+      const running = ((m as any)._run as { kind: string; until: number } | undefined)?.kind === 'behind' && st.t < ((m as any)._run as { until: number }).until; // zaten arkaya kosuyor: on alir
+      const tRec = hyp(tx - m.x, ty - m.y) / (m.speedBase * kf(m.k)) - P.runsHead[runs] - (fastR ? 0.15 : 0) - (running ? 0.25 : 0);
       let tDef = 1e9;
       let winner: PState | null = null;
       const inBox = txf > 88.5 && Math.abs(tyf - 34) < 20.16;
