@@ -168,3 +168,5 @@ Commit sırası: 8ee1406 hız/pencereler → dd51833 şekiller → 7402036 göre
 - Telefon: skor şeridi 900 px altında 250 px / 16 px yazı (Taktik düğmesi skorun üstüne biniyordu).
 ### 5. Rapor
 - Maç raporuna "Oyuncular" (kendi takım: xG, gol, kart, sakatlık, değişiklik, kondisyon) ve "Taktik zaman çizelgesi" (talimat/şekil/görev uygulamaları, kaydırıcı, kural tetikleri; karşı pres/ikinci top sayıya indirildi; rotasyon çevirme sayıları) kartları eklendi.
+- Kanada koşu, hedef 7/61 + pas yolu açık şartıyla (100 maç, aynı seed'ler): arkaya+ayağa 2,54 gol / xG 0,90 → +kanada 2,35 / 0,83, beraberlik %24 → %32. Koşu başına değer düşük: kanada koşan oyuncu kanat kanalındaki boşluğu dolduruyor ama pas geldiğinde orta/şut seçeneği zayıf kalıyor (orta dönüşümü düşük). Karar: `runsMask 'bf'` kalıyor; kanada koşu, orta mekaniği (kesme pası, ikinci direk) ele alındığında yeniden sınanacak.
+- Gece turu kapanışı: 5 madde tamam; artifact sürüm 40, GitHub b071994. Sabah kararları: arka uç (Supabase / Durable Objects / kendi sunucu), botların rotasyon kullanması, 11–16 m dönüşüm bandı.
