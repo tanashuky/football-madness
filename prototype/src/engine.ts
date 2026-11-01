@@ -423,7 +423,7 @@ export const P = {
   gkFarSave: 0, // uzak suttan (18-32 m) ek kurtaris (kalibrasyon 2)
   pressLineUp: 4, // yuksek preste hattin yukari cikisi (m, uyum/100 ile)
   unfamiliarFat: 1.35, // aliskin olunmayan doktrinde 50. dk sonrasi yorulma carpani
-  runsMask: 'b' as any, // etkin kosu turleri: 'b' arkaya, 'f' ayaga, 'w' kanada; bos = hepsi. Simdilik yalniz arkaya: ayaga ve kanada kosulari pas karariyla butunlesmeden hucumu zayiflatiyor (not)
+  runsMask: 'bf' as any, // etkin kosu turleri: 'b' arkaya, 'f' ayaga, 'w' kanada; bos = hepsi. 2 Kasim: ayaga acildi (100 mac: gol 2,43 -> 2,54, pas isabeti +0,5); kanada kosu pas yolu kosuluyla sinanacak
   thinkSim: 0, // dusunen bot adaylari ic simulasyonla dogrulasin mi (0: sezgisel puan; 1: kisa mac simulasyonu - sunucu/test)
   thinkSimMin: 12, // ic simulasyon suresi (oyun dk)
   thruAirPower: 0.7, // kullanici ara pasi bu gucun ustunde havadan (asirtma)
@@ -1182,9 +1182,10 @@ function runChoice(st: MatchState, p: PState, carrier: PState, offL: number, hom
   }
   // kanada: cizgiye yakin, kendi evinin onunde
   if (w.wide > 0.2 && count.wide < 2 && cxf < 70 && (pyf - 34) * (cyf - 34) < 0 && Math.abs(cyf - 34) > 10) {
-    const tyf = pyf < 34 ? 4 : 64, txf = clamp(Math.max(homeXf, cxf + 5), 20, Math.min(offL - 0.6, 96));
+    const tyf = pyf < 34 ? 7 : 61, txf = clamp(Math.max(homeXf, cxf + 5), 20, Math.min(offL - 0.6, 96));
     const [wx, wy] = fromFrame(s, txf, tyf);
-    opts.push({ kind: 'wide', txf, tyf, v: w.wide * (0.3 + 0.7 * spaceAt(st, s, wx, wy)) * (Math.abs(pyf - 34) > 14 ? 1 : 0.6), urg: 0.8 });
+    // pas yolu acik degilse kanada kosunun degeri yok (top oraya gelemez)
+    if (laneFree(st, s, carrier.x, carrier.y, wx, wy, 1.6)) opts.push({ kind: 'wide', txf, tyf, v: w.wide * (0.3 + 0.7 * spaceAt(st, s, wx, wy)) * (Math.abs(pyf - 34) > 14 ? 1 : 0.6), urg: 0.8 });
   }
   if (!opts.length) return null;
   if (P.runsMask) { for (let i = opts.length - 1; i >= 0; i--) if (!(P.runsMask as string).includes(opts[i].kind[0])) opts.splice(i, 1); if (!opts.length) return null; }

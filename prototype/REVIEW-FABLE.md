@@ -161,3 +161,10 @@ Commit sırası: 8ee1406 hız/pencereler → dd51833 şekiller → 7402036 göre
 - Değişiklik (mekanik, çarpan değil): (a) hücumda kanat/bek topa doğru yanal kayma 0,32 → 0,08 (`P.wideHoldK`; ters kanat açık kalır); (b) hücumda kanat/bek genişlik çarpanı `P.wideStretch` [1, 1.12, 1.2] (dar/normal/geniş; "içe kat" talimatında yok); (c) `threat()`'e kanat kanalı terimi (son üçte kenar bölge değeri `P.wideThreat` 0,02); (d) çizgiye 9 m yakın müdahalede top %70 dışarı doğru ve daha hızlı açılır (`P.lineOutR/P.lineOutP`).
 - Sonuç (20 maç): çizgiye 10 m içinde %15,5–18; kanat 22,9 m, bek 28,1 m; orta 10,7 → 13,5; taç 2,1 → 3,0. 200 maç taban: gol 2,56, beraberlik %28, 0-0 %6, korner 0,83, ofsayt 0,38 (bant içinde). `wideThreat` 0,03'te gol 2,28 / 0-0 %14'e düşüyordu (çok fazla orta) → 0,02.
 - Taç sayısı hâlâ gerçeğin (~20/takım) çok altında; kaynağı sahipsiz top/sekme fiziğinin azlığı — ayrı tur.
+### 3. Koşular
+- 100 maç karşılaştırma (aynı seed'ler): yalnız arkaya 2,43 gol / pas %78,2; arkaya+ayağa **2,54 / %78,7** (şut 8,2→8,7); arkaya+kanada 2,33 (hücumda kayıp pas +7%); üçü 2,38. Karar: ayağa koşular açıldı (`runsMask 'bf'`). Kanada koşu hedefi 4/64 → 7/61 ve pas yolu açık şartıyla yeniden sınanıyor; sonucu aşağıda.
+### 4. Total simulation ekstraları + telefon
+- Oynarken "Katman" düğmesi (sağ üst, Kam'ın yanı): kendi takımın hat çizgileri (rakip soluk), şekil fazına göre ev konumları (kesikli daire + oyuncuya çizgi; rotasyonda başkasının evi), rotasyon okları (kayma varsa dolu). Total simulation'da varsayılan açık. Skor şeridinin altında canlı istatistik satırı (sahip olma, şut, xG, korner) — sim modunda ya da katman açıkken.
+- Telefon: skor şeridi 900 px altında 250 px / 16 px yazı (Taktik düğmesi skorun üstüne biniyordu).
+### 5. Rapor
+- Maç raporuna "Oyuncular" (kendi takım: xG, gol, kart, sakatlık, değişiklik, kondisyon) ve "Taktik zaman çizelgesi" (talimat/şekil/görev uygulamaları, kaydırıcı, kural tetikleri; karşı pres/ikinci top sayıya indirildi; rotasyon çevirme sayıları) kartları eklendi.

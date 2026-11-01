@@ -71,6 +71,9 @@ body.play #mentBar { display: flex; }
 #pauseBox[hidden] { display: none; }
 #tacBtn { position: fixed; top: max(8px, env(safe-area-inset-top, 0px)); left: calc(max(10px, env(safe-area-inset-left, 0px)) + 250px); z-index: 950; display: none; font: 600 13px/1 var(--font-body); color: var(--chalk); background: rgba(10,12,16,.7); border: 1px solid rgba(255,255,255,.2); border-radius: 8px; padding: 9px 12px; }
 body.play #tacBtn { display: block; }
+#layerBtn { position: fixed; top: max(8px, env(safe-area-inset-top, 0px)); right: calc(max(10px, env(safe-area-inset-right, 0px)) + 132px); z-index: 950; display: none; font: 600 13px/1 var(--font-body); color: var(--muted); background: rgba(10,12,16,.7); border: 1px solid rgba(255,255,255,.2); border-radius: 8px; padding: 9px 12px; }
+#layerBtn[aria-pressed="true"] { color: var(--chalk); border-color: var(--warn); }
+body.play #layerBtn { display: block; }
 #tacPanel { position: fixed; inset: 0; z-index: 945; display: flex; align-items: flex-start; justify-content: center; padding: calc(max(8px, env(safe-area-inset-top, 0px)) + 46px) 8px 8px; background: rgba(8,12,10,.6); }
 #tacPanel[hidden] { display: none; }
 #tacPanel .box { background: rgba(14,21,18,.97); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; width: min(900px, 96vw); max-height: calc(100vh - 62px); max-height: calc(100dvh - 62px); overflow: auto; color: var(--chalk); font: 500 14px/1.4 var(--font-body); display: flex; flex-direction: column; gap: 10px; }
@@ -245,6 +248,7 @@ label.chk { display: flex; flex-direction: row; gap: 8px; align-items: center; }
 <button id="exitPlay" type="button">Çık</button>
 <button id="pausePlay" type="button" aria-label="Duraklat">❚❚</button>
 <button id="tacBtn" type="button">Taktik</button>
+<button id="layerBtn" type="button" aria-pressed="false" title="Taktik katmanı">Katman</button>
 <div id="tacPanel" hidden><div class="box" id="tacBox"></div></div>
 <div id="mentBar" aria-label="Taktik kaydırıcı"><button id="mentDown" type="button" aria-label="Savunma">◀</button><output id="mentOut">Dengeli</output><button id="mentUp" type="button" aria-label="Hücum">▶</button></div>
 <div id="pauseBox" hidden><div><b>Durduruldu</b><span>Devam etmek için ▶ ya da P</span></div></div>
@@ -584,6 +588,7 @@ function draw(alpha, now = performance.now()) {
   const cpi = PLAY.on ? st.players.indexOf(controlledPlayer(st, PLAY.side)) : -1;
   const pos = (i) => { const pr = prev[i] ?? cur[i]; const a = i === cpi ? 1 + alpha * 0.5 : alpha; return [pr[0] + (cur[i][0] - pr[0]) * a, pr[1] + (cur[i][1] - pr[1]) * a, (pr[2] ?? 0) + ((cur[i][2] ?? 0) - (pr[2] ?? 0)) * alpha]; };
 
+  if (PLAY.on && LAYER.on) drawTacLayer(s, X, Y, pos);
   if (document.getElementById('lines').checked && !PLAY.on) {
     for (const side of [0, 1]) {
       const col = side === 0 ? css('--home') : css('--away');
@@ -990,6 +995,7 @@ window.FM = {
     applyCam(o.cam ?? 'full');
     newMatch(o.seed ?? (1 + Math.floor(Math.random() * 1e6)));
     PLAY.assistP = o.assistP ?? 0; PLAY.assistS = o.assistS ?? 1;
+    LAYER.on = PLAY.mode === 'sim'; document.getElementById('layerBtn').setAttribute('aria-pressed', LAYER.on);
     if (PLAY.mode === 'team') setControl(st, PLAY.side, 'team', PLAY.assistP, PLAY.assistS, { autoSwitch: PLAY.autoSwitch });
     onResize();
     speed = 1;
@@ -1231,6 +1237,45 @@ function sprintFx(cp, now) {
   while (SPR.trail.length && now - SPR.trail[0].t > 350) SPR.trail.shift();
 }
 // oyna modu katmani: HUD, joystick ve butonlar, kontrol edilen futbolcu halkasi, nisan oku, ekran disi isaretler, radar
+// taktik katmani (oynarken): kendi takimin hat cizgileri, ev konumlari (ici bos daire), rotasyon oklari; Total simulation'da varsayilan acik
+const LAYER = { on: false };
+function drawTacLayer(s, X, Y, pos) {
+  const side = PLAY.side, t = st.teams[side], ph = st.phase[side];
+  ctx.save();
+  // hat cizgileri (kendi takim belirgin, rakip soluk)
+  for (const sd of [side, 1 - side]) {
+    ctx.strokeStyle = sd === side ? '#ffffff' : 'rgba(255,255,255,.5)'; ctx.globalAlpha = sd === side ? 0.5 : 0.22; ctx.lineWidth = Math.max(1, s * 0.16);
+    for (const g of [['CB', 'FB'], ['DM', 'CM'], ['W', 'ST']]) {
+      const pts = st.players.map((p, i) => [p, i]).filter(([p]) => p.side === sd && !p.off && g.includes(p.pos)).map(([, i]) => pos(i)).sort((a, b) => a[1] - b[1]);
+      if (pts.length < 2) continue;
+      ctx.beginPath(); pts.forEach(([x, y], k) => (k ? ctx.lineTo(X(x), Y(y)) : ctx.moveTo(X(x), Y(y)))); ctx.stroke();
+    }
+  }
+  // ev konumlari: sekil fazina gore savunma/hucum evi (rotasyonda baskasinin evi)
+  ctx.globalAlpha = 0.6; ctx.setLineDash([3, 3]); ctx.lineWidth = Math.max(1, s * 0.14); ctx.strokeStyle = t.color;
+  for (const p of st.players) {
+    if (p.side !== side || p.off || p.pos === 'GK') continue;
+    const hm = st.rotHome.get(p) ?? p;
+    const [hx, hy] = fromFrame(side, hm.ax + (hm.ox - hm.ax) * ph, hm.ay + (hm.oy - hm.ay) * ph);
+    ctx.beginPath(); ctx.arc(X(hx), Y(hy), Math.max(5, s * 0.8), 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = 0.25; ctx.beginPath(); ctx.moveTo(X(hx), Y(hy)); ctx.lineTo(X(p.x), Y(p.y)); ctx.stroke(); ctx.globalAlpha = 0.6;
+  }
+  ctx.setLineDash([]);
+  // rotasyon oklari: dongu uyeleri arasinda (kayma varsa dolu, yoksa soluk)
+  for (const r of st.rot[side]) {
+    const n = r.players.length;
+    ctx.strokeStyle = css('--warn'); ctx.fillStyle = css('--warn'); ctx.globalAlpha = r.shift ? 0.9 : 0.35; ctx.lineWidth = Math.max(1.5, s * 0.2);
+    for (let i = 0; i < n; i++) {
+      const a = r.players[i], b = r.players[(i + 1) % n]; if (a.off || b.off) continue;
+      const ax = X(a.x), ay = Y(a.y), bx = X(b.x), by = Y(b.y); const dx = bx - ax, dy = by - ay, dd = Math.hypot(dx, dy) || 1; const rr = Math.max(6, s * 1.0) * 1.3;
+      const sx = ax + dx / dd * rr, sy = ay + dy / dd * rr, ex = bx - dx / dd * rr, ey = by - dy / dd * rr;
+      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex, ey); ctx.stroke();
+      const hl = Math.max(5, s * 0.7); ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(ex - dx / dd * hl - dy / dd * hl * 0.5, ey - dy / dd * hl + dx / dd * hl * 0.5); ctx.lineTo(ex - dx / dd * hl + dy / dd * hl * 0.5, ey - dy / dd * hl - dx / dd * hl * 0.5); ctx.closePath(); ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+document.getElementById('layerBtn').addEventListener('click', () => { LAYER.on = !LAYER.on; document.getElementById('layerBtn').setAttribute('aria-pressed', LAYER.on); });
 function drawPhoneOverlay(Wc, Hc, s, X, Y, ox, oy, pos) {
   const dpr = Wc / cv.clientWidth;
   const g = ctrlGeom();
@@ -1276,10 +1321,11 @@ function drawPhoneOverlay(Wc, Hc, s, X, Y, ox, oy, pos) {
     ctx.restore();
   }
   // HUD
-  const hw = 300 * u, hh = 34 * u, hy = SA.t * dpr + 8 * u;
+  const narrow = cv.clientWidth < 900; // telefon: skor seridi dar (Taktik ve Katman dugmeleriyle cakismasin)
+  const hw = (narrow ? 250 : 300) * u, hh = 34 * u, hy = SA.t * dpr + 8 * u;
   ctx.fillStyle = 'rgba(10,12,16,.78)'; ctx.fillRect(Wc / 2 - hw / 2, hy, hw, hh);
   ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.font = `700 ${Math.round(18 * u)}px ${css('--font-body')}`;
+  ctx.font = `700 ${Math.round((narrow ? 16 : 18) * u)}px ${css('--font-body')}`;
   const base = [0, 45, 90, 105][st.half - 1] * 60, t = base + st.hclock;
   const mm = Math.floor(t / 60), ss = Math.floor(t % 60);
   const clk = st.done ? 'MS' : `${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
@@ -1288,6 +1334,14 @@ function drawPhoneOverlay(Wc, Hc, s, X, Y, ox, oy, pos) {
     const gx = st.half % 2 === 0 ? 0 : 105;
     ctx.font = `600 ${Math.round(11 * u)}px ${css('--font-body')}`; ctx.fillStyle = 'rgba(255,255,255,.75)';
     ctx.fillText(gx > 50 ? 'hücum →' : '← hücum', Wc / 2, hy + hh + 12 * u);
+    if (PLAY.mode === 'sim' || LAYER.on) {
+      // canli istatistik seridi: topa sahip olma, sut, xG, uyum
+      const S0 = st.stats[0], S1 = st.stats[1], pt = S0.possTicks + S1.possTicks || 1;
+      const line = `topa sahip olma %${Math.round(100 * S0.possTicks / pt)}–%${Math.round(100 * S1.possTicks / pt)} · şut ${S0.shots}–${S1.shots} · xG ${S0.xg.toFixed(2)}–${S1.xg.toFixed(2)} · korner ${S0.corners}–${S1.corners}`;
+      ctx.font = `500 ${Math.round(10.5 * u)}px ${css('--font-body')}`; const tw = ctx.measureText(line).width + 16 * u;
+      ctx.fillStyle = 'rgba(10,12,16,.62)'; ctx.fillRect(Wc / 2 - tw / 2, hy + hh + 20 * u, tw, 16 * u);
+      ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.fillText(line, Wc / 2, hy + hh + 28 * u);
+    }
   }
   // kamera butonu
   const cm = g.cam;
