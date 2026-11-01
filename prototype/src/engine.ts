@@ -325,6 +325,11 @@ export const P = {
   rotPeriod: 7, // etkin rotasyon: en az bu kadar sure sonra yeni cevirme (s)
   rotProb: 0.5, // etkin rotasyon: periyot dolunca her 0,5 s kontrolde cevirme olasiligi
   rotHold: 6, // cevirmeden sonra tepkisel (mesafe) kuralin beklemesi (s)
+  wideThreat: 0.02, // kanat kanalinin son ucteki pas degeri
+  wideStretch: [1.0, 1.12, 1.2] as number[], // hucumda kanat/bek genislik carpani (dar/normal/genis)
+  lineOutR: 9, // cizgiye bu kadar yakin mudahalede top disari dogru acilabilir (m)
+  lineOutP: 0.7, // ... olasiligi
+  wideHoldK: 0.08, // hucumda kanat/bek topa dogru yanal kayma orani (merkez 0,32)
   markReacq: 1.0, // adam markaji: adam bolgeden cikinca yeni adam aramadan once pesinden gitme suresi (s, okuma B ile 0,6-1,6x)
   gkHandVz: 7, // elden uzun vurusun en az dikey hizi (m/s)
   headZ: [1.2, 2.35] as number[], // kafa/gogus yuksekligi araligi (m): bunun ustu kimseye ulasmaz
@@ -1298,7 +1303,9 @@ function shotModel(st: MatchState, c: PState, xf: number, yf: number, press: num
 
 function threat(xf: number, yf: number): number {
   const centr = Math.exp(-Math.pow((yf - 34) / 24, 2));
-  return 0.004 + 0.45 * baseXg(xf, yf) + 0.05 * Math.exp((xf - 105) / 22) * (0.5 + 0.5 * centr);
+  // kanat kanali: son ucte kenar bolgeler (orta / kesme pasi icin) ayrica degerlidir; yoksa butun paslar merkeze akar
+  const wide = Math.max(0, (Math.abs(yf - 34) - 14) / 20);
+  return 0.004 + 0.45 * baseXg(xf, yf) + 0.05 * Math.exp((xf - 105) / 22) * (0.5 + 0.5 * centr) + P.wideThreat * Math.exp((xf - 105) / 18) * wide;
 }
 
 function pressureOn(st: MatchState, p: PState, x: number, y: number, radius = 6): number {
@@ -1633,7 +1640,11 @@ function updateAnchorsAndMove(st: MatchState) {
         // savunma hatti ayari esas olarak defans hattini oynatir; orta saha yarisi kadar, forvetler hic etkilenmez
         const lineW = p.pos === 'CB' || p.pos === 'FB' ? 1 : p.pos === 'DM' || p.pos === 'CM' ? P.lineMid : 0;
         txf = centerX + (ax - centerX) * lenF + shiftX - lineOff * (1 - lineW);
-        tyf = 34 + (ay - 34) * widthF + (byf - 34) * 0.32;
+        // topa dogru yanal kayma: savunmada herkes top tarafina daralir; hucumda kanat ve bekler genisligi korur (ters kanat acik kalir, oyun cevrilebilir)
+        const ballK = inPoss && (p.pos === 'W' || p.pos === 'FB') ? P.wideHoldK : 0.32;
+        // hucumda kanat ve bekler cizgiye yaslanir (ice katma talimati yoksa): sahayi genis tutar, oyun cevrilir
+        const wideF = inPoss && (p.pos === 'W' || p.pos === 'FB') && t.tactic.wing !== 1 ? P.wideStretch[t.tactic.width ?? 1] : 1;
+        tyf = 34 + (ay - 34) * widthF * (1 + (wideF - 1) * ph) + (byf - 34) * ballK;
         // taktik sadakati: dusuk T'de oyuncu topa bakar (top yonune kayar)
         const loyal = 0.6 + (0.5 * (tEff(st, s) - 60)) / 100;
         txf = txf * loyal + bxf * (1 - loyal) * 0.5 + txf * (1 - loyal) * 0.5;
@@ -4600,10 +4611,11 @@ function tackle(st: MatchState, d: PState, c: PState, behind = false) {
     if (st.rng() < P.tackleLoose) {
       const b = st.ball; let ux = c.x - d.x, uy = c.y - d.y; const un = hyp(ux, uy) || 1; ux /= un; uy /= un;
       // cizgi yakininda top disari dogru acilir (taca attirma); kendi kale cizgisi yakininda savunmacinin mudahalesi kornere
-      if (c.y < 4) { ux = ux * 0.4; uy = -1; } else if (c.y > W - 4) { ux = ux * 0.4; uy = 1; }
+      let outK = 1;
+      if (c.y < P.lineOutR && st.rng() < P.lineOutP) { ux = ux * 0.4; uy = -1; outK = 1.6; } else if (c.y > W - P.lineOutR && st.rng() < P.lineOutP) { ux = ux * 0.4; uy = 1; outK = 1.6; }
       { const [cxf] = toFrame(c.side, c.x, c.y); const [gx] = fromFrame(d.side, 0, 34); if (cxf > 100 && st.rng() < 0.6) { ux = Math.sign(gx - c.x) || 1; uy = (c.y < 34 ? -1 : 1) * 0.6; } }
       const nn = hyp(ux, uy) || 1; ux /= nn; uy /= nn;
-      const ang = Math.atan2(uy, ux) + gauss(st.rng) * 0.5, sp = 3 + st.rng() * 4;
+      const ang = Math.atan2(uy, ux) + gauss(st.rng) * 0.5, sp = (3 + st.rng() * 4) * outK;
       st.owner = null; st.dribbling = false;
       b.vx = Math.cos(ang) * sp; b.vy = Math.sin(ang) * sp; b.vz = 0.3 + st.rng() * 0.8; b.sw = 0; b.dip = 0;
       b.kind = 'loose'; b.kicker = d; b.kickT = st.t; b.touch = d; b.intended = null; b.shot = null; b.offside = null; b.noTouch = null;
