@@ -5519,7 +5519,7 @@ const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 function snapshot() { return st.players.map((p) => [p.x, p.y, 0]).concat([[st.ball.x, st.ball.y, st.ballZ]]); }
 function newMatch(s) {
   seed = s;
-  const [a, b] = buildTeams();
+  const [a, b] = teamOverride ? teamOverride() : buildTeams();
   st = createMatch(a, b, seed, { knockout });
   prev = snapshot();
   acc = 0;
@@ -5564,8 +5564,11 @@ function frame(now) {
       watchEvents();
     }
     alpha = Math.min(1, acc);
-    if (st.done) setPlaying(false);
+    if (st.done) { setPlaying(false); if (PLAY.on && PLAY.hooks && !PLAY.endAt) PLAY.endAt = performance.now(); }
     updateHud();
+  }
+  if (PLAY.on && PLAY.endAt && performance.now() - PLAY.endAt > 2200 && PLAY.hooks) { const h = PLAY.hooks; const fin = st; PLAY.hooks = null; exitPlay(); h.onEnd && h.onEnd(fin); }
+  if (false) {
   }
   draw(playing && !reduce ? alpha : 1, now);
   requestAnimationFrame(frame);
@@ -5818,7 +5821,8 @@ function draw(alpha, now = performance.now()) {
 // Sol yarida yuzen joystick (dis halka = sprint); sag altta elmas duzeninde dort baglamsal buton.
 // Hucum: ust Ara, sag Sut, sol Orta, alt Pas. Savunma: ust Degistir, sag Kaydir, sol Mudahale, alt Baski (basili).
 // Vurus: butona basinca nisan oku acilir; ilk 12 px surukleme yon, yana kayma falso, basili tutma guc; birakinca vurus.
-const PLAY = { on: false, side: 0, camMode: 'full', minutes: 10, keys: 'arrows', autoSwitch: true, speed: 1.3, ball: 1.4, names: 'auto', t0: 0, paused: false };
+const PLAY = { on: false, side: 0, camMode: 'full', minutes: 10, keys: 'arrows', autoSwitch: true, speed: 1.3, ball: 1.4, names: 'auto', t0: 0, paused: false, mode: 'team', hooks: null, endAt: 0 };
+let teamOverride = null; // uygulama katmani (Dilim 1): maci hazir TeamIn nesneleriyle baslatir
 const IN = { joyId: null, joyBase: null, mx: 0, my: 0, joyK: 0, press: false, acts: [], keys: new Set(), ptrBtn: new Map(), kick: null, kbKick: null, swDown: null, slideOver: null };
 const GK_HOLD_MS = 300; // Degistir bu kadar basili tutulunca kaleci cikisi
 const POWER_MS = { shoot: 900, pass: 600, through: 600, cross: 700 };
@@ -5859,7 +5863,7 @@ function ctrlGeom() {
 }
 function hitBtn(x, y) {
   const g = ctrlGeom();
-  for (const b of g.btns) if (Math.hypot(x - b.x, y - b.y) <= b.r * 1.2) return b;
+  if (PLAY.mode !== 'sim') for (const b of g.btns) if (Math.hypot(x - b.x, y - b.y) <= b.r * 1.2) return b;
   if (Math.abs(x - g.cam.x) < g.cam.w / 2 && Math.abs(y - g.cam.y) < g.cam.h / 2) return { id: 'cam' };
   return null;
 }
@@ -6055,14 +6059,43 @@ function startPlay() {
 function exitPlay() {
   if (!PLAY.on) return;
   if (PLAY.paused) togglePause();
-  PLAY.on = false;
+  PLAY.on = false; PLAY.endAt = 0;
+  const hooks = PLAY.hooks; PLAY.hooks = null;
   document.body.classList.remove('play', 'portrait');
   CAM.phone = false; CAM.overlay = false; CAM.mode = 'full';
   P.clockRate = 6; P.dt = 0.1; P.playSpeed = 1;
   IN.acts.length = 0; IN.press = false; IN.joyId = null; IN.mx = 0; IN.my = 0; IN.joyK = 0; IN.kick = null; IN.kbKick = null; IN.ptrBtn.clear();
   fitCanvas();
+  teamOverride = null;
+  const fin = st;
   newMatch(seed);
+  if (hooks && hooks.onExit) hooks.onExit(fin);
 }
+// ---------- Uygulama API'si (Dilim 1 demo katmani) ----------
+// startMatch: hazir TeamIn'lerle maci baslatir; mode 'team' (Team play) ya da 'sim' (Total simulation: kontrol yok, izleme);
+// onEnd(st) mac bitince (2 s sonra, otomatik cikis), onExit() kullanici cikinca
+window.FM = {
+  startMatch(o) {
+    teamOverride = () => [o.teams[0], o.teams[1]];
+    PLAY.on = true; PLAY.side = o.side ?? 0; PLAY.minutes = o.minutes ?? 10; PLAY.keys = o.keys ?? 'arrows'; PLAY.autoSwitch = o.autoSwitch ?? true;
+    PLAY.speed = 1.3; P.playSpeed = PLAY.speed;
+    PLAY.ball = o.ball ?? 1.4; PLAY.names = o.names ?? 'auto'; PLAY.t0 = performance.now(); PLAY.paused = false; PLAY.mode = o.mode ?? 'team'; PLAY.hooks = { onEnd: o.onEnd, onExit: o.onExit }; PLAY.endAt = 0;
+    P.clockRate = 90 / (PLAY.minutes * PLAY.speed); P.dt = PLAY_DT; knockout = !!o.knockout;
+    ment = 0; document.getElementById('mentOut').textContent = 'Dengeli';
+    document.body.classList.add('play');
+    CAM.phone = true; CAM.overlay = true;
+    applyCam(o.cam ?? 'full');
+    newMatch(o.seed ?? (1 + Math.floor(Math.random() * 1e6)));
+    if (PLAY.mode === 'team') setControl(st, PLAY.side, 'team', o.assistP ?? 0, o.assistS ?? 1, { autoSwitch: PLAY.autoSwitch });
+    onResize();
+    speed = 1;
+  },
+  exit: () => exitPlay(),
+  state: () => st,
+  setMent: (m) => setMent(m),
+  pause: () => { if (!PLAY.paused) togglePause(); },
+  resume: () => { if (PLAY.paused) togglePause(); },
+};
 let lastW = 0, lastH = 0;
 function onResize() {
   if (PLAY.on) document.body.classList.toggle('portrait', innerHeight > innerWidth);
@@ -6223,7 +6256,7 @@ function drawPhoneOverlay(Wc, Hc, s, X, Y, ox, oy, pos) {
   ctx.fillStyle = 'rgba(10,12,16,.6)'; ctx.fillRect((cm.x - cm.w / 2) * dpr, (cm.y - cm.h / 2) * dpr, cm.w * dpr, cm.h * dpr);
   ctx.fillStyle = '#fff'; ctx.font = `600 ${Math.round(12 * u)}px ${css('--font-body')}`;
   ctx.fillText('Kam: ' + (CAM_MODES.find((c) => c[0] === PLAY.camMode) ?? CAM_MODES[0])[1], cm.x * dpr, cm.y * dpr);
-  if (PLAY.on) {
+  if (PLAY.on && PLAY.mode !== 'sim') {
     // joystick (yuzen): ic halka yurume/kosu, dis halka sprint (topuz dis halkaya girince halka sariya doner, topuz buyur)
     const jr = g.joyR * dpr;
     if (IN.joyBase) {
@@ -6619,6 +6652,440 @@ newMatch(1);
 renderReport();
 requestAnimationFrame((t) => { last = t; frame(t); });
 </script>
+
+<!-- Dilim 1 demo: uygulama katmani. page.html'in ustune biner; sahne (mac) page.html'deki oynama modudur (window.FM). -->
+<style>
+body.app { padding: 0; overflow: hidden; }
+body.app:not(.play) .wrap { display: none; }
+#app { display: none; position: fixed; inset: 0; z-index: 800; flex-direction: column; background: var(--night); color: var(--chalk); font-family: var(--font-body); }
+body.app #app { display: flex; }
+body.app.play #app { display: none; }
+#app .bar { height: 48px; flex: none; display: flex; align-items: center; gap: 10px; padding: 0 max(12px, env(safe-area-inset-left, 0px)) 0 max(12px, env(safe-area-inset-left, 0px)); background: var(--stand); border-bottom: 1px solid var(--line); }
+#app .bar .back { width: 40px; height: 36px; border: 0; background: transparent; color: var(--chalk); font: 700 20px/1 var(--font-body); border-radius: 8px; }
+#app .bar .back:disabled { opacity: 0; pointer-events: none; }
+#app .bar .ttl { font: 700 18px/1 var(--font-display); letter-spacing: .05em; text-transform: uppercase; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#app .bar .ttl span { color: var(--flood); }
+#app .bar .ico { height: 36px; min-width: 36px; padding: 0 10px; border: 1px solid var(--line); background: transparent; color: var(--chalk); font: 600 13px/1 var(--font-body); border-radius: 8px; }
+#app .bar .ico.on { border-color: var(--flood); color: var(--flood); }
+#app .body { flex: 1; min-height: 0; overflow: auto; padding: 12px max(16px, env(safe-area-inset-right, 0px)) 16px max(16px, env(safe-area-inset-left, 0px)); -webkit-overflow-scrolling: touch; }
+#app .foot { flex: none; display: flex; gap: 8px; padding: 10px max(16px, env(safe-area-inset-right, 0px)) 10px max(16px, env(safe-area-inset-left, 0px)); background: var(--stand); border-top: 1px solid var(--line); }
+#app .foot[hidden] { display: none; }
+#app .foot .btn { flex: 1; }
+#app .tabs3 { height: 56px; flex: none; display: flex; background: var(--stand); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom, 0px); }
+#app .tabs3 button { flex: 1; border: 0; background: transparent; color: var(--muted); font: 600 13px/1 var(--font-body); border-radius: 0; }
+#app .tabs3 button[aria-selected="true"] { color: var(--flood); box-shadow: inset 0 3px 0 var(--flood); }
+#app .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+#app .card { background: var(--stand); border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+#app .card h3 { margin: 0; font: 700 18px/1.1 var(--font-display); letter-spacing: .04em; text-transform: uppercase; }
+#app .card h3 small { color: var(--muted); font: 500 12px/1 var(--font-body); letter-spacing: 0; text-transform: none; margin-left: 6px; }
+#app .card p { margin: 0; color: var(--muted); font-size: 13px; }
+#app .card .big { font: 700 28px/1 var(--font-display); color: var(--chalk); }
+#app .card.hero { border-color: var(--flood); }
+#app .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+#app .btn { font: 600 14px/1 var(--font-body); color: var(--chalk); background: var(--line); border: 1px solid transparent; border-radius: 10px; padding: 12px 16px; min-height: 44px; cursor: pointer; }
+#app .btn.prim { background: var(--flood); color: #1b1a0c; }
+#app .btn.ghost { background: transparent; border-color: var(--line); }
+#app .btn:disabled { opacity: .45; }
+#app .btn.sm { padding: 8px 12px; min-height: 36px; font-size: 13px; }
+#app label.f { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); min-width: 0; }
+#app input[type=text], #app select { font: 500 15px/1.2 var(--font-body); color: var(--chalk); background: var(--night); border: 1px solid var(--line); border-radius: 8px; padding: 10px 10px; min-height: 44px; min-width: 0; }
+#app input[type=color] { width: 44px; height: 44px; border: 1px solid var(--line); background: var(--night); border-radius: 8px; padding: 2px; }
+#app .list { display: flex; flex-direction: column; gap: 6px; }
+#app .li { display: grid; grid-template-columns: 36px 1fr auto; gap: 10px; align-items: center; background: var(--stand); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; min-height: 44px; cursor: pointer; }
+#app .li.sel { border-color: var(--flood); }
+#app .li .num { font: 700 16px/1 var(--font-display); color: var(--muted); text-align: center; }
+#app .li .nm { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#app .li .sub { color: var(--muted); font-size: 12px; }
+#app .li .gg { font: 700 18px/1 var(--font-display); }
+#app .tag { display: inline-block; font-size: 11px; padding: 2px 7px; border-radius: 999px; background: var(--line); color: var(--chalk); margin-right: 4px; }
+#app .tag.y { background: rgba(242,217,78,.18); color: var(--flood); }
+#app .tag.g { background: rgba(95,195,138,.18); color: var(--good); }
+#app .tag.r { background: rgba(229,72,63,.18); color: #e5483f; }
+#app .tag.o { background: rgba(224,166,63,.18); color: var(--warn); }
+#app table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 13px; }
+#app th, #app td { padding: 8px 6px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+#app th:first-child, #app td:first-child, #app th.l, #app td.l { text-align: left; }
+#app th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+#app tr.me td { color: var(--flood); font-weight: 600; }
+#app tr.zone-up td:first-child { box-shadow: inset 3px 0 0 var(--good); }
+#app tr.zone-down td:first-child { box-shadow: inset 3px 0 0 #e5483f; }
+#app .score { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; font-family: var(--font-display); }
+#app .score .tm { font-weight: 600; font-size: 18px; text-transform: uppercase; letter-spacing: .03em; display: flex; align-items: center; gap: 8px; min-width: 0; }
+#app .score .tm.b { justify-content: flex-end; }
+#app .score .tm i { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+#app .score .tm span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#app .score b { font-size: 40px; font-weight: 700; line-height: 1; }
+#app .stat { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center; font-size: 13px; padding: 4px 0; border-bottom: 1px solid var(--line); }
+#app .stat .l { text-align: right; } #app .stat .c { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; } #app .stat .r { text-align: left; }
+#app .ev { display: grid; grid-template-columns: 44px 1fr; gap: 8px; font-size: 13px; padding: 3px 0; }
+#app .ev .t { color: var(--muted); font-variant-numeric: tabular-nums; }
+#app .seg { display: inline-flex; background: var(--night); border: 1px solid var(--line); border-radius: 10px; padding: 3px; gap: 2px; }
+#app .seg button { border: 0; background: transparent; color: var(--muted); font: 600 13px/1 var(--font-body); padding: 9px 12px; border-radius: 8px; min-height: 36px; }
+#app .seg button[aria-pressed="true"] { background: var(--line); color: var(--chalk); }
+#app .muted { color: var(--muted); font-size: 13px; }
+#app .pitchmini { position: relative; background: var(--grass); border: 2px solid rgba(233,239,233,.6); border-radius: 6px; aspect-ratio: 105 / 68; width: 100%; max-width: 560px; overflow: hidden; }
+#app .pitchmini::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; border-left: 2px solid rgba(233,239,233,.5); }
+#app .pitchmini .dot { position: absolute; width: 26px; height: 26px; margin: -13px 0 0 -13px; border-radius: 50%; border: 2px solid #fff; display: flex; align-items: center; justify-content: center; font: 700 11px/1 var(--font-display); color: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.5); }
+#app .pitchmini .dot.att { opacity: .55; border-style: dashed; }
+#app .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+#app .toast { position: fixed; left: 50%; bottom: 76px; transform: translateX(-50%); background: rgba(10,12,16,.92); color: var(--chalk); border: 1px solid var(--line); padding: 10px 14px; border-radius: 10px; font-size: 13px; z-index: 850; }
+#app .center { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100%; gap: 14px; text-align: center; }
+#app .logo { font: 700 42px/1 var(--font-display); letter-spacing: .08em; text-transform: uppercase; }
+#app .logo span { color: var(--flood); }
+#app .dev { position: fixed; right: 8px; bottom: 4px; font-size: 10px; color: var(--muted); z-index: 801; }
+</style>
+<div id="app">
+  <div class="bar"><button class="back" id="aBack" aria-label="Geri">‹</button><div class="ttl" id="aTitle">Football <span>Madness</span></div><button class="ico" id="aFriends" title="Arkadaşlar (demoda yok)">☺ 0</button><button class="ico" id="aSettings" title="Ayarlar">⚙</button></div>
+  <div class="body" id="aBody"></div>
+  <div class="foot" id="aFoot" hidden></div>
+  <div class="tabs3" id="aTabs" hidden></div>
+</div>
+<script>
+// ---------- Uygulama katmani (Dilim 1 demo) ----------
+// Kayit: localStorage. Ekranlar: giris (misafir) -> kulup kurulumu -> ana menu -> Mac Modu / Solo Lig / Takim / Ayarlar; mac odasi -> mac -> rapor.
+const APP = { key: 'fm.demo.v1', db: null, screen: 'login', stack: [], ctx: {} };
+const DEF_SETTINGS = { keys: 'arrows', assistP: 0, assistS: 1, autoSwitch: true, ball: 1.4, names: 'auto', cam: 'full', mode: 'team', minutes: 10 };
+function dbLoad() { try { APP.db = JSON.parse(localStorage.getItem(APP.key)) || null; } catch (e) { APP.db = null; } if (!APP.db) APP.db = { account: null, settings: { ...DEF_SETTINGS }, team: null, solo: null, mm: { elo: 1000, last: null, played: 0 } }; APP.db.settings = { ...DEF_SETTINGS, ...(APP.db.settings || {}) }; }
+function dbSave() { try { localStorage.setItem(APP.key, JSON.stringify(APP.db)); } catch (e) {} }
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const $ = (id) => document.getElementById(id);
+function toast(msg) { const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg; $('app').appendChild(t); setTimeout(() => t.remove(), 2200); }
+
+// --- takim verisi ---
+// kullanicinin kadrosu: makeTeam iskeleti + oyuncu basina deterministik GG sapmasi (kadro ekrani icin cesitlilik)
+function mkSquad(club, base, names) {
+  const t = makeTeam(club.name, club.short, base, { formation: club.formation || '4-3-3' }, names, club.color, club.color2);
+  const off = [3, 1, 4, 2, -2, 5, 0, 3, -1, 6, 4, -3, -4, -2, -1, 0, -5, -2];
+  t.players.forEach((p, i) => { p.gg = base + off[i % off.length]; p.age = 21 + ((i * 7) % 13); });
+  t.bench.forEach((p, i) => { p.gg = base + off[(i + 11) % off.length]; p.age = 19 + ((i * 5) % 14); });
+  return t;
+}
+function userTeamIn() {
+  const db = APP.db, club = db.account.club, tt = db.team;
+  const t = mkSquad({ ...club, formation: tt.formation }, club.gg || 62, NAMES_A);
+  t.tactic = { ...tt.tactic, doctrine: tt.doctrine };
+  t.mainTactic = { ...tt.tactic, doctrine: tt.doctrine };
+  t.duties = tt.duties || {};
+  t.rules = (tt.rules || []).map((id) => RULE_TEMPLATES.find((r) => r.id === id)).filter(Boolean);
+  t.U = 60; t.T = 60; t.F = 60; t.M = 70;
+  return t;
+}
+// Mac Modu takim sablonlari (standart takim-taktik formatlari; gucler Metrik sekmesiyle netlesecek)
+const TEMPLATES = [
+  { id: 'kartal', name: 'Kartal SK', short: 'KSK', color: '#d2433d', color2: '#ffffff', formation: '4-3-3', doctrine: 'gegenpress', gg: 62, blurb: 'Yüksek pres, önde hat, hızlı tempo. Kondisyonu erken biter.' },
+  { id: 'liman', name: 'Liman FK', short: 'LFK', color: '#3b6fd6', color2: '#ffffff', formation: '4-4-2', doctrine: 'direct', gg: 60, blurb: 'Uzun top, iki forvet, ikinci top. Hava hakimi stoperlere karşı zorlanır.' },
+  { id: 'yildiz', name: 'Yıldız Gücü', short: 'YLD', color: '#f2d94e', color2: '#1b1a0c', formation: '4-2-3-1', doctrine: 'possession', gg: 64, blurb: 'Kısa pas, sabırlı oyun, geniş. Yüksek prese karşı top kaybeder.' },
+  { id: 'kale', name: 'Kale Spor', short: 'KAL', color: '#2f6b3a', color2: '#ffffff', formation: '5-3-2', doctrine: 'bus', gg: 58, blurb: 'Derin blok, otobüs. Az pozisyon verir, az üretir.' },
+  { id: 'ruzgar', name: 'Rüzgâr Spor', short: 'RZG', color: '#6fa8ff', color2: '#0e1512', formation: '3-5-2', doctrine: 'wings', gg: 61, blurb: 'Kanat oyunu, bindiren bekler, ortalar. Arkası boş.' },
+  { id: 'bogaz', name: 'Boğaz SK', short: 'BGZ', color: '#9b59b6', color2: '#ffffff', formation: '4-3-3', doctrine: 'gegenpress', gg: 63, blurb: 'Yüksek pres, önde hat. Uzun topa ve arkaya koşuya açık.' },
+  { id: 'simsek', name: 'Şimşek FK', short: 'SMS', color: '#e0a63f', color2: '#1b1a0c', formation: '4-4-2', doctrine: 'counter', gg: 59, blurb: 'Derin hat, hızlı kontra, riskli koşular. Topu az tutar.' },
+];
+const DIFF = [['1', 'Amatör'], ['2', 'Yarı profesyonel'], ['3', 'Profesyonel'], ['4', 'Dünya klası'], ['5', 'Efsane']];
+function botTeamIn(tpl, diff, names) {
+  const t = mkSquad({ name: tpl.name, short: tpl.short, color: tpl.color, color2: tpl.color2, formation: tpl.formation }, tpl.gg, names || NAMES_B);
+  t.tactic = { ...DOCTRINES[tpl.doctrine].tactic, doctrine: tpl.doctrine };
+  t.mainTactic = { ...t.tactic };
+  const lv = AI_LEVELS[diff];
+  if (lv && lv.ai) t.ai = lv.ai;
+  t.rules = botRules(diff - 1); t.think = diff - 1;
+  t.U = 55 + diff * 2; t.T = 50 + diff * 4; t.F = 55 + diff * 2; t.M = 70;
+  return t;
+}
+
+// --- yonlendirme ---
+const SCREENS = {};
+function go(name, ctx = {}, push = true) {
+  if (push && APP.screen && APP.screen !== name) APP.stack.push({ s: APP.screen, c: APP.ctx });
+  APP.screen = name; APP.ctx = ctx;
+  render();
+}
+function back() { const prev = APP.stack.pop(); if (prev) { APP.screen = prev.s; APP.ctx = prev.c; render(); } else go('home', {}, false); }
+function render() {
+  const sc = SCREENS[APP.screen]; if (!sc) return;
+  const { title, html, tabs, noBack, after, foot } = sc(APP.ctx);
+  $('aTitle').innerHTML = title || 'Football <span>Madness</span>';
+  $('aBack').disabled = !!noBack;
+  $('aBody').innerHTML = html;
+  $('aBody').scrollTop = 0;
+  const ft = $('aFoot'); if (foot) { ft.hidden = false; ft.innerHTML = foot; } else { ft.hidden = true; ft.innerHTML = ''; }
+  const tb = $('aTabs');
+  if (tabs) { tb.hidden = false; tb.innerHTML = tabs.map((t) => `<button aria-selected="${t.on ? 'true' : 'false'}" data-go="${t.go}">${t.lab}</button>`).join(''); }
+  else tb.hidden = true;
+  if (after) after();
+}
+$('aBack').addEventListener('click', back);
+$('aSettings').addEventListener('click', () => go('settings'));
+$('aFriends').addEventListener('click', () => toast('Arkadaşlar ve sohbet demoda yok'));
+$('aTabs').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) go(b.dataset.go, APP.ctx, false); });
+$('aFoot').addEventListener('click', (e) => { const b = e.target.closest('[data-go]'); if (b && b.dataset.go) go(b.dataset.go, b.dataset.ctx ? JSON.parse(b.dataset.ctx) : {}); });
+$('aBody').addEventListener('click', (e) => { const b = e.target.closest('[data-go]'); if (b && b.dataset.go) { go(b.dataset.go, b.dataset.ctx ? JSON.parse(b.dataset.ctx) : {}); } });
+
+// --- ekranlar ---
+SCREENS.login = () => ({ title: 'Football <span>Madness</span>', noBack: true, html: `
+  <div class="center">
+    <div class="logo">Football <span>Madness</span></div>
+    <p class="muted">Dilim 1 demo · tek dokunuşla misafir girişi. Google, Apple ve e-posta girişi Faz 3'te.</p>
+    <div class="row"><button class="btn prim" id="guest">Misafir olarak başla</button></div>
+    <p class="muted">Kayıt bu cihazda tutulur; hesaba bağlama sonra.</p>
+  </div>`, after: () => { $('guest').onclick = () => { if (!APP.db.account) go('setup', {}, false); else go('home', {}, false); }; } });
+
+SCREENS.setup = () => ({ title: 'Kulüp kurulumu', noBack: true, html: `
+  <div class="cards">
+    <div class="card hero">
+      <h3>Kulübünü kur</h3>
+      <div class="grid2">
+        <label class="f">Kulüp adı<input type="text" id="cName" maxlength="24" value="Kartal SK"></label>
+        <label class="f">Kısaltma (3 harf)<input type="text" id="cShort" maxlength="3" value="KSK"></label>
+        <label class="f">Şehir<input type="text" id="cCity" maxlength="24" value="İstanbul"></label>
+        <label class="f">Stat adı<input type="text" id="cStad" maxlength="24" value="Kartal Arena"></label>
+      </div>
+      <div class="row"><label class="f">Ana renk<input type="color" id="cCol" value="#d2433d"></label><label class="f">İkinci renk<input type="color" id="cCol2" value="#ffffff"></label></div>
+      <p>Arma editörü ve forma tasarımı demoda yok; renkler sahada ve skorbordda görünür.</p>
+    </div>
+  </div>`, foot: `<button class="btn prim" id="cOk">Kulübü kur</button>`, after: () => { $('cOk').onclick = () => {
+    const name = $('cName').value.trim() || 'Kartal SK', short = ($('cShort').value.trim() || name.slice(0, 3)).toUpperCase().slice(0, 3);
+    APP.db.account = { guest: true, club: { name, short, city: $('cCity').value.trim(), stadium: $('cStad').value.trim(), color: $('cCol').value, color2: $('cCol2').value, gg: 62 } };
+    APP.db.team = { formation: '4-3-3', doctrine: 'balanced', tactic: { ...DOCTRINES.balanced.tactic }, duties: {}, rules: ['counterpress', 'chase', 'protect', 'tired'] };
+    dbSave(); go('home', {}, false); }; } });
+
+SCREENS.home = () => { const db = APP.db, c = db.account.club, s = db.solo; return { title: `${esc(c.name)}`, noBack: true, html: `
+  <div class="cards">
+    <div class="card hero"><h3>Maç Modu <small>hızlı maç</small></h3><p>Bilgisayara karşı tek maç. Takım şablonu seç, zorluğu seç, oyna.</p>
+      <div class="big">${db.mm.elo} <small style="font:500 12px var(--font-body);color:var(--muted)">Elo · ${db.mm.played} maç</small></div>
+      ${db.mm.last ? `<p>Son maç: ${esc(db.mm.last)}</p>` : ''}
+      <div class="row"><button class="btn prim" data-go="mmOpp">Maç kur</button></div></div>
+    <div class="card"><h3>Solo Lig <small>bot lige karşı sezon</small></h3>
+      ${s ? `<p>${esc(s.name)} · ${s.week}/${s.fixtures.length} hafta · sıra ${soloRank(s)}.</p><div class="row"><button class="btn prim" data-go="solo">Devam et</button><button class="btn ghost" id="soloNew">Yeni lig</button></div>` : `<p>4–8 takımlı kısa bir sezon; her maçı oyna ya da anında simüle et.</p><div class="row"><button class="btn prim" data-go="soloNew">Yeni solo lig</button></div>`}
+    </div>
+    <div class="card"><h3>Online Lig <small>Faz 3</small></h3><p>Gerçek rakiplere karşı lig, kupa, pazar, birlik. Demoda yok.</p><div class="row"><button class="btn ghost" disabled>Yakında</button></div></div>
+    <div class="card"><h3>Takım <small>kadro ve taktik</small></h3><p>${esc(c.name)} · ${db.team.formation} · ${DOCTRINES[db.team.doctrine].label}</p><div class="row"><button class="btn" data-go="squad">Kadro</button><button class="btn" data-go="tactics">Taktik tahtası</button></div></div>
+    <div class="card"><h3>Sezon pası · Görevler <small>Faz 3</small></h3><p>Günlük görevler, giriş serisi, sezon pası ödülleri demoda yok.</p></div>
+  </div>`, after: () => { const b = $('soloNew'); if (b) b.onclick = () => { if (confirm('Kayıtlı solo lig silinsin mi?')) { APP.db.solo = null; dbSave(); go('soloNew'); } }; } }; };
+
+// Mac Modu
+SCREENS.mmOpp = () => ({ title: 'Maç Modu · Rakip', html: `
+  <div class="cards">
+    <div class="card"><h3>Bilgisayara karşı</h3>
+      <div class="grid2">
+        <label class="f">Zorluk<select id="mDiff">${DIFF.map(([v, l]) => `<option value="${v}" ${v === '2' ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+        <label class="f">Maç süresi<select id="mMin"><option value="6">6 dakika</option><option value="10" selected>10 dakika</option><option value="15">15 dakika</option></select></label>
+      </div>
+      <p>Rakip takım şablonu bir sonraki adımda. Zorluk botun düşünme derinliğini, okuma doğruluğunu ve tepki süresini değiştirir; güç değerlerine dokunmaz.</p>
+      <div class="row"><button class="btn prim" id="mNext">Rakip şablonunu seç</button></div></div>
+    <div class="card"><h3>Online rakip <small>Faz 3</small></h3><p>Eşleşme araması (±100 Elo) demoda yok.</p></div>
+  </div>`, after: () => { $('mNext').onclick = () => go('mmTpl', { diff: +$('mDiff').value, minutes: +$('mMin').value }); } });
+
+const notMine = (t) => { const c = APP.db.account.club; return t.short !== c.short && t.name !== c.name; };
+SCREENS.mmTpl = (c) => ({ title: 'Maç Modu · Rakip şablonu', html: `
+  <div class="cards">${TEMPLATES.filter(notMine).map((t) => `<div class="card"><h3><i style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${t.color};margin-right:6px"></i>${esc(t.name)} <small>${t.formation} · ${DOCTRINES[t.doctrine].label} · GG ${t.gg}</small></h3><p>${esc(t.blurb)}</p><div class="row"><button class="btn prim" data-go="room" data-ctx='${JSON.stringify({ kind: 'mm', tpl: t.id, diff: c.diff, minutes: c.minutes })}'>Bu rakiple oyna</button></div></div>`).join('')}</div>` });
+
+// Mac odasi (tum modlarda ortak)
+function roomTeams(c) {
+  const me = userTeamIn();
+  let opp;
+  if (c.kind === 'mm') opp = botTeamIn(TEMPLATES.find((t) => t.id === c.tpl), c.diff, NAMES_B);
+  else { const s = APP.db.solo; const bt = s.teams[c.oppIdx]; opp = botTeamIn(bt, s.diff, NAMES_B); }
+  return { me, opp };
+}
+SCREENS.room = (c) => { const { me, opp } = roomTeams(c); const st = APP.db.settings; const home = c.home !== false; const tt = APP.db.team; return { title: 'Maç odası', html: `
+  <div class="card" style="margin-bottom:12px"><div class="score"><div class="tm"><i style="background:${home ? me.color : opp.color}"></i><span>${esc(home ? me.name : opp.name)}</span></div><b style="font-size:22px">${c.kind === 'mm' ? 'Maç Modu' : 'Solo Lig · ' + c.week + '. hafta'}</b><div class="tm b"><span>${esc(home ? opp.name : me.name)}</span><i style="background:${home ? opp.color : me.color}"></i></div></div></div>
+  <div class="cards">
+    <div class="card"><h3>Rakip analizi</h3><p><b>${esc(opp.name)}</b> · GG ${opp.players.reduce((a, p) => a + p.gg, 0) / 11 | 0} · ${opp.formation} · ${DOCTRINES[opp.tactic.doctrine].label}</p><p>Analist olmadan olası formasyon ve hamle tahmini yok; zorluk: ${DIFF.find(([v]) => +v === (c.diff || APP.db.solo?.diff))?.[1] ?? '-'}.</p>${c.kind === 'solo' ? `<p>Form: ${esc(soloForm(APP.db.solo, c.oppIdx))}</p>` : ''}</div>
+    <div class="card"><h3>İlk 11</h3><p>${me.players.map((p) => `<span class="tag">${p.num} ${esc(p.name)} <b>${p.gg}</b></span>`).join('')}</p><p>Kondisyon tam, sakat ve cezalı yok (demo). Kadro düzenleme: Takım sekmesi.</p><div class="row"><button class="btn sm" data-go="squad">Kadro</button></div></div>
+    <div class="card"><h3>Taktik</h3><p>${tt.formation} · ${DOCTRINES[tt.doctrine].label} · pres ${['düşük', 'orta', 'yüksek'][tt.tactic.press]} · hat ${['derin', 'orta', 'önde'][tt.tactic.line]} · tempo ${['yavaş', 'normal', 'hızlı'][tt.tactic.tempo]}</p><p>Kurallar: ${(tt.rules || []).map((id) => RULE_TEMPLATES.find((r) => r.id === id)?.label).filter(Boolean).join(', ') || 'yok'}</p><div class="row"><button class="btn sm" data-go="tactics">Düzenle</button></div></div>
+    <div class="card"><h3>Oyun modu</h3><div class="seg" id="modeSeg"><button aria-pressed="${st.mode === 'team'}" data-m="team">Team play</button><button aria-pressed="${st.mode === 'sim'}" data-m="sim">Total simulation</button></div><p>Team play: topu olan oyuncuyu sen yönetirsin. Total simulation: maçı izlersin, maç içi taktik kaydırıcı sende.</p>
+      <label class="f">Kamera<select id="rCam"><option value="full" ${st.cam === 'full' ? 'selected' : ''}>Tam saha</option><option value="length" ${st.cam === 'length' ? 'selected' : ''}>Tam boy</option><option value="near" ${st.cam === 'near' ? 'selected' : ''}>Yakın</option></select></label></div>
+    <div class="card"><h3>Hamleler · Güçlendirme <small>Faz 3</small></h3><p>Maç hamleleri ve güçlendirmeler demoda yok.</p></div>
+  </div>
+`, foot: `<button class="btn prim" id="rStart">Hazırım · maça başla</button>${c.kind === 'solo' ? `<button class="btn" id="rSim">Anında simüle et</button>` : ''}`, after: () => {
+    $('modeSeg').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; APP.db.settings.mode = b.dataset.m; dbSave(); for (const x of $('modeSeg').children) x.setAttribute('aria-pressed', x === b); };
+    $('rCam').onchange = () => { APP.db.settings.cam = $('rCam').value; dbSave(); };
+    $('rStart').onclick = () => startMatchFlow(c, me, opp, home, false);
+    const sb = $('rSim'); if (sb) sb.onclick = () => startMatchFlow(c, me, opp, home, true);
+  } }; };
+
+function startMatchFlow(c, me, opp, home, instant) {
+  const s = APP.db.settings;
+  const teams = home ? [me, opp] : [opp, me];
+  const side = home ? 0 : 1;
+  if (home) me.home = true; else opp.home = true;
+  const seed = (c.seed ?? (Date.now() % 1000000)) | 0;
+  const finish = (st) => { const rep = buildReport(st, side, c); afterMatch(c, rep); go('report', { rep, c }, false); };
+  if (instant) { P.clockRate = 90 / (c.minutes || s.minutes); P.dt = 0.1; P.playSpeed = 1; const st = simulate(teams[0], teams[1], seed); P.clockRate = 6; finish(st); return; }
+  document.body.classList.remove('app');
+  FM.startMatch({ teams, side, minutes: c.minutes || s.minutes, keys: s.keys, autoSwitch: s.autoSwitch, assistP: s.assistP, assistS: s.assistS, ball: s.ball, names: s.names, cam: s.cam, mode: s.mode, seed,
+    onEnd: (st) => { document.body.classList.add('app'); finish(st); },
+    onExit: (st) => { document.body.classList.add('app'); if (st && !st.done) { // terk edildi: kalan sure simule edilir
+      setControl(st, side, 'none'); let g = 0; while (!st.done && g++ < 40000) step(st); toast('Maç terk edildi: kalan süre simüle edildi'); } if (st) finish(st); else render(); } });
+}
+// rapor verisi
+function buildReport(st, side, c) {
+  const opp = 1 - side, S = st.stats[side], O = st.stats[opp];
+  const poss = S.possTicks + O.possTicks || 1;
+  const pm = (i) => { let best = null, bv = -1; const sc = {}; for (const e of st.events) if (e.type === 'goal' && e.side === i && e.player) sc[e.player] = (sc[e.player] || 0) + 1; for (const p of st.players) { if (p.side !== i || p.pos === 'GK') continue; const v = (st.playerXg[i][p.num] || 0) + (sc[p.num] || 0) * 0.5; if (v > bv) { bv = v; best = p; } } return best ? `${best.num} ${best.name}` : '-'; };
+  const evs = st.events.filter((e) => ['goal', 'yellow', 'red', 'penalty', 'half'].includes(e.type) || (e.type === 'rule' && e.text && !/Karşı pres|İkinci top/.test(e.text))).map((e) => ({ t: Math.floor(e.t / 60) + 1, side: e.side, type: e.type, text: e.type === 'goal' ? 'GOL' : e.type === 'yellow' ? 'Sarı kart' : e.type === 'red' ? 'Kırmızı kart' : e.type === 'penalty' ? 'Penaltı' : e.type === 'offside' ? 'Ofsayt' : e.type === 'half' ? 'Devre arası' : (e.text || 'taktik'), who: e.player ? (st.players.find((p) => p.side === e.side && p.num === e.player)?.name || '') : '' }));
+  return { kind: c.kind, side, teams: st.teams.map((t) => ({ name: t.name, short: t.short, color: t.color })), goals: [st.stats[0].goals, st.stats[1].goals],
+    stats: [['Topa sahip olma', `%${Math.round(100 * st.stats[0].possTicks / poss)}`, `%${Math.round(100 * st.stats[1].possTicks / poss)}`], ['Şut', st.stats[0].shots, st.stats[1].shots], ['İsabetli şut', st.stats[0].onTarget, st.stats[1].onTarget], ['xG', st.stats[0].xg.toFixed(2), st.stats[1].xg.toFixed(2)], ['Pas isabeti', `%${Math.round(100 * st.stats[0].passesOk / Math.max(1, st.stats[0].passes))}`, `%${Math.round(100 * st.stats[1].passesOk / Math.max(1, st.stats[1].passes))}`], ['Faul', st.stats[0].fouls, st.stats[1].fouls], ['Korner', st.stats[0].corners, st.stats[1].corners], ['Ofsayt', st.stats[0].offsides, st.stats[1].offsides], ['Kart', `${st.stats[0].yellows}/${st.stats[0].reds}`, `${st.stats[1].yellows}/${st.stats[1].reds}`]],
+    potm: [pm(0), pm(1)], events: evs, result: S.goals > O.goals ? 'win' : S.goals < O.goals ? 'loss' : 'draw' };
+}
+function afterMatch(c, rep) {
+  const db = APP.db;
+  if (c.kind === 'mm') {
+    const k = 24, exp = 1 / (1 + Math.pow(10, (1000 + (c.diff - 3) * 120 - db.mm.elo) / 400));
+    const sc = rep.result === 'win' ? 1 : rep.result === 'draw' ? 0.5 : 0;
+    const d = Math.round(k * (sc - exp)); db.mm.elo += d; db.mm.played++; rep.elo = d;
+    db.mm.last = `${rep.teams[0].short} ${rep.goals[0]}–${rep.goals[1]} ${rep.teams[1].short} (${d >= 0 ? '+' : ''}${d} Elo)`;
+  } else soloApplyResult(c, rep);
+  dbSave();
+}
+SCREENS.report = (c) => { const r = c.rep; const me = r.side; return { title: 'Maç raporu', noBack: true, html: `
+  <div class="card" style="margin-bottom:12px"><div class="score"><div class="tm"><i style="background:${r.teams[0].color}"></i><span>${esc(r.teams[0].name)}</span></div><b>${r.goals[0]} : ${r.goals[1]}</b><div class="tm b"><span>${esc(r.teams[1].name)}</span><i style="background:${r.teams[1].color}"></i></div></div>
+    <p class="muted" style="text-align:center">${r.result === 'win' ? 'Galibiyet' : r.result === 'loss' ? 'Mağlubiyet' : 'Beraberlik'}${r.elo !== undefined ? ` · Elo ${r.elo >= 0 ? '+' : ''}${r.elo}` : ''}${r.table ? ` · lig sırası ${r.table}.` : ''}</p></div>
+  <div class="cards">
+    <div class="card"><h3>İstatistik</h3>${r.stats.map(([l, a, b]) => `<div class="stat"><div class="l">${a}</div><div class="c">${l}</div><div class="r">${b}</div></div>`).join('')}<p>Maçın oyuncusu: ${esc(r.potm[0])} / ${esc(r.potm[1])}</p></div>
+    <div class="card"><h3>Olaylar</h3>${r.events.length ? r.events.map((e) => `<div class="ev"><div class="t">${e.t}'</div><div>${e.type === 'half' ? '<span class="tag">Devre arası</span>' : `<span class="tag ${e.type === 'goal' ? 'y' : e.type === 'red' ? 'r' : e.type === 'yellow' ? 'o' : ''}">${esc(r.teams[e.side].short)}</span> ${esc(e.text)}${e.who ? ' · ' + esc(e.who) : ''}`}</div></div>`).join('') : '<p>Olay yok</p>'}</div>
+    <div class="card"><h3>Maç sonu <small>Faz 3</small></h3><p>Moral, yorgunluk, rol puanı, FM geliri, görev ve sezon pası ilerlemesi demoda yok. Tekrar oynatıcı ve paylaşım da sonra.</p></div>
+  </div>
+`, foot: r.kind === 'mm' ? `<button class="btn prim" data-go="mmOpp">Tekrar oyna</button><button class="btn" id="rHome">Ana menü</button>` : `<button class="btn prim" data-go="solo">Lige dön</button>`, after: () => { const h = $('rHome'); if (h) h.onclick = () => { APP.stack.length = 0; go('home', {}, false); }; } }; };
+
+// --- Solo Lig ---
+const SOLO_POOL = [
+  { name: 'Liman FK', short: 'LFK', color: '#3b6fd6', color2: '#fff', formation: '4-4-2', doctrine: 'direct' },
+  { name: 'Yıldız Gücü', short: 'YLD', color: '#f2d94e', color2: '#1b1a0c', formation: '4-2-3-1', doctrine: 'possession' },
+  { name: 'Kale Spor', short: 'KAL', color: '#2f6b3a', color2: '#fff', formation: '5-3-2', doctrine: 'bus' },
+  { name: 'Rüzgâr Spor', short: 'RZG', color: '#6fa8ff', color2: '#0e1512', formation: '3-5-2', doctrine: 'wings' },
+  { name: 'Şimşek FK', short: 'SMS', color: '#e0a63f', color2: '#1b1a0c', formation: '4-4-2', doctrine: 'counter' },
+  { name: 'Boğaz SK', short: 'BGZ', color: '#9b59b6', color2: '#fff', formation: '4-3-3', doctrine: 'gegenpress' },
+  { name: 'Anadolu Birlik', short: 'ANB', color: '#e67e22', color2: '#fff', formation: '4-3-3', doctrine: 'balanced' },
+];
+function roundRobin(n) { // cift devreli fikstur; takim indeksleri 0..n-1 (tek sayi ise bay)
+  const ids = [...Array(n).keys()]; if (n % 2) ids.push(-1); const m = ids.length, rounds = [];
+  for (let r = 0; r < m - 1; r++) { const pairs = []; for (let i = 0; i < m / 2; i++) { const a = ids[i], b = ids[m - 1 - i]; if (a >= 0 && b >= 0) pairs.push(r % 2 ? [a, b] : [b, a]); } rounds.push(pairs); ids.splice(1, 0, ids.pop()); }
+  return rounds.concat(rounds.map((rd) => rd.map(([a, b]) => [b, a])));
+}
+SCREENS.soloNew = () => ({ title: 'Yeni Solo Lig', html: `
+  <div class="cards"><div class="card hero"><h3>Lig ayarları</h3>
+    <div class="grid2">
+      <label class="f">Lig büyüklüğü<select id="sN"><option value="4">4 takım (6 hafta)</option><option value="6" selected>6 takım (10 hafta)</option><option value="8">8 takım (14 hafta)</option></select></label>
+      <label class="f">Zorluk<select id="sDiff">${DIFF.map(([v, l]) => `<option value="${v}" ${v === '2' ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+      <label class="f">Maç süresi<select id="sMin"><option value="6">6 dakika</option><option value="10" selected>10 dakika</option><option value="15">15 dakika</option></select></label>
+    </div>
+    <p>Solo lig ayrı kayıttır; pazar ve birlik yoktur. Her maçı oynayabilir ya da anında simüle edebilirsin. Sezon sonunda özet.</p>
+</div></div>`, foot: `<button class="btn prim" id="sOk">Ligi başlat</button>`, after: () => { $('sOk').onclick = () => {
+    const n = +$('sN').value, diff = +$('sDiff').value, minutes = +$('sMin').value;
+    const club = APP.db.account.club;
+    const pool = SOLO_POOL.filter(notMine).slice(0, n - 1).map((t) => ({ ...t, gg: 56 + diff * 2 + ((t.short.charCodeAt(0) % 5) - 2) }));
+    const teams = [{ name: club.name, short: club.short, color: club.color, color2: club.color2, formation: APP.db.team.formation, doctrine: APP.db.team.doctrine, gg: club.gg || 62, me: true }, ...pool];
+    APP.db.solo = { name: `Solo Lig · ${['', '', '', '', 'Dörtlü', '', 'Altılı', '', 'Sekizli'][n]}`, diff, minutes, teams, fixtures: roundRobin(n), week: 0, results: [], table: teams.map(() => ({ p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, pts: 0 })), season: 1 };
+    dbSave(); APP.stack.length = 0; go('solo', {}, false); }; } });
+function soloRank(s) { const order = soloOrder(s); return order.indexOf(0) + 1; }
+function soloOrder(s) { return s.teams.map((_, i) => i).sort((a, b) => s.table[b].pts - s.table[a].pts || (s.table[b].gf - s.table[b].ga) - (s.table[a].gf - s.table[a].ga) || s.table[b].gf - s.table[a].gf); }
+function soloForm(s, i) { const r = s.results.filter((m) => m.a === i || m.b === i).slice(-5); return r.length ? r.map((m) => { const gf = m.a === i ? m.ga_ : m.gb_, ga = m.a === i ? m.gb_ : m.ga_; return gf > ga ? 'G' : gf < ga ? 'M' : 'B'; }).join(' ') : '–'; }
+function soloApplyResult(c, rep) {
+  const s = APP.db.solo; const home = c.home !== false; const a = home ? 0 : c.oppIdx, b = home ? c.oppIdx : 0; const ga_ = rep.goals[0], gb_ = rep.goals[1];
+  soloRecord(s, a, b, ga_, gb_);
+  // ayni haftanin diger maclari simule edilir
+  for (const [x, y] of s.fixtures[s.week]) { if (x === 0 || y === 0) continue; const seed = (s.season * 1000 + s.week * 10 + x) | 0; const A = botTeamIn(s.teams[x], s.diff, NAMES_B), B = botTeamIn(s.teams[y], s.diff, NAMES_A); P.clockRate = 90 / s.minutes; P.dt = 0.1; const st = simulate(A, B, seed); P.clockRate = 6; soloRecord(s, x, y, st.stats[0].goals, st.stats[1].goals); }
+  s.week++; rep.table = soloRank(s);
+}
+function soloRecord(s, a, b, ga_, gb_) { s.results.push({ week: s.week, a, b, ga_, gb_ }); const A = s.table[a], B = s.table[b]; A.p++; B.p++; A.gf += ga_; A.ga += gb_; B.gf += gb_; B.ga += ga_; if (ga_ > gb_) { A.w++; B.l++; A.pts += 3; } else if (ga_ < gb_) { B.w++; A.l++; B.pts += 3; } else { A.d++; B.d++; A.pts++; B.pts++; } }
+SCREENS.solo = (c) => { const s = APP.db.solo; if (!s) return SCREENS.home(); const tab = c.tab || 'fixture'; const done = s.week >= s.fixtures.length; const order = soloOrder(s);
+  let html = '';
+  if (tab === 'fixture') {
+    const nxt = done ? null : s.fixtures[s.week].find(([a, b]) => a === 0 || b === 0);
+    html += `<div class="card hero" style="margin-bottom:12px">${done ? `<h3>Sezon bitti</h3><p>Sıra: ${soloRank(s)}. · ${s.table[0].w}G ${s.table[0].d}B ${s.table[0].l}M · ${s.table[0].gf}:${s.table[0].ga}</p><div class="row"><button class="btn prim" id="sAgain">Yeni sezon (aynı lig)</button><button class="btn ghost" id="sDel">Ligi bitir</button></div>` : nxt ? `<h3>${s.week + 1}. hafta</h3><p>${nxt[0] === 0 ? `<b>${esc(s.teams[0].name)}</b> – ${esc(s.teams[nxt[1]].name)} (iç saha)` : `${esc(s.teams[nxt[0]].name)} – <b>${esc(s.teams[0].name)}</b> (deplasman)`}</p><div class="row"><button class="btn prim" data-go="room" data-ctx='${JSON.stringify({ kind: 'solo', oppIdx: nxt[0] === 0 ? nxt[1] : nxt[0], home: nxt[0] === 0, week: s.week + 1, minutes: s.minutes, diff: s.diff, seed: (s.season * 1000 + s.week * 10) | 0 })}'>Maç odası</button></div>` : `<h3>${s.week + 1}. hafta: bay</h3><div class="row"><button class="btn" id="sBye">Haftayı geç</button></div>`}</div>`;
+    html += `<div class="card"><h3>Fikstür</h3>${s.fixtures.map((rd, w) => `<p style="margin-top:6px"><b>${w + 1}. hafta</b>${w < s.week ? '' : w === s.week ? ' <span class="tag y">sırada</span>' : ''}</p>` + rd.map(([a, b]) => { const r = s.results.find((m) => m.week === w && m.a === a && m.b === b); return `<div class="ev"><div class="t">${r ? `${r.ga_}–${r.gb_}` : '–'}</div><div>${a === 0 || b === 0 ? '<b>' : ''}${esc(s.teams[a].short)} – ${esc(s.teams[b].short)}${a === 0 || b === 0 ? '</b>' : ''}</div></div>`; }).join('')).join('')}</div>`;
+  } else if (tab === 'table') {
+    html += `<div class="card"><h3>Puan durumu</h3><table><tr><th>#</th><th class="l">Takım</th><th>O</th><th>G</th><th>B</th><th>M</th><th>A:Y</th><th>Av</th><th>P</th></tr>${order.map((i, r) => { const t = s.table[i]; return `<tr class="${i === 0 ? 'me' : ''} ${r === 0 ? 'zone-up' : r === order.length - 1 ? 'zone-down' : ''}"><td>${r + 1}</td><td class="l">${esc(s.teams[i].name)}</td><td>${t.p}</td><td>${t.w}</td><td>${t.d}</td><td>${t.l}</td><td>${t.gf}:${t.ga}</td><td>${t.gf - t.ga}</td><td><b>${t.pts}</b></td></tr>`; }).join('')}</table><p class="muted" style="margin-top:8px">Terfi ve düşme bölgeleri online ligde; burada ilk sıra şampiyon.</p></div>`;
+  } else if (tab === 'club') {
+    html += `<div class="cards"><div class="card"><h3>Bugün</h3><p>${s.name} · ${s.season}. sezon · ${s.week}/${s.fixtures.length} hafta oynandı · sıra ${soloRank(s)}.</p><p>Antrenman, tesisler, ekipler ve finans demoda yok (Faz 3).</p></div><div class="card"><h3>Takım</h3><div class="row"><button class="btn" data-go="squad">Kadro</button><button class="btn" data-go="tactics">Taktik tahtası</button></div></div></div>`;
+  }
+  return { title: esc(s.name), noBack: true, html, tabs: [{ lab: 'Kulüp', go: 'solo', on: tab === 'club' }, { lab: 'Takım', go: 'squad', on: false }, { lab: 'Maç', go: 'solo', on: tab === 'fixture' || tab === 'table' }], after: () => {
+    const tb = $('aTabs'); const btns = tb.querySelectorAll('button'); btns[0].onclick = () => go('solo', { tab: 'club' }, false); btns[1].onclick = () => go('squad', {}); btns[2].onclick = () => go('solo', { tab: tab === 'fixture' ? 'table' : 'fixture' }, false);
+    const sub = document.createElement('div'); sub.className = 'row'; sub.style.marginBottom = '12px'; sub.innerHTML = `<div class="seg"><button aria-pressed="${tab === 'fixture'}" data-t="fixture">Fikstür</button><button aria-pressed="${tab === 'table'}" data-t="table">Puan durumu</button><button aria-pressed="${tab === 'club'}" data-t="club">Kulüp</button></div>`; $('aBody').prepend(sub); sub.onclick = (e) => { const b = e.target.closest('button'); if (b) go('solo', { tab: b.dataset.t }, false); };
+    const bye = $('sBye'); if (bye) bye.onclick = () => { soloApplyResultBye(); go('solo', { tab: 'fixture' }, false); };
+    const ag = $('sAgain'); if (ag) ag.onclick = () => { const s2 = APP.db.solo; s2.season++; s2.week = 0; s2.results = []; s2.table = s2.teams.map(() => ({ p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, pts: 0 })); dbSave(); go('solo', { tab: 'fixture' }, false); };
+    const del = $('sDel'); if (del) del.onclick = () => { APP.db.solo = null; dbSave(); APP.stack.length = 0; go('home', {}, false); };
+  } }; };
+function soloApplyResultBye() { const s = APP.db.solo; for (const [x, y] of s.fixtures[s.week]) { const seed = (s.season * 1000 + s.week * 10 + x) | 0; const A = botTeamIn(s.teams[x], s.diff, NAMES_B), B = botTeamIn(s.teams[y], s.diff, NAMES_A); P.clockRate = 90 / s.minutes; P.dt = 0.1; const st = simulate(A, B, seed); P.clockRate = 6; soloRecord(s, x, y, st.stats[0].goals, st.stats[1].goals); } s.week++; dbSave(); }
+
+// --- Takim: kadro, futbolcu karti, taktik tahtasi ---
+const POS_TR = { GK: 'Kaleci', CB: 'Stoper', FB: 'Bek', DM: 'Defansif orta', CM: 'Orta saha', W: 'Kanat', ST: 'Forvet' };
+SCREENS.squad = (c) => { const t = userTeamIn(); const sel = c.sel ?? null; const all = [...t.players.map((p, i) => ({ ...p, xi: true, i })), ...t.bench.map((p, i) => ({ ...p, xi: false, i }))];
+  const p = sel !== null ? all.find((q) => q.num === sel) : null;
+  return { title: 'Takım · Kadro', html: `<div class="cards" style="grid-template-columns: minmax(260px, 1fr) minmax(260px, 1.2fr)">
+    <div class="list">${all.map((q) => `<div class="li ${q.num === sel ? 'sel' : ''}" data-go="squad" data-ctx='${JSON.stringify({ sel: q.num })}'><div class="num">${q.num}</div><div><div class="nm">${esc(q.name)}</div><div class="sub">${POS_TR[q.pos]} · ${q.age} yaş${q.xi ? '' : ' · yedek'}${(q.traits || []).map((tr) => ` · ${tr}`).join('')}</div></div><div class="gg">${q.gg}</div></div>`).join('')}</div>
+    <div>${p ? `<div class="card"><h3>${p.num} ${esc(p.name)} <small>${POS_TR[p.pos]}</small></h3>
+      <div class="row"><span class="tag y">GG ${p.gg}</span><span class="tag">${p.age} yaş</span>${(p.traits || []).map((tr) => `<span class="tag g">${tr}</span>`).join('')}<span class="tag">Yorgunluk ${p.fatigue ?? 20}</span></div>
+      <p>Roller, rol puanları, potansiyel, piyasa değeri, sözleşme ve sezon istatistikleri Faz 3'te. Özellikler motorda: Hızlı (hız ve tepki), Hava Hakimi, Oyun Kurucu (görme/beklenti), Duvar (savunma görme), Çalımcı, Dayanıklı, Bitirici, Refleks.</p>
+      <p class="muted">Eylemler (ilk 11'e al, numara değiştir) demoda yok; kadro sabit.</p></div>` : `<div class="card"><h3>Futbolcu kartı</h3><p>Listeden bir futbolcu seç.</p></div>`}</div></div>`, tabs: APP.db.solo ? [{ lab: 'Kulüp', go: 'solo' }, { lab: 'Takım', go: 'squad', on: true }, { lab: 'Maç', go: 'solo' }] : null, after: () => { if (APP.db.solo) { const b = $('aTabs').querySelectorAll('button'); b[0].onclick = () => go('solo', { tab: 'club' }, false); b[2].onclick = () => go('solo', { tab: 'fixture' }, false); } } }; };
+
+const TAC_LABELS = { press: ['Pres', ['Düşük', 'Orta', 'Yüksek']], line: ['Savunma hattı', ['Derin', 'Orta', 'Önde']], style: ['Oyun stili', ['Kısa pas', 'Dengeli', 'Direkt']], tempo: ['Tempo', ['Yavaş', 'Normal', 'Hızlı']], width: ['Genişlik', ['Dar', 'Normal', 'Geniş']], compact: ['Hatlar arası', ['Kompakt', 'Normal', 'Açık']], fb: ['Bekler', ['Savunmada kal', 'Dengeli', 'Bindir']], cm: ['Merkez orta saha', ['Geride', 'Dengeli', 'Ceza sahasına']], runs: ['Forvet koşuları', ['Güvenli', 'Dengeli', 'Riskli']] };
+SCREENS.tactics = (c) => { const tt = APP.db.team; const level = c.level || 'easy'; const t = userTeamIn(); const sh = shapesOf(t); const show = c.shape || 'def';
+  const dots = (sh[show === 'def' ? 'def' : 'att']).map(([x, y], i) => `<div class="dot ${show === 'att' ? 'att' : ''}" style="left:${x / 105 * 100}%;top:${y / 68 * 100}%;background:${t.color}">${t.players[i].num}</div>`).join('');
+  return { title: 'Taktik tahtası', html: `
+  <div class="row" style="margin-bottom:12px"><div class="seg" id="lvl"><button aria-pressed="${level === 'easy'}" data-l="easy">Kolay</button><button aria-pressed="${level === 'mid'}" data-l="mid">Orta</button><button aria-pressed="${level === 'deep'}" data-l="deep">Derin</button></div></div>
+  <div class="cards" style="grid-template-columns: minmax(260px, 1.2fr) minmax(260px, 1fr)">
+    <div class="card"><h3>Şekil <small>${show === 'def' ? 'savunma (topsuz)' : 'hücum (toplu)'}</small></h3><div class="pitchmini">${dots}</div><div class="row"><div class="seg" id="shp"><button aria-pressed="${show === 'def'}" data-s="def">Savunma şekli</button><button aria-pressed="${show === 'att'}" data-s="att">Hücum şekli</button></div></div><p>Hücum şekli formasyon ve doktrinden türetilir; ızgara editörü (6×5) Derin seviyede sonra.</p></div>
+    <div class="card">
+      ${level === 'easy' ? `<h3>Preset <small>tek seçim</small></h3>
+        <label class="f">Formasyon<select id="tForm">${FORMATION_LIST.map((f) => `<option ${f === tt.formation ? 'selected' : ''}>${f}</option>`).join('')}</select></label>
+        <label class="f">Doktrin (oyun anlayışı)<select id="tDoc">${DOCTRINE_LIST.map((d) => `<option value="${d}" ${d === tt.doctrine ? 'selected' : ''}>${DOCTRINES[d].label}</option>`).join('')}</select></label>
+        <label class="f">Hatlar arası mesafe<select id="tCompact">${TAC_LABELS.compact[1].map((l, i) => `<option value="${i}" ${i === (tt.tactic.compact ?? 1) ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+        <p>Doktrin dört ana talimatı, bek/orta saha çıkışını ve hücum şeklinin cesaretini doldurur. Maç içinde üstteki ◀ ▶ kaydırıcı (savunma ↔ hücum) bunun üstüne biner.</p>` : level === 'mid' ? `<h3>Talimatlar</h3><div class="grid2">${Object.entries(TAC_LABELS).map(([k, [lab, opts]]) => `<label class="f">${lab}<select data-k="${k}" class="tk">${opts.map((o, i) => `<option value="${i}" ${i === (tt.tactic[k] ?? 1) ? 'selected' : ''}>${o}</option>`).join('')}</select></label>`).join('')}<label class="f">Ofsayt tuzağı<select data-k="trap" class="tk"><option value="0" ${!tt.tactic.trap ? 'selected' : ''}>Kapalı</option><option value="1" ${tt.tactic.trap ? 'selected' : ''}>Açık</option></select></label></div><p>Doktrin: ${DOCTRINES[tt.doctrine].label} (Kolay seviyede değişir). Ana taktikten iki kademe sapma taktik kapasite verimini düşürür (doktrin bedeli).</p>` : `<h3>Görev kartları ve kurallar</h3>
+        <p>Oyuncu başına görev (rolün üstüne yazar):</p>
+        ${t.players.filter((p) => p.pos !== 'GK').map((p) => { const d = (tt.duties || {})[p.num] || {}; return `<div class="row" style="padding:4px 0;border-bottom:1px solid var(--line)"><span style="min-width:110px"><b>${p.num}</b> ${esc(p.name)} <span class="muted">${POS_TR[p.pos]}</span></span>
+          <select class="du" data-n="${p.num}" data-k="runs"><option value="">Koşu: rol</option><option value="0" ${d.runs === 0 ? 'selected' : ''}>Geride kal</option><option value="1" ${d.runs === 1 ? 'selected' : ''}>Ayağa</option><option value="2" ${d.runs === 2 ? 'selected' : ''}>Derin koşu</option></select>
+          <select class="du" data-n="${p.num}" data-k="press"><option value="">Pres: rol</option><option value="0" ${d.press === 0 ? 'selected' : ''}>Blokta kal</option><option value="1" ${d.press === 1 ? 'selected' : ''}>Normal</option><option value="2" ${d.press === 2 ? 'selected' : ''}>İlk basan</option></select>
+          <select class="du" data-n="${p.num}" data-k="pass"><option value="">Pas: rol</option><option value="0" ${d.pass === 0 ? 'selected' : ''}>Kısa</option><option value="1" ${d.pass === 1 ? 'selected' : ''}>Karışık</option><option value="2" ${d.pass === 2 ? 'selected' : ''}>Uzun</option></select>
+          <select class="du" data-n="${p.num}" data-k="mark"><option value="">Marke: alan</option><option value="1" ${d.mark === 1 ? 'selected' : ''}>Adam</option></select>
+          ${p.pos === 'FB' ? `<select class="du" data-n="${p.num}" data-k="overlap"><option value="">Bindirme: takım</option><option value="0" ${d.overlap === 0 ? 'selected' : ''}>Kal</option><option value="2" ${d.overlap === 2 ? 'selected' : ''}>Bindir</option></select>` : ''}</div>`; }).join('')}
+        <p style="margin-top:10px">Koşullu kurallar (en çok 4):</p>
+        <div class="row">${RULE_TEMPLATES.map((r) => `<label class="tag" style="cursor:pointer;padding:6px 10px"><input type="checkbox" class="rl" value="${r.id}" ${(tt.rules || []).includes(r.id) ? 'checked' : ''}> ${r.label}</label>`).join('')}</div>`}
+      <div class="row" style="margin-top:12px"><button class="btn prim" id="tSave">Kaydet</button><span class="muted" id="tMsg"></span></div>
+    </div>
+  </div>`, after: () => {
+    $('lvl').onclick = (e) => { const b = e.target.closest('button'); if (b) go('tactics', { ...c, level: b.dataset.l }, false); };
+    $('shp').onclick = (e) => { const b = e.target.closest('button'); if (b) go('tactics', { ...c, shape: b.dataset.s }, false); };
+    $('tSave').onclick = () => {
+      const tt2 = APP.db.team;
+      if (level === 'easy') { tt2.formation = $('tForm').value; tt2.doctrine = $('tDoc').value; tt2.tactic = { ...DOCTRINES[tt2.doctrine].tactic, compact: +$('tCompact').value }; }
+      else if (level === 'mid') { for (const s of document.querySelectorAll('.tk')) tt2.tactic[s.dataset.k] = +s.value; }
+      else { const du = {}; for (const s of document.querySelectorAll('.du')) { if (s.value === '') continue; du[s.dataset.n] = du[s.dataset.n] || {}; du[s.dataset.n][s.dataset.k] = +s.value; } tt2.duties = du; const rl = [...document.querySelectorAll('.rl:checked')].map((x) => x.value); if (rl.length > 4) { toast('En çok 4 kural'); return; } tt2.rules = rl; }
+      dbSave(); $('tMsg').textContent = 'Kaydedildi'; go('tactics', { ...c }, false);
+    };
+  }, tabs: APP.db.solo ? [{ lab: 'Kulüp', go: 'solo' }, { lab: 'Takım', go: 'squad', on: true }, { lab: 'Maç', go: 'solo' }] : null }; };
+
+SCREENS.settings = () => { const s = APP.db.settings; const sel = (id, k, opts) => `<label class="f">${id}<select data-k="${k}" class="sk">${opts.map(([v, l]) => `<option value="${v}" ${String(s[k]) === String(v) ? 'selected' : ''}>${l}</option>`).join('')}</select></label>`;
+  return { title: 'Ayarlar', html: `<div class="cards">
+    <div class="card"><h3>Kontroller</h3><div class="grid2">
+      ${sel('Klavye şeması', 'keys', [['arrows', 'Ok tuşları + S pas · D şut · W ara · A orta · E sprint · Q değiştir'], ['wasd', 'WASD + J pas · K şut · L ara · I orta · Shift sprint · Boşluk değiştir']])}
+      ${sel('Pas yardımı', 'assistP', [[0, 'Kapalı (top tam nişana)'], [1, 'Kısmi'], [2, 'Tam']])}
+      ${sel('Şut yardımı', 'assistS', [[0, 'Kapalı'], [1, 'Kısmi'], [2, 'Tam']])}
+      ${sel('Oyuncu değiştirme', 'autoSwitch', [[true, 'Otomatik (topa en yakın)'], [false, 'Elle']])}
+    </div><p>Dokunmatik: sol yarı joystick (dış bant sprint), sağ altta elmas butonlar; vuruş jesti topun yolunu çizmektir. Sol el modu ve buton boyutu Faz 3'te.</p></div>
+    <div class="card"><h3>Görünüm</h3><div class="grid2">
+      ${sel('Top boyutu', 'ball', [[1, 'Normal'], [1.4, 'Büyük'], [1.8, 'Çok büyük']])}
+      ${sel('Oyuncu isimleri', 'names', [['auto', 'Otomatik'], ['mine', 'Yalnız kontrol ettiğin'], ['off', 'Kapalı']])}
+      ${sel('Kamera', 'cam', [['full', 'Tam saha'], ['length', 'Tam boy'], ['near', 'Yakın']])}
+      ${sel('Varsayılan oyun modu', 'mode', [['team', 'Team play'], ['sim', 'Total simulation']])}
+    </div></div>
+    <div class="card"><h3>Hesap</h3><p>Misafir hesabı · ${esc(APP.db.account?.club.name || '')}. Ses, dil, bildirimler, medya izinleri ve hesap silme Faz 3'te.</p><div class="row"><button class="btn ghost" id="reset">Demoyu sıfırla</button><button class="btn ghost" id="devp">Geliştirici sayfası</button></div></div>
+  </div>`, after: () => { for (const el of document.querySelectorAll('.sk')) el.onchange = () => { let v = el.value; if (v === 'true') v = true; else if (v === 'false') v = false; else if (!isNaN(+v) && el.dataset.k !== 'keys') v = +v; APP.db.settings[el.dataset.k] = v; dbSave(); };
+    $('reset').onclick = () => { if (confirm('Tüm demo kaydı silinsin mi?')) { localStorage.removeItem(APP.key); location.reload(); } };
+    $('devp').onclick = () => { document.body.classList.remove('app'); location.hash = '#dev'; }; } }; };
+
+// --- baslangic ---
+function appInit() {
+  dbLoad();
+  if (location.hash === '#dev') return; // gelistirici sayfasi (eski test sayfasi)
+  document.body.classList.add('app');
+  if (!APP.db.account) go('login', {}, false); else go('home', {}, false);
+}
+window.addEventListener('hashchange', () => { if (location.hash !== '#dev') { document.body.classList.add('app'); render(); } });
+appInit();
+</script>
+<div class="dev">demo · <a href="#dev" style="color:inherit" onclick="document.body.classList.remove('app')">geliştirici</a></div>
 
 </body>
 </html>

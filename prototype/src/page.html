@@ -349,7 +349,7 @@ const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 function snapshot() { return st.players.map((p) => [p.x, p.y, 0]).concat([[st.ball.x, st.ball.y, st.ballZ]]); }
 function newMatch(s) {
   seed = s;
-  const [a, b] = buildTeams();
+  const [a, b] = teamOverride ? teamOverride() : buildTeams();
   st = createMatch(a, b, seed, { knockout });
   prev = snapshot();
   acc = 0;
@@ -394,8 +394,11 @@ function frame(now) {
       watchEvents();
     }
     alpha = Math.min(1, acc);
-    if (st.done) setPlaying(false);
+    if (st.done) { setPlaying(false); if (PLAY.on && PLAY.hooks && !PLAY.endAt) PLAY.endAt = performance.now(); }
     updateHud();
+  }
+  if (PLAY.on && PLAY.endAt && performance.now() - PLAY.endAt > 2200 && PLAY.hooks) { const h = PLAY.hooks; const fin = st; PLAY.hooks = null; exitPlay(); h.onEnd && h.onEnd(fin); }
+  if (false) {
   }
   draw(playing && !reduce ? alpha : 1, now);
   requestAnimationFrame(frame);
@@ -648,7 +651,8 @@ function draw(alpha, now = performance.now()) {
 // Sol yarida yuzen joystick (dis halka = sprint); sag altta elmas duzeninde dort baglamsal buton.
 // Hucum: ust Ara, sag Sut, sol Orta, alt Pas. Savunma: ust Degistir, sag Kaydir, sol Mudahale, alt Baski (basili).
 // Vurus: butona basinca nisan oku acilir; ilk 12 px surukleme yon, yana kayma falso, basili tutma guc; birakinca vurus.
-const PLAY = { on: false, side: 0, camMode: 'full', minutes: 10, keys: 'arrows', autoSwitch: true, speed: 1.3, ball: 1.4, names: 'auto', t0: 0, paused: false };
+const PLAY = { on: false, side: 0, camMode: 'full', minutes: 10, keys: 'arrows', autoSwitch: true, speed: 1.3, ball: 1.4, names: 'auto', t0: 0, paused: false, mode: 'team', hooks: null, endAt: 0 };
+let teamOverride = null; // uygulama katmani (Dilim 1): maci hazir TeamIn nesneleriyle baslatir
 const IN = { joyId: null, joyBase: null, mx: 0, my: 0, joyK: 0, press: false, acts: [], keys: new Set(), ptrBtn: new Map(), kick: null, kbKick: null, swDown: null, slideOver: null };
 const GK_HOLD_MS = 300; // Degistir bu kadar basili tutulunca kaleci cikisi
 const POWER_MS = { shoot: 900, pass: 600, through: 600, cross: 700 };
@@ -689,7 +693,7 @@ function ctrlGeom() {
 }
 function hitBtn(x, y) {
   const g = ctrlGeom();
-  for (const b of g.btns) if (Math.hypot(x - b.x, y - b.y) <= b.r * 1.2) return b;
+  if (PLAY.mode !== 'sim') for (const b of g.btns) if (Math.hypot(x - b.x, y - b.y) <= b.r * 1.2) return b;
   if (Math.abs(x - g.cam.x) < g.cam.w / 2 && Math.abs(y - g.cam.y) < g.cam.h / 2) return { id: 'cam' };
   return null;
 }
@@ -885,14 +889,43 @@ function startPlay() {
 function exitPlay() {
   if (!PLAY.on) return;
   if (PLAY.paused) togglePause();
-  PLAY.on = false;
+  PLAY.on = false; PLAY.endAt = 0;
+  const hooks = PLAY.hooks; PLAY.hooks = null;
   document.body.classList.remove('play', 'portrait');
   CAM.phone = false; CAM.overlay = false; CAM.mode = 'full';
   P.clockRate = 6; P.dt = 0.1; P.playSpeed = 1;
   IN.acts.length = 0; IN.press = false; IN.joyId = null; IN.mx = 0; IN.my = 0; IN.joyK = 0; IN.kick = null; IN.kbKick = null; IN.ptrBtn.clear();
   fitCanvas();
+  teamOverride = null;
+  const fin = st;
   newMatch(seed);
+  if (hooks && hooks.onExit) hooks.onExit(fin);
 }
+// ---------- Uygulama API'si (Dilim 1 demo katmani) ----------
+// startMatch: hazir TeamIn'lerle maci baslatir; mode 'team' (Team play) ya da 'sim' (Total simulation: kontrol yok, izleme);
+// onEnd(st) mac bitince (2 s sonra, otomatik cikis), onExit() kullanici cikinca
+window.FM = {
+  startMatch(o) {
+    teamOverride = () => [o.teams[0], o.teams[1]];
+    PLAY.on = true; PLAY.side = o.side ?? 0; PLAY.minutes = o.minutes ?? 10; PLAY.keys = o.keys ?? 'arrows'; PLAY.autoSwitch = o.autoSwitch ?? true;
+    PLAY.speed = 1.3; P.playSpeed = PLAY.speed;
+    PLAY.ball = o.ball ?? 1.4; PLAY.names = o.names ?? 'auto'; PLAY.t0 = performance.now(); PLAY.paused = false; PLAY.mode = o.mode ?? 'team'; PLAY.hooks = { onEnd: o.onEnd, onExit: o.onExit }; PLAY.endAt = 0;
+    P.clockRate = 90 / (PLAY.minutes * PLAY.speed); P.dt = PLAY_DT; knockout = !!o.knockout;
+    ment = 0; document.getElementById('mentOut').textContent = 'Dengeli';
+    document.body.classList.add('play');
+    CAM.phone = true; CAM.overlay = true;
+    applyCam(o.cam ?? 'full');
+    newMatch(o.seed ?? (1 + Math.floor(Math.random() * 1e6)));
+    if (PLAY.mode === 'team') setControl(st, PLAY.side, 'team', o.assistP ?? 0, o.assistS ?? 1, { autoSwitch: PLAY.autoSwitch });
+    onResize();
+    speed = 1;
+  },
+  exit: () => exitPlay(),
+  state: () => st,
+  setMent: (m) => setMent(m),
+  pause: () => { if (!PLAY.paused) togglePause(); },
+  resume: () => { if (PLAY.paused) togglePause(); },
+};
 let lastW = 0, lastH = 0;
 function onResize() {
   if (PLAY.on) document.body.classList.toggle('portrait', innerHeight > innerWidth);
@@ -1053,7 +1086,7 @@ function drawPhoneOverlay(Wc, Hc, s, X, Y, ox, oy, pos) {
   ctx.fillStyle = 'rgba(10,12,16,.6)'; ctx.fillRect((cm.x - cm.w / 2) * dpr, (cm.y - cm.h / 2) * dpr, cm.w * dpr, cm.h * dpr);
   ctx.fillStyle = '#fff'; ctx.font = `600 ${Math.round(12 * u)}px ${css('--font-body')}`;
   ctx.fillText('Kam: ' + (CAM_MODES.find((c) => c[0] === PLAY.camMode) ?? CAM_MODES[0])[1], cm.x * dpr, cm.y * dpr);
-  if (PLAY.on) {
+  if (PLAY.on && PLAY.mode !== 'sim') {
     // joystick (yuzen): ic halka yurume/kosu, dis halka sprint (topuz dis halkaya girince halka sariya doner, topuz buyur)
     const jr = g.joyR * dpr;
     if (IN.joyBase) {
