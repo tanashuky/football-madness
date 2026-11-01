@@ -1430,7 +1430,10 @@ function updateAnchorsAndMove(st: MatchState) {
     // sekil fazi: topu kazaninca hucum sekline, kaybedince savunma sekline kademeli gecis (2-4 s; iki sekil uzaksa ve uyum dusukse daha yavas)
     const shp = shapesOf(t);
     const trans = P.shapeTrans > 0 ? clamp(P.shapeTrans + shapeDist(shp.def, shp.att) / 8, P.shapeTrans, P.shapeTrans * 2) * (1 + Math.max(0, 60 - t.U) / 100) : 1e-6;
-    const phTarget = inPoss ? 1 : 0;
+    // duran top beklenirken topu kullanacak takim hucum sekline, digeri savunma sekline gecer (eskiden son sahiplik esas alindigi icin
+    // tac/serbest vurus kullanacak takim savunma seklinde bekliyordu)
+    const restartSide = st.pending ? st.pending.side : (st.restartTaker && st.owner === st.restartTaker ? st.restartTaker.side : null);
+    const phTarget = (restartSide !== null ? restartSide === s : inPoss) ? 1 : 0;
     // savunmaya donus daha acil (yarisi surede)
     st.phase[s] += clamp(phTarget - st.phase[s], -dt / (trans * 0.4), dt / trans);
     const ph = st.phase[s];
