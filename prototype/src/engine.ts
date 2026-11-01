@@ -2001,6 +2001,16 @@ function applySubs(st: MatchState, halfTime = false) {
   st.subQueue.push(...keep);
 }
 // otomatik degisiklik kurali: kaleci yoksa yedek kaleci; sakat oyuncu; 60. dakikadan sonra tukenen oyuncu
+// kullanicinin degisikligi: secilen oyuncu cikar, secilen yedek girer; ilk olu topta uygulanir
+export function userSub(st: MatchState, side: 0 | 1, outNum: number, innNum: number): boolean {
+  if (st.subsLeft[side] <= 0) return false;
+  const out = st.players.find((p) => p.side === side && !p.off && p.num === outNum);
+  const inn = st.bench[side].find((b) => b.off && !b.subbed && b.num === innNum);
+  if (!out || !inn || st.subQueue.some((q) => q.out === out || q.inn === inn)) return false;
+  st.subQueue.push({ side, out, inn, reason: 'user' });
+  return true;
+}
+export function pendingSubs(st: MatchState, side: 0 | 1) { return st.subQueue.filter((q) => q.side === side).map((q) => ({ out: q.out.num, inn: q.inn.num })); }
 function autoSubs(st: MatchState) {
   for (const side of [0, 1] as const) {
     if (st.subsLeft[side] <= 0) continue;
@@ -2016,7 +2026,7 @@ function autoSubs(st: MatchState) {
     const inj = live.find((p) => p.injured && !st.subQueue.some((q) => q.out === p));
     if (inj && requestSub(st, side, inj, 'injury')) continue;
     // yorgunluk degisikligi: son pencere acil durumlar icin saklanir
-    if (st.clock >= 60 * 60 && st.subsLeft[side] > 1 && st.subWindowsLeft[side] > 1) {
+    if (!st.control[side] && st.clock >= 60 * 60 && st.subsLeft[side] > 1 && st.subWindowsLeft[side] > 1) { // kullanici takiminda yorgunluk degisikligi kullanicinin karari
       const tired = live.filter((p) => p.pos !== 'GK' && p.k < P.subTiredK && !st.subQueue.some((q) => q.out === p)).sort((a, b) => a.k - b.k)[0];
       if (tired) requestSub(st, side, tired, 'tired');
     }

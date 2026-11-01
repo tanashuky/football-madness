@@ -84,6 +84,26 @@ body.play #mentBar { display: flex; }
 @media (max-width: 760px) { #mentBar output { min-width: 0; font-size: 11px; } }
 #pauseBox { position: fixed; inset: 0; z-index: 940; display: flex; align-items: center; justify-content: center; background: rgba(8,12,10,.55); pointer-events: none; }
 #pauseBox[hidden] { display: none; }
+#tacBtn { position: fixed; top: max(8px, env(safe-area-inset-top, 0px)); right: calc(max(10px, env(safe-area-inset-right, 0px)) + 116px); z-index: 950; display: none; font: 600 13px/1 var(--font-body); color: var(--chalk); background: rgba(10,12,16,.7); border: 1px solid rgba(255,255,255,.2); border-radius: 8px; padding: 9px 12px; }
+body.play #tacBtn { display: block; }
+#tacPanel { position: fixed; inset: 0; z-index: 945; display: flex; align-items: flex-start; justify-content: center; padding: calc(max(8px, env(safe-area-inset-top, 0px)) + 46px) 8px 8px; background: rgba(8,12,10,.6); }
+#tacPanel[hidden] { display: none; }
+#tacPanel .box { background: rgba(14,21,18,.97); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; width: min(900px, 96vw); max-height: calc(100vh - 62px); max-height: calc(100dvh - 62px); overflow: auto; color: var(--chalk); font: 500 14px/1.4 var(--font-body); display: flex; flex-direction: column; gap: 10px; }
+#tacPanel h3 { margin: 0; font: 700 20px/1.1 var(--font-display); letter-spacing: .05em; text-transform: uppercase; display: flex; justify-content: space-between; align-items: center; }
+#tacPanel h3 small { font: 500 12px var(--font-body); color: var(--muted); letter-spacing: 0; text-transform: none; }
+#tacPanel .cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+#tacPanel .col { background: rgba(255,255,255,.03); border: 1px solid var(--line); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+#tacPanel .col h4 { margin: 0 0 2px; font: 700 13px/1 var(--font-body); color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+#tacPanel label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); }
+#tacPanel select, #tacPanel button { font: 600 14px/1 var(--font-body); color: var(--chalk); background: var(--night); border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; min-height: 40px; }
+#tacPanel button.prim { background: var(--flood); color: #1b1a0c; border-color: transparent; }
+#tacPanel .seg { display: inline-flex; flex-wrap: wrap; gap: 2px; background: var(--night); border: 1px solid var(--line); border-radius: 8px; padding: 2px; }
+#tacPanel .seg button { border: 0; background: transparent; color: var(--muted); min-height: 34px; padding: 6px 10px; }
+#tacPanel .seg button[aria-pressed="true"] { background: var(--line); color: var(--chalk); }
+#tacPanel .pl { display: grid; grid-template-columns: 28px 1fr 44px; gap: 6px; align-items: center; font-size: 13px; padding: 2px 0; min-height: 30px; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,.06); }
+#tacPanel .pl .k { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; } #tacPanel .pl .k i { display: block; height: 100%; background: var(--good); }
+#tacPanel .pl.sel { outline: 1px solid var(--flood); border-radius: 6px; }
+#tacPanel .foot { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
 #pauseBox div { background: rgba(10,12,16,.85); border-radius: 10px; padding: 16px 22px; display: flex; flex-direction: column; gap: 4px; text-align: center; font: 500 14px/1.4 var(--font-body); color: var(--chalk); }
 #pauseBox b { font: 700 22px/1.2 var(--font-display); letter-spacing: .06em; text-transform: uppercase; }
 #sa { position: fixed; top: 0; left: 0; width: 0; height: 0; visibility: hidden; pointer-events: none; padding-top: env(safe-area-inset-top, 0px); padding-right: env(safe-area-inset-right, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); padding-left: env(safe-area-inset-left, 0px); }
@@ -231,6 +251,8 @@ label.chk { display: flex; flex-direction: row; gap: 8px; align-items: center; }
 <div id="sa" aria-hidden="true"></div>
 <button id="exitPlay" type="button">Çık</button>
 <button id="pausePlay" type="button" aria-label="Duraklat">❚❚</button>
+<button id="tacBtn" type="button">Taktik</button>
+<div id="tacPanel" hidden><div class="box" id="tacBox"></div></div>
 <div id="mentBar" aria-label="Taktik kaydırıcı"><button id="mentDown" type="button" aria-label="Savunma">◀</button><output id="mentOut">Dengeli</output><button id="mentUp" type="button" aria-label="Hücum">▶</button></div>
 <div id="pauseBox" hidden><div><b>Durduruldu</b><span>Devam etmek için ▶ ya da P</span></div></div>
 <div id="rotate">Telefonu yatay çevir.<br><span style="font-weight:400;font-size:14px;color:var(--muted)">Oyun yatay oynanır; uygulamada yön kilitli olacak.</span></div>
@@ -2331,6 +2353,18 @@ function applySubs(st, halfTime = false) {
     st.subQueue.push(...keep);
 }
 // otomatik degisiklik kurali: kaleci yoksa yedek kaleci; sakat oyuncu; 60. dakikadan sonra tukenen oyuncu
+// kullanicinin degisikligi: secilen oyuncu cikar, secilen yedek girer; ilk olu topta uygulanir
+function userSub(st, side, outNum, innNum) {
+    if (st.subsLeft[side] <= 0)
+        return false;
+    const out = st.players.find((p) => p.side === side && !p.off && p.num === outNum);
+    const inn = st.bench[side].find((b) => b.off && !b.subbed && b.num === innNum);
+    if (!out || !inn || st.subQueue.some((q) => q.out === out || q.inn === inn))
+        return false;
+    st.subQueue.push({ side, out, inn, reason: 'user' });
+    return true;
+}
+function pendingSubs(st, side) { return st.subQueue.filter((q) => q.side === side).map((q) => ({ out: q.out.num, inn: q.inn.num })); }
 function autoSubs(st) {
     for (const side of [0, 1]) {
         if (st.subsLeft[side] <= 0)
@@ -2349,7 +2383,7 @@ function autoSubs(st) {
         if (inj && requestSub(st, side, inj, 'injury'))
             continue;
         // yorgunluk degisikligi: son pencere acil durumlar icin saklanir
-        if (st.clock >= 60 * 60 && st.subsLeft[side] > 1 && st.subWindowsLeft[side] > 1) {
+        if (!st.control[side] && st.clock >= 60 * 60 && st.subsLeft[side] > 1 && st.subWindowsLeft[side] > 1) { // kullanici takiminda yorgunluk degisikligi kullanicinin karari
             const tired = live.filter((p) => p.pos !== 'GK' && p.k < P.subTiredK && !st.subQueue.some((q) => q.out === p)).sort((a, b) => a.k - b.k)[0];
             if (tired)
                 requestSub(st, side, tired, 'tired');
@@ -5692,7 +5726,7 @@ function watchEvents() {
     else if (e.type === 'yellow') banner('SARI KART', 'yellow', `${tm.short} · #${e.player}`);
     else if (e.type === 'red') banner('KIRMIZI KART', 'red', `${tm.short} · #${e.player}`);
     else if (e.type === 'penalty') banner('PENALTI', 'info', tm.short);
-    else if (e.type === 'half') banner('DEVRE ARASI', 'info');
+    else if (e.type === 'half') { banner('DEVRE ARASI', 'info'); if (PLAY.on && PLAY.hooks) setTimeout(() => openTac(true), 900); }
     else if (e.type === 'end') banner('MAÇ SONU', 'info');
     else if (e.type === 'rule' && PLAY.on) {
       // kural etiketi: kendi kuralimiz adiyla, rakibinki yalniz 'taktik degisti'; ayni etiket 8 s icinde tekrar cikmaz
@@ -6115,7 +6149,8 @@ addEventListener('keydown', (e) => {
   else if (e.code === 'BracketLeft') setMent(ment - 1);
   else if (e.code === 'BracketRight') setMent(ment + 1);
   else if (e.code === 'KeyC') cycleCam();
-  else if (e.code === 'Escape') exitPlay();
+  else if (e.code === 'Escape') { if (TAC.open) closeTac(); else exitPlay(); }
+  else if (e.code === 'KeyT') (TAC.open ? closeTac() : openTac(false));
   if (kb.move.includes(e.code) || e.code === 'Space') e.preventDefault();
 });
 addEventListener('keyup', (e) => {
@@ -6163,7 +6198,7 @@ function startPlay() {
 function exitPlay() {
   if (!PLAY.on) return;
   if (PLAY.paused) togglePause();
-  PLAY.on = false; PLAY.endAt = 0;
+  PLAY.on = false; PLAY.endAt = 0; TAC.open = false; document.getElementById('tacPanel').hidden = true;
   const hooks = PLAY.hooks; PLAY.hooks = null;
   document.body.classList.remove('play', 'portrait');
   CAM.phone = false; CAM.overlay = false; CAM.mode = 'full';
@@ -6190,11 +6225,13 @@ window.FM = {
     CAM.phone = true; CAM.overlay = true;
     applyCam(o.cam ?? 'full');
     newMatch(o.seed ?? (1 + Math.floor(Math.random() * 1e6)));
-    if (PLAY.mode === 'team') setControl(st, PLAY.side, 'team', o.assistP ?? 0, o.assistS ?? 1, { autoSwitch: PLAY.autoSwitch });
+    PLAY.assistP = o.assistP ?? 0; PLAY.assistS = o.assistS ?? 1;
+    if (PLAY.mode === 'team') setControl(st, PLAY.side, 'team', PLAY.assistP, PLAY.assistS, { autoSwitch: PLAY.autoSwitch });
     onResize();
     speed = 1;
   },
   exit: () => exitPlay(),
+  setMode(m) { if (!PLAY.on) return; PLAY.mode = m; if (m === 'team') setControl(st, PLAY.side, 'team', PLAY.assistP ?? 0, PLAY.assistS ?? 1, { autoSwitch: PLAY.autoSwitch }); else setControl(st, PLAY.side, 'none'); },
   state: () => st,
   setMent: (m) => setMent(m),
   pause: () => { if (!PLAY.paused) togglePause(); },
@@ -6234,6 +6271,53 @@ function togglePause() {
   IN.acts.length = 0; IN.kick = null; IN.kbKick = null; IN.swDown = null; IN.press = false;
 }
 document.getElementById('pausePlay').addEventListener('click', togglePause);
+// ---------- Mac ici taktik paneli ve devre arasi (Dilim 1) ----------
+// Acilinca oyun durur (tek oyunculu modlar); taktik: kaydirici (serbest), talimat/formasyon (3 degisiklik hakki, 1 dk uyum),
+// oyun modu (Team play / Total simulation), degisiklik (ilk olu topta uygulanir). Devre arasinda ayni panel otomatik acilir.
+const TAC = { open: false, half: false, subOut: null };
+const TL = { press: ['Düşük', 'Orta', 'Yüksek'], line: ['Derin', 'Orta', 'Önde'], tempo: ['Yavaş', 'Normal', 'Hızlı'], style: ['Kısa pas', 'Dengeli', 'Direkt'], width: ['Dar', 'Normal', 'Geniş'] };
+function openTac(half = false) {
+  if (!PLAY.on || st.done) return;
+  TAC.open = true; TAC.half = half; TAC.subOut = null;
+  if (!PLAY.paused) togglePause();
+  renderTac();
+  document.getElementById('tacPanel').hidden = false;
+  document.getElementById('pauseBox').hidden = true;
+}
+function closeTac() { TAC.open = false; document.getElementById('tacPanel').hidden = true; if (PLAY.paused) togglePause(); }
+function renderTac() {
+  const side = PLAY.side, t = st.teams[side], tac = t.tactic, opp = st.teams[1 - side];
+  const left = 3 - st.tacticChanges[side];
+  const live = st.players.filter((p) => p.side === side && !p.off).sort((a, b) => a.idx - b.idx);
+  const bench = st.bench[side].filter((b) => b.off && !b.subbed);
+  const pend = pendingSubs(st, side);
+  const S = st.stats[side], O = st.stats[1 - side], poss = S.possTicks + O.possTicks || 1;
+  const sel = (k, opts) => `<label>${{ press: 'Pres', line: 'Savunma hattı', tempo: 'Tempo', style: 'Oyun stili', width: 'Genişlik' }[k]}<select data-k="${k}" class="tk">${opts.map((o, i) => `<option value="${i}" ${i === (tac[k] ?? 1) ? 'selected' : ''}>${o}</option>`).join('')}</select></label>`;
+  document.getElementById('tacBox').innerHTML = `
+    <h3>${TAC.half ? 'Devre arası' : 'Taktik'} <small>${t.short} ${S.goals} : ${O.goals} ${opp.short} · topa sahip olma %${Math.round(100 * S.possTicks / poss)} · şut ${S.shots}–${O.shots} · xG ${S.xg.toFixed(2)}–${O.xg.toFixed(2)}</small></h3>
+    <div class="cols">
+      <div class="col"><h4>Yaklaşım</h4>
+        <div class="seg" id="tMent">${[-2, -1, 0, 1, 2].map((m) => `<button aria-pressed="${st.mentality[side] === m}" data-m="${m}">${MENT_LABEL[String(m)]}</button>`).join('')}</div>
+        <div class="seg" id="tMode"><button aria-pressed="${PLAY.mode === 'team'}" data-mode="team">Team play</button><button aria-pressed="${PLAY.mode === 'sim'}" data-mode="sim">Total simulation</button></div>
+        <span style="font-size:12px;color:var(--muted)">Kaydırıcı serbest (1 dk uyum). Talimat ve formasyon değişikliği hakkı: <b style="color:var(--chalk)">${left}</b> · 1 dk uyum (T −10).</span></div>
+      <div class="col"><h4>Talimatlar</h4>${sel('press', TL.press)}${sel('line', TL.line)}${sel('tempo', TL.tempo)}${sel('style', TL.style)}${sel('width', TL.width)}
+        <label>Formasyon (savunma şekli)<select id="tForm">${FORMATION_LIST.map((f) => `<option ${f === t.formation ? 'selected' : ''}>${f}</option>`).join('')}</select></label>
+        <button id="tApply" ${left <= 0 ? 'disabled' : ''}>Talimatları uygula (1 hak)</button></div>
+      <div class="col"><h4>Değişiklik <small style="color:var(--muted)">kalan ${st.subsLeft[side]} · pencere ${st.subWindowsLeft[side]}</small></h4>
+        <div style="font-size:12px;color:var(--muted)">Çıkacak oyuncuyu seç, sonra yedeği. İlk ölü topta uygulanır.</div>
+        ${live.filter((p) => p.pos !== 'GK' || true).map((p) => `<div class="pl ${TAC.subOut === p.num ? 'sel' : ''}" data-out="${p.num}"><b>${p.num}</b><span>${p.name} <span style="color:var(--muted)">${p.pos}</span>${pend.some((q) => q.out === p.num) ? ' <span style="color:var(--warn)">çıkıyor</span>' : ''}${p.injured ? ' <span style="color:#e5483f">sakat</span>' : ''}</span><div class="k" title="kondisyon"><i style="width:${Math.round(p.k)}%"></i></div></div>`).join('')}
+        <div style="font-size:12px;color:var(--muted);margin-top:4px">Yedekler</div>
+        ${bench.map((b) => `<div class="pl" data-in="${b.num}"><b>${b.num}</b><span>${b.name} <span style="color:var(--muted)">${b.pos}</span>${pend.some((q) => q.inn === b.num) ? ' <span style="color:var(--good)">giriyor</span>' : ''}</span><div class="k"><i style="width:${Math.round(b.k)}%"></i></div></div>`).join('')}</div>
+    </div>
+    <div class="foot"><button class="prim" id="tClose">${TAC.half ? 'İkinci yarıya başla' : 'Devam'}</button></div>`;
+  const box = document.getElementById('tacBox');
+  box.querySelector('#tMent').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; setMent(+b.dataset.m); renderTac(); };
+  box.querySelector('#tMode').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; FM.setMode(b.dataset.mode); renderTac(); };
+  box.querySelector('#tApply').onclick = () => { const patch = {}; for (const s2 of box.querySelectorAll('.tk')) patch[s2.dataset.k] = +s2.value; const f = box.querySelector('#tForm').value; const ok = setTactic(st, side, patch, f !== t.formation ? f : undefined); banner(ok ? 'TAKTİK DEĞİŞTİ' : 'HAK KALMADI', 'rule', ok ? '1 dk uyum' : ''); renderTac(); };
+  box.onclick = (e) => { const o = e.target.closest('[data-out]'); const i = e.target.closest('[data-in]'); if (o) { TAC.subOut = TAC.subOut === +o.dataset.out ? null : +o.dataset.out; renderTac(); } else if (i && TAC.subOut !== null) { const ok = userSub(st, side, TAC.subOut, +i.dataset.in); banner(ok ? 'DEĞİŞİKLİK SIRADA' : 'DEĞİŞİKLİK YAPILAMADI', 'rule', ok ? 'ilk ölü topta' : ''); TAC.subOut = null; renderTac(); } };
+  box.querySelector('#tClose').onclick = closeTac;
+}
+document.getElementById('tacBtn').addEventListener('click', () => (TAC.open ? closeTac() : openTac(false)));
 
 // nisan oku: yon (surukleme > joystick/klavye > bakis), uzunluk guc, egri falso (motorun falso isaretiyle ayni yon)
 function aimInfo(cp) {
@@ -6867,6 +6951,14 @@ function mkSquad(club, base, names) {
 function userTeamIn() {
   const db = APP.db, club = db.account.club, tt = db.team;
   const t = mkSquad({ ...club, formation: tt.formation }, club.gg || 62, NAMES_A);
+  // ilk 11: kullanicinin dizilisi (forma numaralari, slot sirasinda); slotun mevkisi formasyondan, dogal mevki natPos
+  const roster = [...t.players, ...t.bench].map((p) => ({ ...p, natPos: p.natPos || p.pos }));
+  const slots = FORM_POS[tt.formation];
+  if (!tt.lineup || tt.lineup.length !== 11) tt.lineup = t.players.map((p) => p.num);
+  const byNum = Object.fromEntries(roster.map((p) => [p.num, p]));
+  const xi = tt.lineup.map((num, i) => ({ ...byNum[num], pos: slots[i] }));
+  const rest = roster.filter((p) => !tt.lineup.includes(p.num)).sort((a, b) => (a.natPos === 'GK' ? -1 : b.natPos === 'GK' ? 1 : 0));
+  t.players = xi; t.bench = rest;
   const sh = userShapes(tt);
   t.tactic = { ...tt.tactic, doctrine: tt.doctrine, shapeDef: sh.def, shapeAtt: sh.att };
   t.mainTactic = { ...tt.tactic, doctrine: tt.doctrine };
@@ -7116,14 +7208,26 @@ function soloApplyResultBye() { const s = APP.db.solo; for (const [x, y] of s.fi
 
 // --- Takim: kadro, futbolcu karti, taktik tahtasi ---
 const POS_TR = { GK: 'Kaleci', CB: 'Stoper', FB: 'Bek', DM: 'Defansif orta', CM: 'Orta saha', W: 'Kanat', ST: 'Forvet' };
-SCREENS.squad = (c) => { const t = userTeamIn(); const sel = c.sel ?? null; const all = [...t.players.map((p, i) => ({ ...p, xi: true, i })), ...t.bench.map((p, i) => ({ ...p, xi: false, i }))];
+SCREENS.squad = (c) => { const tt = APP.db.team; const t = userTeamIn(); const sel = c.sel ?? null;
+  const all = [...t.players.map((p, i) => ({ ...p, xi: true, slot: i })), ...t.bench.map((p) => ({ ...p, xi: false }))];
   const p = sel !== null ? all.find((q) => q.num === sel) : null;
-  return { title: 'Takım · Kadro', html: `<div class="cards" style="grid-template-columns: minmax(260px, 1fr) minmax(260px, 1.2fr)">
-    <div class="list">${all.map((q) => `<div class="li ${q.num === sel ? 'sel' : ''}" data-go="squad" data-ctx='${JSON.stringify({ sel: q.num, from: c.from })}'><div class="num">${q.num}</div><div><div class="nm">${esc(q.name)}</div><div class="sub">${POS_TR[q.pos]} · ${q.age} yaş${q.xi ? '' : ' · yedek'}${(q.traits || []).map((tr) => ` · ${tr}`).join('')}</div></div><div class="gg">${q.gg}</div></div>`).join('')}</div>
-    <div>${p ? `<div class="card"><h3>${p.num} ${esc(p.name)} <small>${POS_TR[p.pos]}</small></h3>
+  const fit = (q) => (q.xi && q.natPos !== q.pos ? ` <span class="tag o">${POS_TR[q.natPos]} oynuyor: ${POS_TR[q.pos]}</span>` : '');
+  return { title: 'Takım · Kadro', html: `<p class="muted" style="margin:0 0 10px">Önce bir futbolcu seç; sonra "Yer değiştir" ile başka birini seç. Slotun mevkisi formasyondan gelir (${tt.formation}); doğal mevki dışında oynayan turuncu işaretlenir (mevki uyumu Faz 3).</p>
+  <div class="cards" style="grid-template-columns: minmax(260px, 1fr) minmax(260px, 1.2fr)">
+    <div class="list"><div class="muted">İlk 11</div>${all.filter((q) => q.xi).map((q) => `<div class="li ${q.num === sel ? 'sel' : ''} ${c.swap && q.num !== c.swap ? '' : ''}" data-go="squad" data-ctx='${JSON.stringify(c.swap ? { ...c, target: q.num } : { sel: q.num, from: c.from })}'><div class="num">${q.num}</div><div><div class="nm">${esc(q.name)}</div><div class="sub">${POS_TR[q.pos]} · ${q.age} yaş${(q.traits || []).map((tr) => ` · ${tr}`).join('')}${fit(q)}</div></div><div class="gg">${q.gg}</div></div>`).join('')}
+      <div class="muted" style="margin-top:8px">Yedekler</div>${all.filter((q) => !q.xi).map((q) => `<div class="li ${q.num === sel ? 'sel' : ''}" data-go="squad" data-ctx='${JSON.stringify(c.swap ? { ...c, target: q.num } : { sel: q.num, from: c.from })}'><div class="num">${q.num}</div><div><div class="nm">${esc(q.name)}</div><div class="sub">${POS_TR[q.natPos]} · ${q.age} yaş · yedek${(q.traits || []).map((tr) => ` · ${tr}`).join('')}</div></div><div class="gg">${q.gg}</div></div>`).join('')}</div>
+    <div>${p ? `<div class="card"><h3>${p.num} ${esc(p.name)} <small>${POS_TR[p.natPos]}${p.xi ? ` · slot: ${POS_TR[p.pos]}` : ' · yedek'}</small></h3>
       <div class="row"><span class="tag y">GG ${p.gg}</span><span class="tag">${p.age} yaş</span>${(p.traits || []).map((tr) => `<span class="tag g">${tr}</span>`).join('')}<span class="tag">Yorgunluk ${p.fatigue ?? 20}</span></div>
       <p>Roller, rol puanları, potansiyel, piyasa değeri, sözleşme ve sezon istatistikleri Faz 3'te. Özellikler motorda: Hızlı (hız ve tepki), Hava Hakimi, Oyun Kurucu (görme/beklenti), Duvar (savunma görme), Çalımcı, Dayanıklı, Bitirici, Refleks.</p>
-      <p class="muted">Eylemler (ilk 11'e al, numara değiştir) demoda yok; kadro sabit.</p></div>` : `<div class="card"><h3>Futbolcu kartı</h3><p>Listeden bir futbolcu seç.</p></div>`}</div></div>`, tabs: c.from === 'solo' ? [{ lab: 'Kulüp', go: 'solo' }, { lab: 'Takım', go: 'squad', on: true }, { lab: 'Maç', go: 'solo' }] : null, after: () => { if (c.from === 'solo') { const b = $('aTabs').querySelectorAll('button'); b[0].onclick = () => go('solo', { tab: 'club' }, false); b[1].onclick = () => {}; b[2].onclick = () => go('solo', { tab: 'fixture' }, false); } } }; };
+      <div class="row">${c.swap ? `<span class="muted">Şimdi yer değiştireceği futbolcuyu listeden seç</span><button class="btn sm ghost" data-go="squad" data-ctx='${JSON.stringify({ sel: p.num, from: c.from })}'>Vazgeç</button>` : `<button class="btn sm" data-go="squad" data-ctx='${JSON.stringify({ sel: p.num, swap: p.num, from: c.from })}'>Yer değiştir</button><button class="btn sm ghost" id="sqReset">Dizilişi sıfırla</button>`}</div></div>` : `<div class="card"><h3>Futbolcu kartı</h3><p>Listeden bir futbolcu seç.</p></div>`}</div></div>`,
+    tabs: c.from === 'solo' ? [{ lab: 'Kulüp', go: 'solo' }, { lab: 'Takım', go: 'squad', on: true }, { lab: 'Maç', go: 'solo' }] : null, after: () => {
+      if (c.swap && c.target && c.target !== c.swap) { // takas: iki numaranin yerini degistir (biri yedekteyse ilk 11'e girer)
+        const lu = APP.db.team.lineup; const a = lu.indexOf(c.swap), b = lu.indexOf(c.target);
+        if (a >= 0 && b >= 0) { lu[a] = c.target; lu[b] = c.swap; } else if (a >= 0) lu[a] = c.target; else if (b >= 0) lu[b] = c.swap;
+        dbSave(); toast('Diziliş güncellendi'); go('squad', { sel: c.target, from: c.from }, false); return;
+      }
+      const r = $('sqReset'); if (r) r.onclick = () => { delete APP.db.team.lineup; dbSave(); go('squad', { from: c.from }, false); };
+      if (c.from === 'solo') { const b = $('aTabs').querySelectorAll('button'); b[0].onclick = () => go('solo', { tab: 'club' }, false); b[2].onclick = () => go('solo', { tab: 'fixture' }, false); } } }; };
 
 const TAC_LABELS = { press: ['Pres', ['Düşük', 'Orta', 'Yüksek']], line: ['Savunma hattı', ['Derin', 'Orta', 'Önde']], style: ['Oyun stili', ['Kısa pas', 'Dengeli', 'Direkt']], tempo: ['Tempo', ['Yavaş', 'Normal', 'Hızlı']], width: ['Genişlik', ['Dar', 'Normal', 'Geniş']], compact: ['Hatlar arası', ['Kompakt', 'Normal', 'Açık']], fb: ['Bekler', ['Savunmada kal', 'Dengeli', 'Bindir']], cm: ['Merkez orta saha', ['Geride', 'Dengeli', 'Ceza sahasına']], runs: ['Forvet koşuları', ['Güvenli', 'Dengeli', 'Riskli']] };
 // kullanicinin taktik verisi -> motor sekilleri (ozel sekil varsa o, yoksa formasyon + doktrin)
