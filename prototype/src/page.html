@@ -1031,7 +1031,7 @@ document.getElementById('pausePlay').addEventListener('click', togglePause);
 // ---------- Mac ici taktik paneli ve devre arasi (Dilim 1) ----------
 // Acilinca oyun durur (tek oyunculu modlar); taktik: kaydirici (serbest), talimat/formasyon (3 degisiklik hakki, 1 dk uyum),
 // oyun modu (Team play / Total simulation), degisiklik (ilk olu topta uygulanir). Devre arasinda ayni panel otomatik acilir.
-const TAC = { open: false, half: false, subOut: null, decide: null, timer: null }; // decide: { kind: 'injury'|'red'|'gk', player, until(ms) }
+const TAC = { open: false, half: false, subOut: null, decide: null, timer: null, msg: '' }; // decide: { kind: 'injury'|'red'|'gk', player, until(ms) }
 const TL = { press: ['Düşük', 'Orta', 'Yüksek'], line: ['Derin', 'Orta', 'Önde'], tempo: ['Yavaş', 'Normal', 'Hızlı'], style: ['Kısa pas', 'Dengeli', 'Direkt'], width: ['Dar', 'Normal', 'Geniş'] };
 function openTac(half = false, decide = null) {
   if (!PLAY.on || st.done) return;
@@ -1053,6 +1053,7 @@ function renderTac() {
   const pend = pendingSubs(st, side);
   const S = st.stats[side], O = st.stats[1 - side], poss = S.possTicks + O.possTicks || 1;
   const sel = (k, opts) => `<label>${{ press: 'Pres', line: 'Savunma hattı', tempo: 'Tempo', style: 'Oyun stili', width: 'Genişlik' }[k]}<select data-k="${k}" class="tk">${opts.map((o, i) => `<option value="${i}" ${i === (tac[k] ?? 1) ? 'selected' : ''}>${o}</option>`).join('')}</select></label>`;
+  const panelEl = document.getElementById('tacPanel'); const keepScroll = [panelEl.scrollTop, document.getElementById('tacBox').scrollTop];
   document.getElementById('tacBox').innerHTML = `
     <h3>${TAC.decide ? (TAC.decide.kind === 'injury' ? 'Sakatlık' : TAC.decide.kind === 'gk' ? 'Kaleci atıldı' : 'Kırmızı kart') + ' · <span id="tLeft"></span>' : TAC.half ? 'Devre arası' : 'Taktik'} <small>${t.short} ${S.goals} : ${O.goals} ${opp.short} · topa sahip olma %${Math.round(100 * S.possTicks / poss)} · şut ${S.shots}–${O.shots} · xG ${S.xg.toFixed(2)}–${O.xg.toFixed(2)}</small></h3>
     <div class="cols">
@@ -1062,7 +1063,7 @@ function renderTac() {
         <span style="font-size:12px;color:var(--muted)">Kaydırıcı serbest (1 dk uyum). Talimat ve formasyon değişikliği hakkı: <b style="color:var(--chalk)">${left}</b> · 1 dk uyum (T −10).</span></div>
       <div class="col"><h4>Talimatlar</h4>${sel('press', TL.press)}${sel('line', TL.line)}${sel('tempo', TL.tempo)}${sel('style', TL.style)}${sel('width', TL.width)}
         <label>Formasyon (savunma şekli)<select id="tForm">${FORMATION_LIST.map((f) => `<option ${f === t.formation ? 'selected' : ''}>${f}</option>`).join('')}</select></label>
-        <button id="tApply" ${left <= 0 ? 'disabled' : ''}>Talimatları uygula (1 hak)</button></div>
+        <button id="tApply" ${left <= 0 ? 'disabled' : ''}>${left <= 0 ? 'Hak kalmadı' : `Talimatları uygula · kalan ${left} hak`}</button><div id="tMsg" style="font-size:12px;color:var(--good);min-height:16px;margin-top:4px">${TAC.msg || ''}</div></div>
       <div class="col"><h4>Değişiklik <small style="color:var(--muted)">kalan ${st.subsLeft[side]} · pencere ${st.subWindowsLeft[side]}</small></h4>
         <div style="font-size:12px;color:var(--muted)">${TAC.decide ? (TAC.decide.kind === 'red' ? `<b style="color:#e5483f">${TAC.decide.player} numara atıldı.</b> Taktiği ayarla; istersen değişiklik yap. Süre dolunca 10 kişiyle devam.` : `<b style="color:var(--warn)">${TAC.decide.player} numara ${TAC.decide.kind === 'injury' ? 'sakatlandı' : 'kaleci atıldı'}.</b> Önerilen yedek işaretli; başka birini seçebilirsin. Süre dolunca sistem öneriyi uygular.`) : 'Çıkacak oyuncuyu seç, sonra yedeği. İlk ölü topta uygulanır.'}</div>
         ${live.filter((p) => p.pos !== 'GK' || true).map((p) => `<div class="pl ${TAC.subOut === p.num ? 'sel' : ''}" data-out="${p.num}"><b>${p.num}</b><span>${p.name} <span style="color:var(--muted)">${p.pos}</span>${pend.some((q) => q.out === p.num) ? ' <span style="color:var(--warn)">çıkıyor</span>' : ''}${p.injured ? ' <span style="color:#e5483f">sakat</span>' : ''}</span><div class="k" title="kondisyon"><i style="width:${Math.round(p.k)}%"></i></div></div>`).join('')}
@@ -1071,9 +1072,10 @@ function renderTac() {
     </div>
     <div class="foot"><button class="prim" id="tClose">${TAC.half ? 'İkinci yarıya başla' : TAC.decide ? 'Devam (kararı uygula)' : 'Devam'}</button></div>`;
   const box = document.getElementById('tacBox');
+  panelEl.scrollTop = keepScroll[0]; box.scrollTop = keepScroll[1];
   box.querySelector('#tMent').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; setMent(+b.dataset.m); renderTac(); };
   box.querySelector('#tMode').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; FM.setMode(b.dataset.mode); renderTac(); };
-  box.querySelector('#tApply').onclick = () => { const patch = {}; for (const s2 of box.querySelectorAll('.tk')) patch[s2.dataset.k] = +s2.value; const f = box.querySelector('#tForm').value; const ok = setTactic(st, side, patch, f !== t.formation ? f : undefined); banner(ok ? 'TAKTİK DEĞİŞTİ' : 'HAK KALMADI', 'rule', ok ? '1 dk uyum' : ''); renderTac(); };
+  box.querySelector('#tApply').onclick = () => { const patch = {}; for (const s2 of box.querySelectorAll('.tk')) patch[s2.dataset.k] = +s2.value; const f = box.querySelector('#tForm').value; const ok = setTactic(st, side, patch, f !== t.formation ? f : undefined); banner(ok ? 'TAKTİK DEĞİŞTİ' : 'HAK KALMADI', 'rule', ok ? '1 dk uyum' : ''); TAC.msg = ok ? `Uygulandı: ${f} · pres ${TL.press[patch.press].toLowerCase()} · hat ${TL.line[patch.line].toLowerCase()} · tempo ${TL.tempo[patch.tempo].toLowerCase()} · 1 dk uyum süresi` : 'Değişiklik hakkı kalmadı'; renderTac(); setTimeout(() => { if (TAC.msg) { TAC.msg = ''; const m = document.getElementById('tMsg'); if (m) m.textContent = ''; } }, 6000); };
   box.onclick = (e) => { const o = e.target.closest('[data-out]'); const i = e.target.closest('[data-in]'); if (o) { TAC.subOut = TAC.subOut === +o.dataset.out ? null : +o.dataset.out; renderTac(); } else if (i && TAC.subOut !== null) { const ok = userSub(st, side, TAC.subOut, +i.dataset.in); banner(ok ? 'DEĞİŞİKLİK SIRADA' : 'DEĞİŞİKLİK YAPILAMADI', 'rule', ok ? 'ilk ölü topta' : ''); TAC.subOut = null; renderTac(); } };
   box.querySelector('#tClose').onclick = () => { if (TAC.decide && TAC.decide.kind !== 'red' && !pendingSubs(st, side).some((q) => q.out === TAC.decide.player)) autoSubsFor(st, side); closeTac(); };
 }
