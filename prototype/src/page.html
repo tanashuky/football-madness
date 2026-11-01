@@ -366,7 +366,7 @@ function buildTeams() {
 }
 
 // ---------- Mac dongusu ----------
-let st, seed = 1, speed = 1, playing = true, acc = 0, prev = null, last = performance.now(), knockout = false;
+let st, seed = 1, speed = 1, playing = true, acc = 0, prev = null, last = performance.now(), knockout = false, nanWarned = false;
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 function snapshot() { return st.players.map((p) => [p.x, p.y, 0]).concat([[st.ball.x, st.ball.y, st.ballZ]]); }
 function newMatch(s) {
@@ -414,6 +414,7 @@ function frame(now) {
       step(st);
       acc -= 1;
       watchEvents();
+      if (!Number.isFinite(st.ball.x) && !nanWarned) { nanWarned = true; console.error('Motor: top/oyuncu konumu NaN', st.players.filter((p) => !Number.isFinite(p.x)).map((p) => p.side + ':' + p.num)); }
     }
     alpha = Math.min(1, acc);
     if (st.done) { setPlaying(false); if (PLAY.on && PLAY.hooks && !PLAY.endAt) PLAY.endAt = performance.now(); }

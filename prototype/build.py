@@ -4,7 +4,8 @@ S = sys.argv[1]
 eng = open('build/engine.js').read()
 eng = re.sub(r'^export\s+', '', eng, flags=re.M)
 eng = re.sub(r'^import .*$', '', eng, flags=re.M)
-page = open('src/page.html').read() + '\n' + open('src/app.html').read()
+import datetime
+page = open('src/page.html').read() + '\n' + open('src/app.html').read().replace('__BUILD__', datetime.datetime.now().strftime('%d.%m %H:%M'))
 page = page.replace('__ENGINE__', eng).replace('__SUMMARY__', open(S + '/summary.json').read()).replace('__BALANCE__', open(S + '/balance.json').read()).replace('__MATCHUP__', json.dumps(json.load(open(S + '/f0.json')) + (json.load(open(S + '/f1.json')) if os.path.exists(S + '/f1.json') else [])))
 open(S + '/prototip.html', 'w').write(page)
 # bagimsiz surum (dosya olarak gonderilen): tam iskelet ve telefon viewport ayarlari

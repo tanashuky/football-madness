@@ -575,13 +575,13 @@ const FORM_NUM = {
     '4-4-2': [1, 3, 4, 5, 2, 6, 8, 11, 7, 9, 10],
     '4-2-3-1': [1, 3, 4, 5, 2, 6, 8, 11, 10, 7, 9],
     '3-5-2': [1, 4, 5, 6, 3, 8, 10, 7, 2, 9, 11],
-    '5-3-2': [1, 3, 4, 5, 6, 2, 8, 14, 10, 9, 11],
+    '5-3-2': [1, 3, 4, 5, 6, 2, 8, 7, 10, 9, 11],
     '4-1-4-1': [1, 3, 4, 5, 2, 6, 11, 8, 10, 7, 9],
     '4-3-1-2': [1, 3, 4, 5, 2, 6, 8, 7, 10, 9, 11],
     '3-4-3': [1, 4, 5, 6, 3, 8, 10, 2, 11, 9, 7],
     '4-2-2-2': [1, 3, 4, 5, 2, 6, 8, 11, 7, 9, 10],
     '5-4-1': [1, 3, 4, 5, 6, 2, 11, 8, 10, 7, 9],
-    '3-4-2-1': [1, 4, 5, 6, 3, 8, 14, 2, 10, 11, 9],
+    '3-4-2-1': [1, 4, 5, 6, 3, 8, 7, 2, 10, 11, 9],
     '4-4-1-1': [1, 3, 4, 5, 2, 8, 6, 11, 7, 10, 9],
 };
 const FORMATION_LIST = Object.keys(FORM_POS);
@@ -750,7 +750,29 @@ function doctrinePenalty(t) {
     pen = Math.min(0.15, pen);
     return t.specialTraining ? pen / 2 : pen;
 }
+// takim girdisi dogrulama: eksik/bozuk oyuncu NaN olarak sahaya cikip ayrilma itmesiyle herkesi NaN yapiyordu (1 Kasim, 5-3-2 / forma no 14)
+function validateTeam(t, label) {
+    if (!FORMATIONS[t.formation])
+        throw new Error(`${label}: bilinmeyen formasyon ${t.formation}`);
+    if (!t.players || t.players.length !== 11)
+        throw new Error(`${label}: ilk 11 ${t.players ? t.players.length : 0} oyuncu`);
+    const nums = new Set();
+    t.players.forEach((p, i) => {
+        if (!p || !Number.isFinite(p.gg) || !Number.isFinite(p.num) || !p.pos)
+            throw new Error(`${label}: ${i + 1}. slotta gecersiz oyuncu (${p ? JSON.stringify({ num: p.num, gg: p.gg, pos: p.pos }) : 'yok'})`);
+        if (nums.has(p.num))
+            throw new Error(`${label}: forma numarasi ${p.num} iki kez`);
+        nums.add(p.num);
+    });
+    for (const k of ['shapeDef', 'shapeAtt']) {
+        const sh = t.tactic[k];
+        if (sh && (sh.length !== 11 || sh.some((q) => !q || !Number.isFinite(q[0]) || !Number.isFinite(q[1]))))
+            throw new Error(`${label}: ${k} bozuk`);
+    }
+}
 function createMatch(a0, b0, seed, opts) {
+    validateTeam(a0, a0.name ?? 'A');
+    validateTeam(b0, b0.name ?? 'B');
     FLIP = false;
     // taktik kopyalanir (mac icinde degisebilir), doktrin bedeli T'ye uygulanir
     const a = { ...a0, tactic: applyDoctrine({ ...a0.tactic }), T: a0.T * (1 - doctrinePenalty(a0)) };
@@ -1967,8 +1989,8 @@ function separate(st) {
             const dx = b.x - a.x;
             const dy = b.y - a.y;
             const d = Math.hypot(dx, dy);
-            if (d >= (a.side === b.side ? sameD : minD))
-                continue;
+            if (!(d < (a.side === b.side ? sameD : minD)))
+                continue; // NaN dahil: uzak ya da gecersiz ciftte itme yok
             // barajdakiler omuz omuza durur (ayrilma itmesi yok)
             if (a.side === b.side && wall && wall.includes(a) && wall.includes(b))
                 continue;
@@ -5751,7 +5773,7 @@ function buildTeams() {
 }
 
 // ---------- Mac dongusu ----------
-let st, seed = 1, speed = 1, playing = true, acc = 0, prev = null, last = performance.now(), knockout = false;
+let st, seed = 1, speed = 1, playing = true, acc = 0, prev = null, last = performance.now(), knockout = false, nanWarned = false;
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 function snapshot() { return st.players.map((p) => [p.x, p.y, 0]).concat([[st.ball.x, st.ball.y, st.ballZ]]); }
 function newMatch(s) {
@@ -5799,6 +5821,7 @@ function frame(now) {
       step(st);
       acc -= 1;
       watchEvents();
+      if (!Number.isFinite(st.ball.x) && !nanWarned) { nanWarned = true; console.error('Motor: top/oyuncu konumu NaN', st.players.filter((p) => !Number.isFinite(p.x)).map((p) => p.side + ':' + p.num)); }
     }
     alpha = Math.min(1, acc);
     if (st.done) { setPlaying(false); if (PLAY.on && PLAY.hooks && !PLAY.endAt) PLAY.endAt = performance.now(); }
@@ -7069,14 +7092,37 @@ function mkSquad(club, base, names) {
   t.bench.forEach((p, i) => { p.gg = base + off[(i + 11) % off.length]; p.age = 19 + ((i * 5) % 14); });
   return t;
 }
+// Kullanicinin kadrosu formasyondan BAGIMSIZ sabit bir listedir (18 futbolcu, numaralar 1-18, dogal mevki natPos);
+// formasyon yalniz slotlarin mevkisini verir, lineup (11 forma numarasi, slot sirasinda) kimin nerede oynadigini.
+// 1 Kasim hatasi: kadro formasyona gore uretiliyordu; 5-3-2'de numaralar degisince diziliste olmayan oyuncu NaN olup herkesi yok etti.
+function userRoster() {
+  const club = APP.db.account.club;
+  const base = mkSquad({ ...club, formation: '4-3-3' }, club.gg || 62, NAMES_A);
+  return [...base.players, ...base.bench].map((p) => ({ ...p, natPos: p.pos }));
+}
+// varsayilan diziliş: her slota dogal mevkisi uyan en guclu bos oyuncu, kalan slotlara en guclu kalanlar
+function defaultLineup(roster, slots) {
+  const free = new Set(roster.map((p) => p.num)); const out = new Array(slots.length).fill(null);
+  const pick = (pred) => { let best = null; for (const p of roster) if (free.has(p.num) && pred(p) && (!best || p.gg > best.gg)) best = p; if (best) free.delete(best.num); return best ? best.num : null; };
+  slots.forEach((sp, i) => { out[i] = pick((p) => p.natPos === sp); });
+  const near = { FB: ['W', 'CB'], CB: ['DM', 'FB'], DM: ['CM', 'CB'], CM: ['DM', 'W'], W: ['CM', 'ST', 'FB'], ST: ['W', 'CM'], GK: [] };
+  slots.forEach((sp, i) => { if (out[i] === null) out[i] = pick((p) => p.natPos !== 'GK' && (near[sp] || []).includes(p.natPos)); });
+  slots.forEach((sp, i) => { if (out[i] === null) out[i] = pick((p) => sp === 'GK' ? p.natPos === 'GK' : p.natPos !== 'GK'); });
+  slots.forEach((sp, i) => { if (out[i] === null) out[i] = pick(() => true); });
+  return out;
+}
 function userTeamIn() {
   const db = APP.db, club = db.account.club, tt = db.team;
+  if (!FORMATIONS[tt.formation]) tt.formation = '4-3-3';
+  if (tt.formationAtt && !FORMATIONS[tt.formationAtt]) delete tt.formationAtt;
   const t = mkSquad({ ...club, formation: tt.formation }, club.gg || 62, NAMES_A);
-  // ilk 11: kullanicinin dizilisi (forma numaralari, slot sirasinda); slotun mevkisi formasyondan, dogal mevki natPos
-  const roster = [...t.players, ...t.bench].map((p) => ({ ...p, natPos: p.natPos || p.pos }));
+  const roster = userRoster();
   const slots = FORM_POS[tt.formation];
-  if (!tt.lineup || tt.lineup.length !== 11) tt.lineup = t.players.map((p) => p.num);
   const byNum = Object.fromEntries(roster.map((p) => [p.num, p]));
+  // diziliş dogrulama: 11 benzersiz, hepsi kadroda, kaleci slotunda kaleci; degilse varsayilana don
+  const lu = tt.lineup;
+  const valid = Array.isArray(lu) && lu.length === 11 && new Set(lu).size === 11 && lu.every((n) => byNum[n]) && byNum[lu[0]].natPos === 'GK';
+  if (!valid) { tt.lineup = defaultLineup(roster, slots); dbSave(); }
   const xi = tt.lineup.map((num, i) => ({ ...byNum[num], pos: slots[i] }));
   const rest = roster.filter((p) => !tt.lineup.includes(p.num)).sort((a, b) => (a.natPos === 'GK' ? -1 : b.natPos === 'GK' ? 1 : 0));
   t.players = xi; t.bench = rest;
@@ -7230,11 +7276,17 @@ function startMatchFlow(c, me, opp, home, instant) {
   const seed = (c.seed ?? (Date.now() % 1000000)) | 0;
   const finish = (st) => { const rep = buildReport(st, side, c); afterMatch(c, rep); go('report', { rep, c }, false); };
   if (instant) { P.clockRate = 90 / (c.minutes || s.minutes); P.dt = 0.1; P.playSpeed = 1; const st = simulate(teams[0], teams[1], seed); P.clockRate = 6; finish(st); return; }
+  // sahaya cikmadan once iki takimi dogrula; hata varsa uygulama ekraninda kal ve nedenini goster (eskiden gelistirici sayfasina dusuyordu)
+  try { validateTeam(teams[0], teams[0].name); validateTeam(teams[1], teams[1].name); } catch (e) { console.error(e); toast('Maç başlatılamadı: ' + (e && e.message ? e.message : e)); return; }
   document.body.classList.remove('app');
-  FM.startMatch({ teams, side, minutes: c.minutes || s.minutes, keys: s.keys, autoSwitch: s.autoSwitch, assistP: s.assistP, assistS: s.assistS, ball: s.ball, names: s.names, cam: s.cam, mode: s.mode, seed,
-    onEnd: (st) => { document.body.classList.add('app'); finish(st); },
-    onExit: (st) => { document.body.classList.add('app'); if (st && !st.done) { // terk edildi: kalan sure simule edilir
-      setControl(st, side, 'none'); let g = 0; while (!st.done && g++ < 40000) step(st); toast('Maç terk edildi: kalan süre simüle edildi'); } if (st) finish(st); else render(); } });
+  try {
+    FM.startMatch({ teams, side, minutes: c.minutes || s.minutes, keys: s.keys, autoSwitch: s.autoSwitch, assistP: s.assistP, assistS: s.assistS, ball: s.ball, names: s.names, cam: s.cam, mode: s.mode, seed,
+      onEnd: (st) => { document.body.classList.add('app'); finish(st); },
+      onExit: (st) => { document.body.classList.add('app'); if (st && !st.done) { // terk edildi: kalan sure simule edilir
+        setControl(st, side, 'none'); let g = 0; while (!st.done && g++ < 40000) step(st); toast('Maç terk edildi: kalan süre simüle edildi'); } if (st) finish(st); else render(); } });
+  } catch (e) {
+    console.error(e); try { FM.exit(); } catch (e2) {} document.body.classList.add('app'); render(); toast('Maç başlatılamadı: ' + (e && e.message ? e.message : e));
+  }
 }
 // rapor verisi
 function buildReport(st, side, c) {
@@ -7440,7 +7492,7 @@ function appInit() {
 window.addEventListener('hashchange', () => { if (location.hash !== '#dev') { document.body.classList.add('app'); render(); } });
 appInit();
 </script>
-<div class="dev">demo · <a href="#dev" style="color:inherit" onclick="document.body.classList.remove('app')">geliştirici</a></div>
+<div class="dev">demo · sürüm 01.11 20:40 · <a href="#dev" style="color:inherit" onclick="document.body.classList.remove('app')">geliştirici</a></div>
 
 </body>
 </html>

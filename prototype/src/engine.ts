@@ -606,13 +606,13 @@ const FORM_NUM: Record<Formation, number[]> = {
   '4-4-2': [1, 3, 4, 5, 2, 6, 8, 11, 7, 9, 10],
   '4-2-3-1': [1, 3, 4, 5, 2, 6, 8, 11, 10, 7, 9],
   '3-5-2': [1, 4, 5, 6, 3, 8, 10, 7, 2, 9, 11],
-  '5-3-2': [1, 3, 4, 5, 6, 2, 8, 14, 10, 9, 11],
+  '5-3-2': [1, 3, 4, 5, 6, 2, 8, 7, 10, 9, 11],
   '4-1-4-1': [1, 3, 4, 5, 2, 6, 11, 8, 10, 7, 9],
   '4-3-1-2': [1, 3, 4, 5, 2, 6, 8, 7, 10, 9, 11],
   '3-4-3': [1, 4, 5, 6, 3, 8, 10, 2, 11, 9, 7],
   '4-2-2-2': [1, 3, 4, 5, 2, 6, 8, 11, 7, 9, 10],
   '5-4-1': [1, 3, 4, 5, 6, 2, 11, 8, 10, 7, 9],
-  '3-4-2-1': [1, 4, 5, 6, 3, 8, 14, 2, 10, 11, 9],
+  '3-4-2-1': [1, 4, 5, 6, 3, 8, 7, 2, 10, 11, 9],
   '4-4-1-1': [1, 3, 4, 5, 2, 8, 6, 11, 7, 10, 9],
 };
 export const FORMATION_LIST = Object.keys(FORM_POS) as Formation[];
@@ -768,7 +768,23 @@ export function doctrinePenalty(t: TeamIn): number {
   pen = Math.min(0.15, pen);
   return t.specialTraining ? pen / 2 : pen;
 }
+// takim girdisi dogrulama: eksik/bozuk oyuncu NaN olarak sahaya cikip ayrilma itmesiyle herkesi NaN yapiyordu (1 Kasim, 5-3-2 / forma no 14)
+export function validateTeam(t: TeamIn, label: string) {
+  if (!FORMATIONS[t.formation]) throw new Error(`${label}: bilinmeyen formasyon ${t.formation}`);
+  if (!t.players || t.players.length !== 11) throw new Error(`${label}: ilk 11 ${t.players ? t.players.length : 0} oyuncu`);
+  const nums = new Set<number>();
+  t.players.forEach((p, i) => {
+    if (!p || !Number.isFinite(p.gg) || !Number.isFinite(p.num) || !p.pos) throw new Error(`${label}: ${i + 1}. slotta gecersiz oyuncu (${p ? JSON.stringify({ num: p.num, gg: p.gg, pos: p.pos }) : 'yok'})`);
+    if (nums.has(p.num)) throw new Error(`${label}: forma numarasi ${p.num} iki kez`);
+    nums.add(p.num);
+  });
+  for (const k of ['shapeDef', 'shapeAtt'] as const) {
+    const sh = t.tactic[k];
+    if (sh && (sh.length !== 11 || sh.some((q) => !q || !Number.isFinite(q[0]) || !Number.isFinite(q[1])))) throw new Error(`${label}: ${k} bozuk`);
+  }
+}
 export function createMatch(a0: TeamIn, b0: TeamIn, seed: number, opts?: { knockout?: boolean }): MatchState {
+  validateTeam(a0, a0.name ?? 'A'); validateTeam(b0, b0.name ?? 'B');
   FLIP = false;
   // taktik kopyalanir (mac icinde degisebilir), doktrin bedeli T'ye uygulanir
   const a: TeamIn = { ...a0, tactic: applyDoctrine({ ...a0.tactic }), T: a0.T * (1 - doctrinePenalty(a0)) };
@@ -1720,7 +1736,7 @@ function separate(st: MatchState) {
       const dx = b.x - a.x;
       const dy = b.y - a.y;
       const d = Math.hypot(dx, dy);
-      if (d >= (a.side === b.side ? sameD : minD)) continue;
+      if (!(d < (a.side === b.side ? sameD : minD))) continue; // NaN dahil: uzak ya da gecersiz ciftte itme yok
       // barajdakiler omuz omuza durur (ayrilma itmesi yok)
       if (a.side === b.side && wall && wall.includes(a) && wall.includes(b)) continue;
       // top sahibi ile rakibi arasinda itme yok: mudahale/omuz omuza mucadele temasi gerekir

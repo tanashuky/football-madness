@@ -128,3 +128,10 @@ Commit sırası: 8ee1406 hız/pencereler → dd51833 şekiller → 7402036 göre
 - Kaleci: güvenli pas (p ≥ 0,8) yoksa uzaklaştırma öncelik sırası (kendi pasını kovalamasın). Not: kalecinin kendi (restart olmayan) pasını geri alması kural olarak serbest; aut sonrası ikinci dokunuş yasağı testte 0.
 - Klavye falso: vuruş tuşuna bastıktan sonra ilk 0,25 s yön tuşları nişan, sonra nişan kilitlenir, nişana dik yön tuşu kavis (±0,8); önizlemede görünür. Güç dolma süresi pas/ara 600 → 900 ms, orta 800.
 - Taktik düğmesi duraklat/kaydırıcı yanına; dar ekranda kaydırıcı etiketi gizli.
+
+## KRİTİK HATA ve düzeltme (1 Kasım 20:40)
+
+- Belirti: taktik düzenledikten sonra maç açılmıyor / sahada futbolcular ve top kayboluyor (mobil ekran görüntüsü).
+- Kök neden: kullanıcı kadrosu formasyona göre üretiliyordu (`makeTeam` → `FORM_NUM`); 5-3-2 ve 3-4-2-1 formasyonlarında forma numaraları 14 içerip 7 içermiyordu. Diziliş (`lineup`) 4-3-3'ten 7 numarayla kaydedilince 5-3-2'de 7 numara kadroda bulunamadı → tanımsız oyuncu (gg/name yok) → hız/konum NaN → `separate()` NaN mesafeyi "yakın" sayıp itmeyi herkese bulaştırdı → bütün oyuncular ve top NaN (görünmez). Ayrıca 14 numara yedek 14 ile çakışıyordu.
+- Düzeltme: (1) kullanıcı kadrosu formasyondan bağımsız sabit (`userRoster`, 1–18); formasyon yalnız slot mevkisi; `defaultLineup` slot mevkisine göre en güçlü uygun oyuncu; diziliş doğrulaması (11 benzersiz, kadroda var, 0. slot kaleci) yoksa varsayılana dön. (2) `FORM_NUM`'da 14 → 7 (her formasyonda 1–11). (3) Motor `validateTeam` (createMatch başında; bozuk takım açık hata mesajıyla reddedilir), `separate()` NaN-güvenli (`!(d < minD)`). (4) Uygulama: maç başlatma try/catch, hata mesajı toast, geliştirici sayfasına düşmez. (5) Sayfada NaN bekçisi (konsola uyarı), alt köşede sürüm damgası (önbellek şüphesinde kontrol için).
+- Doğrulama: 12 formasyonun hepsi savunma/hücum şekli olarak maç başlattı (NaN 0), eski 4-3-3 dizilişiyle 5-3-2, bozuk diziliş (99 numara), solo + takas + sürükleme — hepsi temiz.
