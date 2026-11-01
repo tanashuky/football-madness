@@ -431,6 +431,8 @@ function watchEvents() {
   if (st.deadStart !== lastDeadStart && isDead() && st.deadReason && st.deadReason !== 'GOL' && st.deadReason !== 'Penaltı') {
     banner(st.deadReason.toUpperCase(), 'info');
   }
+  // oyun durdu: suren vurus jesti ve bekleyen aksiyonlar iptal (duran topta eski aksiyon tetiklenmesin)
+  if (st.deadStart !== lastDeadStart && PLAY.on) { IN.kick = null; IN.kbKick = null; IN.acts.length = 0; IN.ptrBtn.clear(); }
   lastDeadStart = st.deadStart;
 }
 

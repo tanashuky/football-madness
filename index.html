@@ -335,9 +335,9 @@ const P = {
     readShift: 3, // okuma dogruysa savunmanin kanada kaymasi / hattin geri cekilmesi (m)
     reachT: 0.4, // ince adimda mudahale menzili zaman ufku (s): kaba adimdaki (0,5 s) erisimi korur
     fineAtt: 0.3, // ince adimda mudahale deneme olasiligi duzeltmesi (menzil genisleyince arkadan/yandan denemeler artar)
-    userRestartLimit: 5, // kullanici duran topta / kaleci elinde bu kadar bekleyince yapay zeka oynar (s)
+    userRestartLimit: 6, // kullanici duran topta / kaleci elinde bu kadar bekleyince yapay zeka oynar (s)
     userIdleLimit: 8, // acik oyunda girdisiz bekleme siniri (s)
-    userSetPieceLimit: 8, // kullanici korner / serbest vurus / penaltida bu kadar bekleyince yapay zeka kullanir (s)
+    userSetPieceLimit: 10, // kullanici korner / serbest vurus / penaltida bu kadar bekleyince yapay zeka kullanir (s)
     subTiredK: 38, // bu kondisyonun altindaki oyuncu 60. dakikadan sonra degistirilir
     injuryRisk: [0.0001, 0.0004, 0.0012, 0.003], // dakikalik sakatlik riski: k>=60, 40-59, 20-39, <20 (Metrik sekmesi)
     pressFat: [0.9, 1.0, 1.5], // pres seviyesine gore yorulma carpani
@@ -361,6 +361,8 @@ const P = {
     runsMask: 'b', // etkin kosu turleri: 'b' arkaya, 'f' ayaga, 'w' kanada; bos = hepsi. Simdilik yalniz arkaya: ayaga ve kanada kosulari pas karariyla butunlesmeden hucumu zayiflatiyor (not)
     thinkSim: 0, // dusunen bot adaylari ic simulasyonla dogrulasin mi (0: sezgisel puan; 1: kisa mac simulasyonu - sunucu/test)
     thinkSimMin: 12, // ic simulasyon suresi (oyun dk)
+    thruAirPower: 0.7, // kullanici ara pasi bu gucun ustunde havadan (asirtma)
+    thruAirDist: 28, // ya da nisan bu mesafeden uzunsa (m)
     stepUp: 1.8, // ofsayt duellosunda savunmacinin erken adimi (m, G*B ile)
     timingErr: 1.5, // forvetin cizgi zamanlama hatasi (m, (1-B) ile)
     trackB: 0.55, // bu beklentinin altindaki savunmaci yem kosusunu takip eder
@@ -1474,7 +1476,7 @@ function updateAnchorsAndMove(st) {
         }
         // kaleciyle karsi karsiya: kaleci cikar (onunde kendi savunmacisi yoksa)
         let gkOut = null;
-        if (!inPoss && carrier && bxf < P.gkOutRange) {
+        if (!inPoss && carrier && bxf < P.gkOutRange && Math.abs(byf - 34) < 18 && bxf > 3) { // dar acidan (korner bayragi yakini) cikmaz
             const [, cyfA] = [0, byf];
             const blocked = live.some((q) => {
                 if (q.pos === 'GK')
@@ -1524,7 +1526,9 @@ function updateAnchorsAndMove(st) {
             if (p === carrier)
                 continue;
             let sp0 = setPieceTarget(st, p);
-            if (sp0) {
+            // barajdakiler 9,15 m kuralindan muaf (hedefleri zaten 9,45 m'de; iki hedef birbirini itince salinim oluyordu)
+            const inWall = !!(st.pending ?? st.spWait)?.wallSet?.includes(p);
+            if (sp0 && !inWall) {
                 const [kx, ky, inside] = keepAway(guard, p, sp0[0], sp0[1]);
                 sp0 = [kx, ky, inside ? 1 : sp0[2]];
             }
@@ -2488,6 +2492,14 @@ function extraSeconds(minutes, lo, hi) {
 }
 function deadTime(st, sec, reason = '') {
     st.deadReason = reason;
+    // oyun durdu: acik kalan vurus kuyrugu, gelisine niyeti ve mudahale baskisi sifirlanir (duran topta eski aksiyon tetiklenmesin)
+    for (const ctl of st.control)
+        if (ctl) {
+            ctl.kick = null;
+            ctl.pre = null;
+            ctl.press50 = null;
+            ctl.input.act = undefined;
+        }
     st.spWait = null;
     st.restartKind = reason === 'Taç' ? 'throw' : reason === 'Aut' ? 'goalkick' : reason === 'Korner' ? 'corner' : reason === 'Kaleci aldı' ? 'gk' : reason === 'GOL' ? 'kickoff' : reason ? 'fk' : '';
     st.deadStart = st.t;
@@ -2551,7 +2563,7 @@ function carrierAct(st) {
     const [cxf, cyf] = toFrame(side, c.x, c.y);
     const press = pressureOn(st, c, c.x, c.y);
     // savunma mudahalesi (kaleci kendi ceza sahasinda topu elinde tutarken mudahale edilemez)
-    const gkHolding = c.pos === 'GK' && cxf < 16.5 && Math.abs(cyf - 34) < 20.16 && !st.gkFeet;
+    const gkHolding = c.pos === 'GK' && !st.gkFeet; // kaleci topu elinde tutarken mudahale edilemez (Kural 12); ayakla oynarken (geri pas, aut) serbest
     const spHold = st.spWait !== null && st.restartTaker === c; // duran top kullanilana kadar mudahale yok
     if (st.t >= st.restartUntil && !gkHolding && !spHold) {
         const def = nearestOpp(st, c);
@@ -2665,6 +2677,7 @@ function aiDecide(st, c) {
     const mates = liveTeam(st, side).filter((p) => p !== c);
     const curOppThreat = threat(105 - cxf, 68 - cyf);
     const offLine0 = offsideLine(st, side);
+    const defLine2 = (() => { const xs = st.players.filter((o) => o.side !== side && !o.off).map((o) => toFrame(side, o.x, o.y)[0]).sort((a, b) => b - a); return xs.length > 1 ? xs[1] : 105; })(); // rakibin sondan ikinci oyuncusu (top haric)
     for (const m of mates) {
         const d = hyp(m.x - c.x, m.y - c.y);
         if (d < 4 || d > 55)
@@ -2696,6 +2709,12 @@ function aiDecide(st, c) {
         if (team.tactic.tempo === 0)
             ev += 0.004 * (ps - 0.85);
         ev += P.safePass * (ps - 0.8); // guvenli pas egilimi (pas isabeti kalibrasyonu)
+        // kaleciyle karsi karsiya ve merkezdeyken geriye pas yok (cizgiden geri cikarma haric)
+        if (oneOnOne && mxf < cxf - 3 && Math.abs(cyf - 34) < 16 && cxf < 97)
+            ev -= 0.05;
+        // savunmanin arkasina sarkmisken (ofsayt cizgisinin otesinde) geriye orta sahaya pas yok: orta, sut ya da surme
+        if (cxf > 75 && mxf < cxf - 6 && (cxf > defLine2 + 1 || (oneOnOne && press < 1)) && !(cxf >= 97 && Math.abs(cyf - 34) > 8))
+            ev -= 0.04;
         ev += gauss(st.rng) * noiseSigma;
         if (ev > bestEV) {
             bestEV = ev;
@@ -2754,6 +2773,10 @@ function aiDecide(st, c) {
             bestAct = { kind: 'pass', target: m, p: 0.8, air: false };
     }
     dbg('karar_' + bestAct.kind + (cxf > 70 ? '_hucum' : ''));
+    if (oneOnOne && bestAct.kind === 'pass' && bestAct.target && toFrame(side, bestAct.target.x, bestAct.target.y)[0] < cxf - 6)
+        dbg('birebir_geri_pas');
+    if (oneOnOne)
+        dbg('birebir_karar_' + bestAct.kind);
     const restartKind = st.restartKind;
     st.restartKind = '';
     if (c.thruT !== undefined && st.t - c.thruT < 6) {
@@ -3082,7 +3105,7 @@ function userCarrier(st, c, ctl) {
     // sure sinirlari: korner / serbest vurus / penalti 8 s, diger duran toplar ve kaleci 5 s, acik oyunda girdisiz 8 s
     const held = st.t - Math.max(ctl.holdStart, st.restartUntil); // duran topta dizilme suresi sayilmaz
     const spBig = st.spWait && st.restartTaker === c && (st.spWait.kind === 'corner' || st.spWait.kind === 'fkshot' || st.spWait.kind === 'penalty' || st.spWait.kind === 'fk');
-    const limit = spBig ? P.userSetPieceLimit : P.userRestartLimit;
+    const limit = spBig ? (st.spWait && st.spWait.kind === 'penalty' ? 8 : P.userSetPieceLimit) : P.userRestartLimit;
     if ((mustPlay && held > limit) || (!mustPlay && held > P.userIdleLimit && st.t - ctl.lastInputT > P.userIdleLimit)) {
         inp.act = undefined;
         ctl.kick = null;
@@ -3326,7 +3349,12 @@ function planKick(st, c, ctl, kk, rk, press) {
         }
         if (best) {
             const [dx, dy, dd] = toward(best.tx, best.ty);
-            // Ara pas her zaman yerden (havadan asirtma Orta butonuyla)
+            // Ara pas yerden; uzun ara pas (guc > 0,7 ya da nisan > 28 m) havadan asirtma (karar 1 Kasim)
+            if (power > P.thruAirPower || dd > P.thruAirDist) {
+                const [v, vz] = lobV(dd, 0.42);
+                dbg('uara_havadan');
+                return { kind: 'through', dx, dy, speed: v, vz, sw, tx: best.tx, ty: best.ty, intended: best.m, noOff, tag: 'uara_kosucu_hava' };
+            }
             return { kind: 'through', dx, dy, speed: throughV0(dd, best.tRec), vz: 0, sw, tx: best.tx, ty: best.ty, intended: best.m, noOff, tag: 'uara_kosucu' };
         }
         // kosucu yoksa: yon boyunca bosluga sert top; en yakin takim arkadasi kosar (hedeflenen alici)
@@ -3344,6 +3372,11 @@ function planKick(st, c, ctl, kk, rk, press) {
         }
         const [dx, dy, dd] = toward(ax, ay);
         const tRun = runner ? rd / playerSpeed(runner) : 1.5;
+        if (power > P.thruAirPower || dd > P.thruAirDist) {
+            const [v, vz] = lobV(dd, 0.42);
+            dbg('uara_havadan');
+            return { kind: 'through', dx, dy, speed: v, vz, sw, tx: ax, ty: ay, intended: runner, noOff, tag: 'uara_bosluk_hava' };
+        }
         return { kind: 'through', dx, dy, speed: throughV0(dd, tRun), vz: 0, sw, tx: ax, ty: ay, intended: runner, noOff, tag: 'uara_bosluk' };
     }
     // yonlu pas: hedef nokta nisan yonunde, mesafe basili tutma suresinden; yardim seviyesi yone yakin takim
@@ -4384,6 +4417,13 @@ function ballContacts(st) {
             continue;
         if (p === b.noTouch)
             continue; // duran topu kullanan ikinci kez dokunamaz
+        // yol verme: takim arkadasinin vurdugu top ona niyetlenmemis ve hedef onun belirgin otesindeyse (>= 5 m) kenara cekilip birakir
+        if (b.kicker && b.kicker.side === p.side && p !== b.intended && !chase.has(p) && (b.kind === 'pass' || b.kind === 'through' || b.kind === 'cross' || b.kind === 'shot')) {
+            const dx = b.tx - b.x, dy = b.ty - b.y, dn = hyp(dx, dy) || 1;
+            const along = ((p.x - b.x) * dx + (p.y - b.y) * dy) / dn;
+            if (along > 0 && dn - along >= 5)
+                continue;
+        }
         const [pxf, pyf] = toFrame(p.side, p.x, p.y);
         const inOwnBox = pxf < 16.5 && Math.abs(pyf - 34) < 20.16;
         const gkHands = p.pos === 'GK' && inOwnBox && !isBackPass(st, p);
@@ -5026,8 +5066,8 @@ function setPieceTarget(st, p) {
             const vx = 105 - spotX;
             const vy = 34 - spotY;
             const len = Math.hypot(vx, vy) || 1;
-            const wx = spotX + (vx / len) * 9.15 + (-vy / len) * (i - (nWall - 1) / 2) * 0.9;
-            const wy = spotY + (vy / len) * 9.15 + (vx / len) * (i - (nWall - 1) / 2) * 0.9;
+            const wx = spotX + (vx / len) * 9.45 + (-vy / len) * (i - (nWall - 1) / 2) * 0.9;
+            const wy = spotY + (vy / len) * 9.45 + (vx / len) * (i - (nWall - 1) / 2) * 0.9;
             const [x, y] = fromFrame(A, wx, wy);
             return [x, y, 0.5];
         }
@@ -5601,6 +5641,8 @@ function watchEvents() {
   if (st.deadStart !== lastDeadStart && isDead() && st.deadReason && st.deadReason !== 'GOL' && st.deadReason !== 'Penaltı') {
     banner(st.deadReason.toUpperCase(), 'info');
   }
+  // oyun durdu: suren vurus jesti ve bekleyen aksiyonlar iptal (duran topta eski aksiyon tetiklenmesin)
+  if (st.deadStart !== lastDeadStart && PLAY.on) { IN.kick = null; IN.kbKick = null; IN.acts.length = 0; IN.ptrBtn.clear(); }
   lastDeadStart = st.deadStart;
 }
 
@@ -6725,7 +6767,7 @@ body.app.play #app { display: none; }
 #app .muted { color: var(--muted); font-size: 13px; }
 #app .pitchmini { position: relative; background: var(--grass); border: 2px solid rgba(233,239,233,.6); border-radius: 6px; aspect-ratio: 105 / 68; width: 100%; max-width: 560px; overflow: hidden; }
 #app .pitchmini::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; border-left: 2px solid rgba(233,239,233,.5); }
-#app .pitchmini .dot { position: absolute; width: 26px; height: 26px; margin: -13px 0 0 -13px; border-radius: 50%; border: 2px solid #fff; display: flex; align-items: center; justify-content: center; font: 700 11px/1 var(--font-display); color: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.5); }
+#app .pitchmini .dot { touch-action: none; position: absolute; width: 26px; height: 26px; margin: -13px 0 0 -13px; border-radius: 50%; border: 2px solid #fff; display: flex; align-items: center; justify-content: center; font: 700 11px/1 var(--font-display); color: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.5); }
 #app .pitchmini .dot.att { opacity: .55; border-style: dashed; }
 #app .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
 #app .toast { position: fixed; left: 50%; bottom: 76px; transform: translateX(-50%); background: rgba(10,12,16,.92); color: var(--chalk); border: 1px solid var(--line); padding: 10px 14px; border-radius: 10px; font-size: 13px; z-index: 850; }
@@ -6735,7 +6777,7 @@ body.app.play #app { display: none; }
 #app .dev { position: fixed; right: 8px; bottom: 4px; font-size: 10px; color: var(--muted); z-index: 801; }
 </style>
 <div id="app">
-  <div class="bar"><button class="back" id="aBack" aria-label="Geri">‹</button><div class="ttl" id="aTitle">Football <span>Madness</span></div><button class="ico" id="aFriends" title="Arkadaşlar (demoda yok)">☺ 0</button><button class="ico" id="aSettings" title="Ayarlar">⚙</button></div>
+  <div class="bar"><button class="back" id="aBack" aria-label="Geri">‹</button><div class="ttl" id="aTitle">Football <span>Madness</span></div><button class="ico" id="aHome" title="Ana menü">⌂</button><button class="ico" id="aFriends" title="Arkadaşlar (demoda yok)">☺ 0</button><button class="ico" id="aSettings" title="Ayarlar">⚙</button></div>
   <div class="body" id="aBody"></div>
   <div class="foot" id="aFoot" hidden></div>
   <div class="tabs3" id="aTabs" hidden></div>
@@ -6763,7 +6805,8 @@ function mkSquad(club, base, names) {
 function userTeamIn() {
   const db = APP.db, club = db.account.club, tt = db.team;
   const t = mkSquad({ ...club, formation: tt.formation }, club.gg || 62, NAMES_A);
-  t.tactic = { ...tt.tactic, doctrine: tt.doctrine };
+  const sh = userShapes(tt);
+  t.tactic = { ...tt.tactic, doctrine: tt.doctrine, shapeDef: sh.def, shapeAtt: sh.att };
   t.mainTactic = { ...tt.tactic, doctrine: tt.doctrine };
   t.duties = tt.duties || {};
   t.rules = (tt.rules || []).map((id) => RULE_TEMPLATES.find((r) => r.id === id)).filter(Boolean);
@@ -6815,6 +6858,7 @@ function render() {
 }
 $('aBack').addEventListener('click', back);
 $('aSettings').addEventListener('click', () => go('settings'));
+$('aHome').addEventListener('click', () => { APP.stack.length = 0; go(APP.db.account ? 'home' : 'login', {}, false); });
 $('aFriends').addEventListener('click', () => toast('Arkadaşlar ve sohbet demoda yok'));
 $('aTabs').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) go(b.dataset.go, APP.ctx, false); });
 $('aFoot').addEventListener('click', (e) => { const b = e.target.closest('[data-go]'); if (b && b.dataset.go) go(b.dataset.go, b.dataset.ctx ? JSON.parse(b.dataset.ctx) : {}); });
@@ -6858,7 +6902,6 @@ SCREENS.home = () => { const db = APP.db, c = db.account.club, s = db.solo; retu
       ${s ? `<p>${esc(s.name)} · ${s.week}/${s.fixtures.length} hafta · sıra ${soloRank(s)}.</p><div class="row"><button class="btn prim" data-go="solo">Devam et</button><button class="btn ghost" id="soloNew">Yeni lig</button></div>` : `<p>4–8 takımlı kısa bir sezon; her maçı oyna ya da anında simüle et.</p><div class="row"><button class="btn prim" data-go="soloNew">Yeni solo lig</button></div>`}
     </div>
     <div class="card"><h3>Online Lig <small>Faz 3</small></h3><p>Gerçek rakiplere karşı lig, kupa, pazar, birlik. Demoda yok.</p><div class="row"><button class="btn ghost" disabled>Yakında</button></div></div>
-    <div class="card"><h3>Takım <small>kadro ve taktik</small></h3><p>${esc(c.name)} · ${db.team.formation} · ${DOCTRINES[db.team.doctrine].label}</p><div class="row"><button class="btn" data-go="squad">Kadro</button><button class="btn" data-go="tactics">Taktik tahtası</button></div></div>
     <div class="card"><h3>Sezon pası · Görevler <small>Faz 3</small></h3><p>Günlük görevler, giriş serisi, sezon pası ödülleri demoda yok.</p></div>
   </div>`, after: () => { const b = $('soloNew'); if (b) b.onclick = () => { if (confirm('Kayıtlı solo lig silinsin mi?')) { APP.db.solo = null; dbSave(); go('soloNew'); } }; } }; };
 
@@ -6998,10 +7041,10 @@ SCREENS.solo = (c) => { const s = APP.db.solo; if (!s) return SCREENS.home(); co
   } else if (tab === 'table') {
     html += `<div class="card"><h3>Puan durumu</h3><table><tr><th>#</th><th class="l">Takım</th><th>O</th><th>G</th><th>B</th><th>M</th><th>A:Y</th><th>Av</th><th>P</th></tr>${order.map((i, r) => { const t = s.table[i]; return `<tr class="${i === 0 ? 'me' : ''} ${r === 0 ? 'zone-up' : r === order.length - 1 ? 'zone-down' : ''}"><td>${r + 1}</td><td class="l">${esc(s.teams[i].name)}</td><td>${t.p}</td><td>${t.w}</td><td>${t.d}</td><td>${t.l}</td><td>${t.gf}:${t.ga}</td><td>${t.gf - t.ga}</td><td><b>${t.pts}</b></td></tr>`; }).join('')}</table><p class="muted" style="margin-top:8px">Terfi ve düşme bölgeleri online ligde; burada ilk sıra şampiyon.</p></div>`;
   } else if (tab === 'club') {
-    html += `<div class="cards"><div class="card"><h3>Bugün</h3><p>${s.name} · ${s.season}. sezon · ${s.week}/${s.fixtures.length} hafta oynandı · sıra ${soloRank(s)}.</p><p>Antrenman, tesisler, ekipler ve finans demoda yok (Faz 3).</p></div><div class="card"><h3>Takım</h3><div class="row"><button class="btn" data-go="squad">Kadro</button><button class="btn" data-go="tactics">Taktik tahtası</button></div></div></div>`;
+    html += `<div class="cards"><div class="card"><h3>Bugün</h3><p>${s.name} · ${s.season}. sezon · ${s.week}/${s.fixtures.length} hafta oynandı · sıra ${soloRank(s)}.</p><p>Antrenman, tesisler, ekipler ve finans demoda yok (Faz 3).</p></div><div class="card"><h3>Takım</h3><div class="row"><button class="btn" data-go="squad" data-ctx='{"from":"solo"}'>Kadro</button><button class="btn" data-go="tactics" data-ctx='{"from":"solo"}'>Taktik tahtası</button></div></div></div>`;
   }
   return { title: esc(s.name), noBack: true, html, tabs: [{ lab: 'Kulüp', go: 'solo', on: tab === 'club' }, { lab: 'Takım', go: 'squad', on: false }, { lab: 'Maç', go: 'solo', on: tab === 'fixture' || tab === 'table' }], after: () => {
-    const tb = $('aTabs'); const btns = tb.querySelectorAll('button'); btns[0].onclick = () => go('solo', { tab: 'club' }, false); btns[1].onclick = () => go('squad', {}); btns[2].onclick = () => go('solo', { tab: tab === 'fixture' ? 'table' : 'fixture' }, false);
+    const tb = $('aTabs'); const btns = tb.querySelectorAll('button'); btns[0].onclick = () => go('solo', { tab: 'club' }, false); btns[1].onclick = () => go('squad', { from: 'solo' }); btns[2].onclick = () => go('solo', { tab: tab === 'fixture' ? 'table' : 'fixture' }, false);
     const sub = document.createElement('div'); sub.className = 'row'; sub.style.marginBottom = '12px'; sub.innerHTML = `<div class="seg"><button aria-pressed="${tab === 'fixture'}" data-t="fixture">Fikstür</button><button aria-pressed="${tab === 'table'}" data-t="table">Puan durumu</button><button aria-pressed="${tab === 'club'}" data-t="club">Kulüp</button></div>`; $('aBody').prepend(sub); sub.onclick = (e) => { const b = e.target.closest('button'); if (b) go('solo', { tab: b.dataset.t }, false); };
     const bye = $('sBye'); if (bye) bye.onclick = () => { soloApplyResultBye(); go('solo', { tab: 'fixture' }, false); };
     const ag = $('sAgain'); if (ag) ag.onclick = () => { const s2 = APP.db.solo; s2.season++; s2.week = 0; s2.results = []; s2.table = s2.teams.map(() => ({ p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, pts: 0 })); dbSave(); go('solo', { tab: 'fixture' }, false); };
@@ -7014,26 +7057,34 @@ const POS_TR = { GK: 'Kaleci', CB: 'Stoper', FB: 'Bek', DM: 'Defansif orta', CM:
 SCREENS.squad = (c) => { const t = userTeamIn(); const sel = c.sel ?? null; const all = [...t.players.map((p, i) => ({ ...p, xi: true, i })), ...t.bench.map((p, i) => ({ ...p, xi: false, i }))];
   const p = sel !== null ? all.find((q) => q.num === sel) : null;
   return { title: 'Takım · Kadro', html: `<div class="cards" style="grid-template-columns: minmax(260px, 1fr) minmax(260px, 1.2fr)">
-    <div class="list">${all.map((q) => `<div class="li ${q.num === sel ? 'sel' : ''}" data-go="squad" data-ctx='${JSON.stringify({ sel: q.num })}'><div class="num">${q.num}</div><div><div class="nm">${esc(q.name)}</div><div class="sub">${POS_TR[q.pos]} · ${q.age} yaş${q.xi ? '' : ' · yedek'}${(q.traits || []).map((tr) => ` · ${tr}`).join('')}</div></div><div class="gg">${q.gg}</div></div>`).join('')}</div>
+    <div class="list">${all.map((q) => `<div class="li ${q.num === sel ? 'sel' : ''}" data-go="squad" data-ctx='${JSON.stringify({ sel: q.num, from: c.from })}'><div class="num">${q.num}</div><div><div class="nm">${esc(q.name)}</div><div class="sub">${POS_TR[q.pos]} · ${q.age} yaş${q.xi ? '' : ' · yedek'}${(q.traits || []).map((tr) => ` · ${tr}`).join('')}</div></div><div class="gg">${q.gg}</div></div>`).join('')}</div>
     <div>${p ? `<div class="card"><h3>${p.num} ${esc(p.name)} <small>${POS_TR[p.pos]}</small></h3>
       <div class="row"><span class="tag y">GG ${p.gg}</span><span class="tag">${p.age} yaş</span>${(p.traits || []).map((tr) => `<span class="tag g">${tr}</span>`).join('')}<span class="tag">Yorgunluk ${p.fatigue ?? 20}</span></div>
       <p>Roller, rol puanları, potansiyel, piyasa değeri, sözleşme ve sezon istatistikleri Faz 3'te. Özellikler motorda: Hızlı (hız ve tepki), Hava Hakimi, Oyun Kurucu (görme/beklenti), Duvar (savunma görme), Çalımcı, Dayanıklı, Bitirici, Refleks.</p>
-      <p class="muted">Eylemler (ilk 11'e al, numara değiştir) demoda yok; kadro sabit.</p></div>` : `<div class="card"><h3>Futbolcu kartı</h3><p>Listeden bir futbolcu seç.</p></div>`}</div></div>`, tabs: APP.db.solo ? [{ lab: 'Kulüp', go: 'solo' }, { lab: 'Takım', go: 'squad', on: true }, { lab: 'Maç', go: 'solo' }] : null, after: () => { if (APP.db.solo) { const b = $('aTabs').querySelectorAll('button'); b[0].onclick = () => go('solo', { tab: 'club' }, false); b[2].onclick = () => go('solo', { tab: 'fixture' }, false); } } }; };
+      <p class="muted">Eylemler (ilk 11'e al, numara değiştir) demoda yok; kadro sabit.</p></div>` : `<div class="card"><h3>Futbolcu kartı</h3><p>Listeden bir futbolcu seç.</p></div>`}</div></div>`, tabs: c.from === 'solo' ? [{ lab: 'Kulüp', go: 'solo' }, { lab: 'Takım', go: 'squad', on: true }, { lab: 'Maç', go: 'solo' }] : null, after: () => { if (c.from === 'solo') { const b = $('aTabs').querySelectorAll('button'); b[0].onclick = () => go('solo', { tab: 'club' }, false); b[1].onclick = () => {}; b[2].onclick = () => go('solo', { tab: 'fixture' }, false); } } }; };
 
 const TAC_LABELS = { press: ['Pres', ['Düşük', 'Orta', 'Yüksek']], line: ['Savunma hattı', ['Derin', 'Orta', 'Önde']], style: ['Oyun stili', ['Kısa pas', 'Dengeli', 'Direkt']], tempo: ['Tempo', ['Yavaş', 'Normal', 'Hızlı']], width: ['Genişlik', ['Dar', 'Normal', 'Geniş']], compact: ['Hatlar arası', ['Kompakt', 'Normal', 'Açık']], fb: ['Bekler', ['Savunmada kal', 'Dengeli', 'Bindir']], cm: ['Merkez orta saha', ['Geride', 'Dengeli', 'Ceza sahasına']], runs: ['Forvet koşuları', ['Güvenli', 'Dengeli', 'Riskli']] };
-SCREENS.tactics = (c) => { const tt = APP.db.team; const level = c.level || 'easy'; const t = userTeamIn(); const sh = shapesOf(t); const show = c.shape || 'def';
-  const dots = (sh[show === 'def' ? 'def' : 'att']).map(([x, y], i) => `<div class="dot ${show === 'att' ? 'att' : ''}" style="left:${x / 105 * 100}%;top:${y / 68 * 100}%;background:${t.color}">${t.players[i].num}</div>`).join('');
-  return { title: 'Taktik tahtası', html: `
-  <div class="row" style="margin-bottom:12px"><div class="seg" id="lvl"><button aria-pressed="${level === 'easy'}" data-l="easy">Kolay</button><button aria-pressed="${level === 'mid'}" data-l="mid">Orta</button><button aria-pressed="${level === 'deep'}" data-l="deep">Derin</button></div></div>
-  <div class="cards" style="grid-template-columns: minmax(260px, 1.2fr) minmax(260px, 1fr)">
-    <div class="card"><h3>Şekil <small>${show === 'def' ? 'savunma (topsuz)' : 'hücum (toplu)'}</small></h3><div class="pitchmini">${dots}</div><div class="row"><div class="seg" id="shp"><button aria-pressed="${show === 'def'}" data-s="def">Savunma şekli</button><button aria-pressed="${show === 'att'}" data-s="att">Hücum şekli</button></div></div><p>Hücum şekli formasyon ve doktrinden türetilir; ızgara editörü (6×5) Derin seviyede sonra.</p></div>
-    <div class="card">
-      ${level === 'easy' ? `<h3>Preset <small>tek seçim</small></h3>
-        <label class="f">Formasyon<select id="tForm">${FORMATION_LIST.map((f) => `<option ${f === tt.formation ? 'selected' : ''}>${f}</option>`).join('')}</select></label>
-        <label class="f">Doktrin (oyun anlayışı)<select id="tDoc">${DOCTRINE_LIST.map((d) => `<option value="${d}" ${d === tt.doctrine ? 'selected' : ''}>${DOCTRINES[d].label}</option>`).join('')}</select></label>
-        <label class="f">Hatlar arası mesafe<select id="tCompact">${TAC_LABELS.compact[1].map((l, i) => `<option value="${i}" ${i === (tt.tactic.compact ?? 1) ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
-        <p>Doktrin dört ana talimatı, bek/orta saha çıkışını ve hücum şeklinin cesaretini doldurur. Maç içinde üstteki ◀ ▶ kaydırıcı (savunma ↔ hücum) bunun üstüne biner.</p>` : level === 'mid' ? `<h3>Talimatlar</h3><div class="grid2">${Object.entries(TAC_LABELS).map(([k, [lab, opts]]) => `<label class="f">${lab}<select data-k="${k}" class="tk">${opts.map((o, i) => `<option value="${i}" ${i === (tt.tactic[k] ?? 1) ? 'selected' : ''}>${o}</option>`).join('')}</select></label>`).join('')}<label class="f">Ofsayt tuzağı<select data-k="trap" class="tk"><option value="0" ${!tt.tactic.trap ? 'selected' : ''}>Kapalı</option><option value="1" ${tt.tactic.trap ? 'selected' : ''}>Açık</option></select></label></div><p>Doktrin: ${DOCTRINES[tt.doctrine].label} (Kolay seviyede değişir). Ana taktikten iki kademe sapma taktik kapasite verimini düşürür (doktrin bedeli).</p>` : `<h3>Görev kartları ve kurallar</h3>
-        <p>Oyuncu başına görev (rolün üstüne yazar):</p>
+// kullanicinin taktik verisi -> motor sekilleri (ozel sekil varsa o, yoksa formasyon + doktrin)
+function userShapes(tt) {
+  const def = tt.shapeDef || FORMATIONS[tt.formation];
+  const fa = tt.formationAtt || tt.formation;
+  const att = tt.shapeAtt || attackShapeOf(FORMATIONS[fa], FORM_POS[fa], tt.doctrine);
+  return { def, att };
+}
+SCREENS.tactics = (c) => { const tt = APP.db.team; const level = c.level || 'easy'; const t = userTeamIn(); const show = c.shape || 'def'; const sh = userShapes(tt);
+  const shape = show === 'def' ? sh.def : sh.att;
+  const dots = shape.map(([x, y], i) => `<div class="dot ${show === 'att' ? 'att' : ''}" data-i="${i}" style="left:${x / 105 * 100}%;top:${y / 68 * 100}%;background:${t.color}">${t.players[i].num}</div>`).join('');
+  const shapeCard = `<div class="card"><h3>Şekil <small>${show === 'def' ? 'savunma (topsuz)' : 'hücum (toplu)'}${level === 'deep' ? ' · sürükle' : ''}</small></h3><div class="pitchmini" id="mini">${dots}</div><div class="row"><div class="seg" id="shp"><button aria-pressed="${show === 'def'}" data-s="def">Savunma şekli</button><button aria-pressed="${show === 'att'}" data-s="att">Hücum şekli</button></div>${level === 'deep' ? `<button class="btn sm ghost" id="shReset">Formasyondan yükle</button>` : ''}</div><p>${level === 'deep' ? 'Oyuncuyu sürükle; iki şekil ayrı ayrı kaydedilir. Kaleci sol tarafta kalır. Şekil ne kadar cesursa geçiş o kadar uzun sürer ve arkada boşluk kalır.' : 'Hücum şekli seçilen formasyon ve doktrinden türetilir; Derin seviyede elle çizilir.'}</p></div>`;
+  let right = '';
+  if (level !== 'deep') {
+    right += `<h3>${level === 'easy' ? 'Preset <small>tek seçim</small>' : 'Şekiller ve talimatlar'}</h3>
+      <label class="f">Savunma şekli (topsuz)<select id="tForm">${FORMATION_LIST.map((f) => `<option ${f === tt.formation ? 'selected' : ''}>${f}</option>`).join('')}</select></label>
+      <label class="f">Hücum şekli (toplu)<select id="tFormAtt">${FORMATION_LIST.map((f) => `<option ${f === (tt.formationAtt || tt.formation) ? 'selected' : ''}>${f}</option>`).join('')}</select></label>
+      <label class="f">Doktrin (oyun anlayışı)<select id="tDoc">${DOCTRINE_LIST.map((d) => `<option value="${d}" ${d === tt.doctrine ? 'selected' : ''}>${DOCTRINES[d].label}</option>`).join('')}</select></label>`;
+    if (level === 'easy') right += `<label class="f">Hatlar arası mesafe<select id="tCompact">${TAC_LABELS.compact[1].map((l, i) => `<option value="${i}" ${i === (tt.tactic.compact ?? 1) ? 'selected' : ''}>${l}</option>`).join('')}</select></label><p>Doktrin dört ana talimatı, bek/orta saha çıkışını ve hücum şeklinin cesaretini doldurur. Maç içinde üstteki ◀ ▶ kaydırıcı (savunma ↔ hücum) bunun üstüne biner.</p>`;
+    else right += `<div class="grid2" style="margin-top:6px">${Object.entries(TAC_LABELS).map(([k, [lab, opts]]) => `<label class="f">${lab}<select data-k="${k}" class="tk">${opts.map((o, i) => `<option value="${i}" ${i === (tt.tactic[k] ?? 1) ? 'selected' : ''}>${o}</option>`).join('')}</select></label>`).join('')}<label class="f">Ofsayt tuzağı<select data-k="trap" class="tk"><option value="0" ${!tt.tactic.trap ? 'selected' : ''}>Kapalı</option><option value="1" ${tt.tactic.trap ? 'selected' : ''}>Açık</option></select></label></div><p>Doktrin seçince talimatlar doktrinin varsayılanına döner; sonra tek tek değiştir. Ana taktikten iki kademe sapma taktik kapasite verimini düşürür (doktrin bedeli).</p>`;
+  } else {
+    right += `<h3>Görev kartları ve kurallar</h3><p>Oyuncu başına görev (rolün üstüne yazar):</p>
         ${t.players.filter((p) => p.pos !== 'GK').map((p) => { const d = (tt.duties || {})[p.num] || {}; return `<div class="row" style="padding:4px 0;border-bottom:1px solid var(--line)"><span style="min-width:110px"><b>${p.num}</b> ${esc(p.name)} <span class="muted">${POS_TR[p.pos]}</span></span>
           <select class="du" data-n="${p.num}" data-k="runs"><option value="">Koşu: rol</option><option value="0" ${d.runs === 0 ? 'selected' : ''}>Geride kal</option><option value="1" ${d.runs === 1 ? 'selected' : ''}>Ayağa</option><option value="2" ${d.runs === 2 ? 'selected' : ''}>Derin koşu</option></select>
           <select class="du" data-n="${p.num}" data-k="press"><option value="">Pres: rol</option><option value="0" ${d.press === 0 ? 'selected' : ''}>Blokta kal</option><option value="1" ${d.press === 1 ? 'selected' : ''}>Normal</option><option value="2" ${d.press === 2 ? 'selected' : ''}>İlk basan</option></select>
@@ -7041,20 +7092,36 @@ SCREENS.tactics = (c) => { const tt = APP.db.team; const level = c.level || 'eas
           <select class="du" data-n="${p.num}" data-k="mark"><option value="">Marke: alan</option><option value="1" ${d.mark === 1 ? 'selected' : ''}>Adam</option></select>
           ${p.pos === 'FB' ? `<select class="du" data-n="${p.num}" data-k="overlap"><option value="">Bindirme: takım</option><option value="0" ${d.overlap === 0 ? 'selected' : ''}>Kal</option><option value="2" ${d.overlap === 2 ? 'selected' : ''}>Bindir</option></select>` : ''}</div>`; }).join('')}
         <p style="margin-top:10px">Koşullu kurallar (en çok 4):</p>
-        <div class="row">${RULE_TEMPLATES.map((r) => `<label class="tag" style="cursor:pointer;padding:6px 10px"><input type="checkbox" class="rl" value="${r.id}" ${(tt.rules || []).includes(r.id) ? 'checked' : ''}> ${r.label}</label>`).join('')}</div>`}
-      <div class="row" style="margin-top:12px"><button class="btn prim" id="tSave">Kaydet</button><span class="muted" id="tMsg"></span></div>
-    </div>
-  </div>`, after: () => {
+        <div class="row">${RULE_TEMPLATES.map((r) => `<label class="tag" style="cursor:pointer;padding:6px 10px"><input type="checkbox" class="rl" value="${r.id}" ${(tt.rules || []).includes(r.id) ? 'checked' : ''}> ${r.label}</label>`).join('')}</div>`;
+  }
+  return { title: 'Taktik tahtası', html: `
+  <div class="row" style="margin-bottom:12px"><div class="seg" id="lvl"><button aria-pressed="${level === 'easy'}" data-l="easy">Kolay</button><button aria-pressed="${level === 'mid'}" data-l="mid">Orta</button><button aria-pressed="${level === 'deep'}" data-l="deep">Derin</button></div><span class="muted">${tt.shapeDef || tt.shapeAtt ? 'Özel şekil kayıtlı' : `${tt.formation} → ${tt.formationAtt || tt.formation} · ${DOCTRINES[tt.doctrine].label}`}</span></div>
+  <div class="cards" style="grid-template-columns: minmax(260px, 1.2fr) minmax(260px, 1fr)">${shapeCard}<div class="card">${right}<div class="row" style="margin-top:12px"><button class="btn prim" id="tSave">Kaydet</button><span class="muted" id="tMsg"></span></div></div></div>`, after: () => {
     $('lvl').onclick = (e) => { const b = e.target.closest('button'); if (b) go('tactics', { ...c, level: b.dataset.l }, false); };
     $('shp').onclick = (e) => { const b = e.target.closest('button'); if (b) go('tactics', { ...c, shape: b.dataset.s }, false); };
+    const rs = $('shReset'); if (rs) rs.onclick = () => { if (show === 'def') delete APP.db.team.shapeDef; else delete APP.db.team.shapeAtt; dbSave(); go('tactics', { ...c }, false); };
+    if (level === 'deep') {
+      // serbest surukleme: dot'lar sahada; birakinca cerceve koordinati (0..105, 0..68) kaydedilir (anlik; Kaydet gereksiz)
+      const mini = $('mini'); let drag = null;
+      const toFrameXY = (ev) => { const r = mini.getBoundingClientRect(); return [Math.max(2, Math.min(103, (ev.clientX - r.left) / r.width * 105)), Math.max(2, Math.min(66, (ev.clientY - r.top) / r.height * 68))]; };
+      mini.addEventListener('pointerdown', (ev) => { const d = ev.target.closest('.dot'); if (!d) return; drag = d; d.setPointerCapture(ev.pointerId); ev.preventDefault(); });
+      mini.addEventListener('pointermove', (ev) => { if (!drag) return; const [x, y] = toFrameXY(ev); drag.style.left = (x / 105 * 100) + '%'; drag.style.top = (y / 68 * 100) + '%'; });
+      const drop = (ev) => { if (!drag) return; const i = +drag.dataset.i; const [x0, y0] = toFrameXY(ev); const x = i === 0 ? Math.min(x0, 14) : x0, y = y0; const key = show === 'def' ? 'shapeDef' : 'shapeAtt'; const cur = (APP.db.team[key] || (show === 'def' ? sh.def : sh.att)).map((q) => [q[0], q[1]]); cur[i] = [Math.round(x * 10) / 10, Math.round(y * 10) / 10]; APP.db.team[key] = cur; dbSave(); drag = null; };
+      mini.addEventListener('pointerup', drop); mini.addEventListener('pointercancel', () => { drag = null; });
+    }
     $('tSave').onclick = () => {
       const tt2 = APP.db.team;
-      if (level === 'easy') { tt2.formation = $('tForm').value; tt2.doctrine = $('tDoc').value; tt2.tactic = { ...DOCTRINES[tt2.doctrine].tactic, compact: +$('tCompact').value }; }
-      else if (level === 'mid') { for (const s of document.querySelectorAll('.tk')) tt2.tactic[s.dataset.k] = +s.value; }
-      else { const du = {}; for (const s of document.querySelectorAll('.du')) { if (s.value === '') continue; du[s.dataset.n] = du[s.dataset.n] || {}; du[s.dataset.n][s.dataset.k] = +s.value; } tt2.duties = du; const rl = [...document.querySelectorAll('.rl:checked')].map((x) => x.value); if (rl.length > 4) { toast('En çok 4 kural'); return; } tt2.rules = rl; }
-      dbSave(); $('tMsg').textContent = 'Kaydedildi'; go('tactics', { ...c }, false);
+      if (level !== 'deep') {
+        const nf = $('tForm').value, nfa = $('tFormAtt').value, nd = $('tDoc').value;
+        const docChanged = nd !== tt2.doctrine;
+        if (nf !== tt2.formation) { delete tt2.shapeDef; } if (nfa !== (tt2.formationAtt || tt2.formation) || docChanged) { delete tt2.shapeAtt; }
+        tt2.formation = nf; tt2.formationAtt = nfa; tt2.doctrine = nd;
+        if (level === 'easy') tt2.tactic = { ...DOCTRINES[nd].tactic, compact: +$('tCompact').value };
+        else { if (docChanged) tt2.tactic = { ...DOCTRINES[nd].tactic }; for (const s of document.querySelectorAll('.tk')) tt2.tactic[s.dataset.k] = +s.value; }
+      } else { const du = {}; for (const s of document.querySelectorAll('.du')) { if (s.value === '') continue; du[s.dataset.n] = du[s.dataset.n] || {}; du[s.dataset.n][s.dataset.k] = +s.value; } tt2.duties = du; const rl = [...document.querySelectorAll('.rl:checked')].map((x) => x.value); if (rl.length > 4) { toast('En çok 4 kural'); return; } tt2.rules = rl; }
+      dbSave(); toast('Kaydedildi'); go('tactics', { ...c }, false);
     };
-  }, tabs: APP.db.solo ? [{ lab: 'Kulüp', go: 'solo' }, { lab: 'Takım', go: 'squad', on: true }, { lab: 'Maç', go: 'solo' }] : null }; };
+  }, tabs: c.from === 'solo' ? [{ lab: 'Kulüp', go: 'solo' }, { lab: 'Takım', go: 'squad', on: true }, { lab: 'Maç', go: 'solo' }] : null }; };
 
 SCREENS.settings = () => { const s = APP.db.settings; const sel = (id, k, opts) => `<label class="f">${id}<select data-k="${k}" class="sk">${opts.map(([v, l]) => `<option value="${v}" ${String(s[k]) === String(v) ? 'selected' : ''}>${l}</option>`).join('')}</select></label>`;
   return { title: 'Ayarlar', html: `<div class="cards">
