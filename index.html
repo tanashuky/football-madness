@@ -356,6 +356,11 @@ const P = {
     playSpeed: 1, // oynama hizi (1,3 = %30 hizli): tepki pencereleri gercek saniye sabit kalsin diye oyun saniyesine bununla cevrilir
     gkSaveBase: 0.85, // kaleci kurtaris tabani
     gkFarSave: 0, // uzak suttan (18-32 m) ek kurtaris (kalibrasyon 2)
+    pressLineUp: 4, // yuksek preste hattin yukari cikisi (m, uyum/100 ile)
+    unfamiliarFat: 1.35, // aliskin olunmayan doktrinde 50. dk sonrasi yorulma carpani
+    stepUp: 1.8, // ofsayt duellosunda savunmacinin erken adimi (m, G*B ile)
+    timingErr: 1.5, // forvetin cizgi zamanlama hatasi (m, (1-B) ile)
+    trackB: 0.55, // bu beklentinin altindaki savunmaci yem kosusunu takip eder
     shapeTrans: 2, // sekil gecisi taban suresi (s); savunmaya donus yarisi; 0 = aninda (test)
     letBallOut: 1, // cikan topu avantajli tarafin birakmasi (0 kapali)
     longShotMax: 36, // bu mesafeden uzaga akan oyunda sut dusunulmez (m)
@@ -874,6 +879,74 @@ function kf(k) {
 function eg(p) {
     return p.egBase * kf(p.k);
 }
+// Algi katmani (mimari 2.1, Metrik sekmesi): gorunur stat yok; EG, ozellik, rol ve kondisyondan turetilir
+// G gorme (0-1): olayi ne kadar erken fark eder; R tepki (s); B beklenti (0-1): pasi/kosuyu onceden okuma
+function percOf(p, defending) {
+    const egn = clamp((eg(p) - 35) / 50, 0, 1);
+    const tr = p.traits;
+    let G = 0.45 + 0.45 * egn;
+    if (defending && (tr.includes('Duvar') || tr.includes('Hava Hakimi')))
+        G += 0.1;
+    if (!defending && tr.includes('Oyun Kurucu'))
+        G += 0.1;
+    if (p.k < 50)
+        G -= 0.1;
+    let R = 0.55 - 0.25 * egn;
+    if (tr.includes('Hızlı'))
+        R -= 0.05;
+    if (p.k < 40)
+        R += 0.1;
+    let B = 0.35 + 0.5 * egn;
+    if (tr.includes('Oyun Kurucu') || tr.includes('Bitirici'))
+        B += 0.15;
+    if (defending && tr.includes('Duvar'))
+        B += 0.1;
+    return { G: clamp(G, 0.1, 1), R: clamp(R, 0.15, 0.9), B: clamp(B, 0.1, 1) };
+}
+// forvetin ofsayt zamanlama hatasi (m): beklentisi dusuk oyuncu cizgiyi kacirir; her 0,5 s'de bir yenilenir, oyuncuya baglidir
+function timingErr(st, p) {
+    const slot = Math.floor(st.t * 2);
+    const c = p._te;
+    if (c && c.slot === slot)
+        return c.v;
+    const B = percOf(p, false).B;
+    const v = (1 - B) * gauss(st.rng) * P.timingErr;
+    p._te = { slot, v };
+    return v;
+}
+// rakip tasiyici ileri oynayabilir mi: cizgiye yakin (6 m icinde) ve one bakan bir rakip kosucu var mi (savunan taraf s)
+function threatRunner(st, s) {
+    const c = st.owner;
+    if (!c || c.side === s)
+        return false;
+    const line = offsideLine(st, c.side);
+    for (const q of st.players) {
+        if (q.side === s || q.off || q === c || q.pos === 'GK')
+            continue;
+        const [qxf] = toFrame(c.side, q.x, q.y);
+        if (qxf > line - 6 && qxf > 60)
+            return true;
+    }
+    return false;
+}
+// savunmacinin 7 m yakininda kaleye dogru kosan topsuz rakip (yem kosusu)
+function decoyNear(st, p) {
+    const [gx, gy] = fromFrame(p.side, 0, 34);
+    for (const q of st.players) {
+        if (q.side === p.side || q.off || q === st.owner || q.pos === 'GK')
+            continue;
+        const d = hyp(q.x - p.x, q.y - p.y);
+        if (d > 7)
+            continue;
+        const sp = hyp(q.vx ?? 0, q.vy ?? 0);
+        if (sp < 3.5)
+            continue;
+        const tg = ((gx - q.x) * (q.vx ?? 0) + (gy - q.y) * (q.vy ?? 0)) / (hyp(gx - q.x, gy - q.y) || 1) / sp;
+        if (tg > 0.6)
+            return q;
+    }
+    return null;
+}
 function gk(st, side) {
     return (st.players.find((p) => p.side === side && p.pos === 'GK' && !p.off) ?? st.players.find((p) => p.side === side && !p.off));
 }
@@ -1112,7 +1185,9 @@ function reactOf(st, p) {
         return 0;
     if (p.side === b.kicker.side)
         return P.reactMate;
-    return RT((st.teams[p.side].ai?.react ?? P.reactOpp) + (b.kickT - st.lastTurnoverT < P.transWin ? P.transReact : 0));
+    // oyuncunun kendi tepki suresi (algi); bot zorlugu tablo degerinin 0,5 s'ye gore farkini ekler (Amator +0,2 .. Efsane -0,15)
+    const botOff = st.teams[p.side].ai?.react !== undefined ? st.teams[p.side].ai.react - 0.5 : 0;
+    return RT(Math.max(0.1, percOf(p, true).R + botOff) + (b.kickT - st.lastTurnoverT < P.transWin ? P.transReact : 0));
 }
 // duran topta rakip mesafesi (Kural 13, 15, 17, 8, 14): kullanilmamis duran topta rakip oyuncu topa bu kadar yaklasamaz
 function restartGuard(st) {
@@ -1410,6 +1485,18 @@ function updateAnchorsAndMove(st) {
                             txf -= P.respect;
                         if (t.tactic.trap)
                             txf += 1.5;
+                        // ofsayt duellosu (algi): rakip tasiyici one bakiyor ve cizgide bir kosucu varsa, iyi goren/okuyan savunmaci erken adim atar (en cok 1,8 m)
+                        if (carrier && threatRunner(st, s)) {
+                            const pc = percOf(p, true);
+                            txf += P.stepUp * pc.G * pc.B * (t.tactic.trap ? 1.3 : 1);
+                        }
+                        // kademe bozma: beklentisi dusuk savunmaci yakinindaki bos kosuyu takip eder (hatti bozar)
+                        const dec = decoyNear(st, p);
+                        if (dec && percOf(p, true).B < P.trackB) {
+                            const [dxf, dyf] = toFrame(s, dec.x, dec.y);
+                            txf = Math.max(2, dxf - 1.0);
+                            tyf = dyf;
+                        }
                     }
                     // adam markaji: evinin 12 m yakinindaki en yakin rakip hucumcuyu kale tarafindan 1,5 m'de tutar
                     if (dutyOf(st, p).mark === 1) {
@@ -1430,6 +1517,9 @@ function updateAnchorsAndMove(st) {
                             tyf = qyf;
                         }
                     }
+                    // yuksek preste hat uyumla birlikte yukari cikar; uyumu dusuk takimda pres ile hat arasinda bosluk acilir (pres boslugu)
+                    if (t.tactic.press === 2 && pressers.length && bxf > 50 && (p.pos === 'CB' || p.pos === 'FB' || p.pos === 'DM'))
+                        txf += P.pressLineUp * (t.U / 100);
                     txf = Math.min(txf, bxf + 2); // savunmada topun onune gecme
                     // top kendi kalesine yakinsa savunma kale onunde daralir
                     // defansif orta sahasi olmayan dizilislerde (4-4-2) merkez orta sahalar bu gorevi ustlenir
@@ -1446,9 +1536,9 @@ function updateAnchorsAndMove(st) {
                 // hucumda ofsayta dusmemek icin son savunma cizgisinde bekle
                 // hucumcular topa sahipken son savunma cizgisine yaslanir (ara pas kosusu icin)
                 if (inPoss && (p.pos === 'ST' || (p.pos === 'W' && p.ax >= 58 && bxf > 35)))
-                    txf = Math.max(txf, offL - P.runsGap[dutyOf(st, p).runs ?? t.tactic.runs ?? 1]);
-                if (inPoss && txf > offL - 0.4)
-                    txf = offL - 0.4;
+                    txf = Math.max(txf, offL - P.runsGap[dutyOf(st, p).runs ?? t.tactic.runs ?? 1] + timingErr(st, p));
+                if (inPoss && txf > offL - 0.4 + Math.max(0, timingErr(st, p)))
+                    txf = offL - 0.4 + Math.max(0, timingErr(st, p)); // beklentisi dusuk forvet cizgiyi kacirabilir
                 txf = clamp(txf, 6, 101);
                 tyf = clamp(tyf, 2, 66);
             }
@@ -2020,9 +2110,11 @@ function step(st) {
     st.clock += dc - dt;
     st.hclock += dc;
     const rest = inPlay ? 1 : 0.3;
+    // doktrine aliskinlik: ana taktigin doktrininden farkli doktrinle oynayan takim 50. dakikadan sonra daha hizli yorulur
+    const famK = [0, 1].map((i) => { const t = st.teams[i]; return st.clock > 50 * 60 && t.mainTactic?.doctrine && t.tactic.doctrine && t.mainTactic.doctrine !== t.tactic.doctrine ? P.unfamiliarFat : 1; });
     for (const p of st.players)
         if (!p.off)
-            p.k = Math.max(0, p.k - (p.kDrop * dt * P.clockRate * rest) / 60);
+            p.k = Math.max(0, p.k - (p.kDrop * famK[p.side] * dt * P.clockRate * rest) / 60);
     rulesStep(st);
     injuryRoll(st);
     if (st.owner)
@@ -2370,9 +2462,10 @@ function aiDecide(st, c) {
     }
     // ara paslar
     let thru = null;
+    const seeG = percOf(c, false).G; // tasiyicinin gormesi: bosluğu goren ara pasi gorur, goremeyen gormez (pres boslugunun cezasi)
     for (const o of throughOptions(st, c, mates)) {
         const ps = o.path * o.race * (1 - o.off);
-        let ev = ps * threat(o.vxf, o.tyf) * P.thruV - (1 - ps) * threat(105 - o.txf, 68 - o.tyf);
+        let ev = ps * threat(o.vxf, o.tyf) * P.thruV * (0.5 + 0.5 * seeG) - (1 - ps) * threat(105 - o.txf, 68 - o.tyf);
         if (team.tactic.style === 0)
             ev -= 0.003;
         if (team.tactic.style === 2)

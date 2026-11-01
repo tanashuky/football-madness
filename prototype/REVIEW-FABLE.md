@@ -73,3 +73,8 @@ Commit sırası: 8ee1406 hız/pencereler → dd51833 şekiller → 7402036 göre
 - Şut hatası mesafeyle: `P.shotDistErr` 0,35 (12 m ötesinde her 10 m için açı hatası +%35, dikey hata √ ile). Dönüşüm: 0–11 m %23, 11–16 %18, 16–22 %8, 22+ %2,6–3,8 (gerçeğe yakın; 11–16 bandı hâlâ yüksek, kalecinin yakın şutta modeli "yarı fiziksel" kaldı).
 - Durum taktiği (`situational`, `SIT_RULES`) kaldırıldı.
 - 200 maç: gol 2,65 · beraberlik %28 · golsüz %9 · 5+ %13 · 7+ %1,5 · şut 9,0 · pas %78 · faul 3,0 · korner 0,6 · ofsayt 0,13 · duran top payı %17. Taç 4,9 → 1,8/maç: eski sayı rastgele sekme ve uzaklaştırmadan geliyordu; gerçek kaynak (çizgi mücadelesi, kontrol hatası) sonraki katmanlarda.
+
+## Dilim 0.5 (2) — algı katmanı
+
+- `percOf(p, defending)` → {G görme, R tepki, B beklenti} (Metrik sekmesindeki formüller). `reactOf` artık oyuncunun R'si + bot tablosu farkı (ai.react − 0,5). Ofsayt düellosu: savunmacı rakip taşıyıcı ileri oynayabilecekken (`threatRunner`) G·B·1,8 m erken adım (`P.stepUp`, tuzakta ×1,3); forvet `timingErr` (1−B)·1,5 m, 0,5 s'de bir yenilenir, çizgiyi kaçırabilir. Kademe bozma: B < 0,55 savunmacı 7 m içindeki yem koşusunu takip eder (`decoyNear`). Pres boşluğu: yüksek preste hat U/100·4 m yukarı çıkar (düşük uyumda boşluk), taşıyıcının ara pas değerlendirmesi G ile (0,5+0,5G). Alışkınlık: ana taktik doktrini ≠ maç doktrini → 50. dk sonrası yorulma ×1,35 (`P.unfamiliarFat`); test: 85. dk kondisyon 38 → 30.
+- perctest.ts: GG 70 vs 50: ofsayt 0,33 / 0,42; simetri 0,22 / 0,24. 200 maç: gol 2,74, ofsayt 0,13 → 0,23, korner 0,77.
