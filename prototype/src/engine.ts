@@ -1322,6 +1322,19 @@ function keepAway(g: { side: 0 | 1; r: number; x: number; y: number } | null, p:
     ex = g.x + (ux / n2) * (r + 0.2); ey = g.y + (uy / n2) * (r + 0.2);
   }
   if (dP < r || dT < r) { tx = ex; ty = ey; }
+  else {
+    // oyuncu disarida, hedef disarida ama yol cemberden geciyorsa: cemberin etrafindan dolas (yakin teget noktasina yuru)
+    const dx = tx - p.x, dy = ty - p.y, dd = hyp(dx, dy) || 1;
+    const u = ((g.x - p.x) * dx + (g.y - p.y) * dy) / (dd * dd);
+    if (u > 0 && u < 1) {
+      const cx = p.x + dx * u, cy = p.y + dy * u, perp = hyp(cx - g.x, cy - g.y);
+      if (perp < r) {
+        const sgn = ((cx - g.x) * dy - (cy - g.y) * dx) >= 0 ? 1 : -1; // hangi taraftan dolasilacak: merkezin uzak kaldigi taraf
+        const nx = dy / dd * sgn, ny = -dx / dd * sgn; // yola dik, merkezden yolun gectigi tarafa dogru
+        tx = g.x + nx * (r + 0.8); ty = g.y + ny * (r + 0.8);
+      }
+    }
+  }
   return [clamp(tx, 0.5, L - 0.5), clamp(ty, 0.5, W - 0.5), dP < r];
 }
 // gercek saniye -> oyun saniyesi (tepki pencereleri oynama hizindan bagimsiz kalsin)
@@ -1417,7 +1430,7 @@ function updateAnchorsAndMove(st: MatchState) {
     // baskida en yakin 1-2 oyuncu topa gider
     const pressers: PState[] = [];
     const deadBall = st.t < st.restartUntil; // yeniden baslatma bekleniyor: rakip 9,15 m uzakta durur, pres yok
-    if (!inPoss && !deadBall && carrier) {
+    if (!inPoss && !deadBall && carrier && st.restartTaker !== carrier) { // duran topu kullanacak oyuncuya pres yok (Kural 13-17 mesafe)
       const tx = carrier.x;
       const ty = carrier.y;
       // gorev karti: ilk basan 6 m yakin sayilir, blokta kalan yalniz 5 m icindeyse basar
@@ -2457,6 +2470,9 @@ function aiDecide(st: MatchState, c: PState) {
     const m = liveTeam(st, side).filter((p) => p !== c && p.pos !== 'GK').reduce<PState | null>((b0, p) => (!b0 || hyp(p.x - c.x, p.y - c.y) < hyp(b0.x - c.x, b0.y - c.y) ? p : b0), null);
     if (m) bestAct = { kind: 'pass', target: m, p: 0.8, air: false };
   }
+  // kaleci: guvenli pas yoksa (p < 0,8) kimseye gitmeyecek pas yerine uzaklastirma oncelik sirasi (kendi pasini kovalamasin)
+  if (c.pos === 'GK' && bestAct.kind === 'pass' && (bestAct.p ?? 1) < 0.8 && !mustPass) { dbg('kaleci_uzaklastirma'); clearBall(st, c, false); return; }
+  if (c.pos === 'GK' && bestAct.kind === 'dribble') { dbg('kaleci_uzaklastirma'); clearBall(st, c, false); return; }
   dbg('karar_' + bestAct.kind + (cxf > 70 ? '_hucum' : ''));
   if (oneOnOne && bestAct.kind === 'pass' && bestAct.target && toFrame(side, bestAct.target.x, bestAct.target.y)[0] < cxf - 6) dbg('birebir_geri_pas');
   if (oneOnOne) dbg('birebir_karar_' + bestAct.kind);
@@ -4169,7 +4185,7 @@ function setPieceTarget(st: MatchState, p: PState): [number, number, number] | n
     if (atk && p.pos === 'GK') return null;
     const k = p.idx;
     const [x, y] = fromFrame(A, atk ? 83.2 : 84.2, 18 + ((k * 3 + (atk ? 0 : 1)) % 11) * 3.2); // ceza sahasi ve yayin disi (Kural 14)
-    return [x, y, 0.45];
+    { const [pxf] = toFrame(A, p.x, p.y); return [x, y, pxf > 86 ? 0.9 : 0.45]; } // icerideyse kosarak cikar
   }
   if (pd.kind === 'goalkick') {
     if (p.side === A && p.pos === 'GK') {

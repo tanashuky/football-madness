@@ -65,11 +65,11 @@ body.play #pausePlay { display: block; }
 #mentBar { position: fixed; top: max(8px, env(safe-area-inset-top, 0px)); left: calc(max(10px, env(safe-area-inset-left, 0px)) + 112px); z-index: 950; display: none; gap: 4px; align-items: center; font: 600 12px/1 var(--font-body); color: var(--chalk); background: rgba(10,12,16,.7); border: 1px solid rgba(255,255,255,.2); border-radius: 8px; padding: 5px 6px; }
 body.play #mentBar { display: flex; }
 #mentBar button { font: 700 14px/1 var(--font-body); color: var(--chalk); background: transparent; border: 1px solid rgba(255,255,255,.25); border-radius: 6px; width: 30px; height: 26px; }
-#mentBar output { min-width: 72px; text-align: center; }
-@media (max-width: 760px) { #mentBar output { min-width: 0; font-size: 11px; } }
+#mentBar output { min-width: 56px; text-align: center; font-size: 11px; }
+@media (max-width: 900px) { #mentBar output { display: none; } #tacBtn { left: calc(max(10px, env(safe-area-inset-left, 0px)) + 196px); } }
 #pauseBox { position: fixed; inset: 0; z-index: 940; display: flex; align-items: center; justify-content: center; background: rgba(8,12,10,.55); pointer-events: none; }
 #pauseBox[hidden] { display: none; }
-#tacBtn { position: fixed; top: max(8px, env(safe-area-inset-top, 0px)); right: calc(max(10px, env(safe-area-inset-right, 0px)) + 116px); z-index: 950; display: none; font: 600 13px/1 var(--font-body); color: var(--chalk); background: rgba(10,12,16,.7); border: 1px solid rgba(255,255,255,.2); border-radius: 8px; padding: 9px 12px; }
+#tacBtn { position: fixed; top: max(8px, env(safe-area-inset-top, 0px)); left: calc(max(10px, env(safe-area-inset-left, 0px)) + 250px); z-index: 950; display: none; font: 600 13px/1 var(--font-body); color: var(--chalk); background: rgba(10,12,16,.7); border: 1px solid rgba(255,255,255,.2); border-radius: 8px; padding: 9px 12px; }
 body.play #tacBtn { display: block; }
 #tacPanel { position: fixed; inset: 0; z-index: 945; display: flex; align-items: flex-start; justify-content: center; padding: calc(max(8px, env(safe-area-inset-top, 0px)) + 46px) 8px 8px; background: rgba(8,12,10,.6); }
 #tacPanel[hidden] { display: none; }
@@ -217,7 +217,7 @@ label.chk { display: flex; flex-direction: row; gap: 8px; align-items: center; }
           <label for="pCam">Kamera<select id="pCam"><option value="full" selected>Tam saha</option><option value="length">Tam boy</option><option value="near">Yakın</option></select></label>
           <label for="pKeys">Klavye<select id="pKeys"><option value="arrows" selected>Ok tuşları + S pas · D şut · W ara · A orta · E sprint · Q değiştir</option><option value="wasd">WASD + J pas · K şut · L ara · I orta · Shift sprint · Boşluk değiştir</option></select></label>
           <div class="ctrl"><button class="btn prim" id="playBtn">Oynamaya başla (Kartal SK, Team play)</button></div>
-          <p class="keys">Telefon: sol yarıda parmağını bastığın yer joystick olur; kesikli sarı çizgiyi geçip dış banda itince sprint (iç daire normal koşu). Sağ altta elmas butonlar: hücumda üst Ara, sağ Şut, sol Orta, alt Pas; savunmada üst Değiştir, sağ Kaydır, sol Müdahale, alt Baskı (basılı; joystick dış bandı ile koşarak baskı, başparmağı Baskı'dan Müdahale/Kaydır'a kaydırınca o hareket). Vuruş: butona basınca oyuncunun üstünde topun gerçek yolu belirir; parmağınla yolu çiz: yön = sürükleme yönü, kavis = izin bükülmesi, güç = basılı tutma; bırakınca vurur (ne görüyorsan o). Kısa dokunuş (0,2 s altı, sürüklemeden) nişan açmaz: Pas/Ara joystick yönündeki arkadaşa tek pas, Şut joystick yönüne düz şut. Pas ve Ara her zaman yerden, Orta her zaman havadan. Top sana gelirken Pas/Şut'a basarsan gelişine vurur (⚡); joystick ilk dokunuş yönüdür. Sahipsiz topta rakiple aynı anda yetişiyorsan iki yay belirir: o anda Müdahale/Kaydır bas (erken basan atmış olur). Taktik (Kolay seviye): maç öncesi tek seçim (formasyon · doktrin · mesafe) ve kural seti; maç içinde üstteki ◀ ▶ (ya da [ ve ] tuşları) savunma↔hücum kaydırıcısı (1 dk uyum bedeli, değişiklik hakkından düşmez); tetiklenen kural ekranın üstünde yeşil etiketle görünür, rakibinki yalnız “rakip taktik değiştirdi”. Klavyede yön tuşları nişandır; tuşu basılı tutmak güç. C kamera, P duraklat, Esc çık; Değiştir'i (Q / üst buton) basılı tutmak kaleciyi çıkarır; gol sevincini dokunarak atla.</p>
+          <p class="keys">Telefon: sol yarıda parmağını bastığın yer joystick olur; kesikli sarı çizgiyi geçip dış banda itince sprint (iç daire normal koşu). Sağ altta elmas butonlar: hücumda üst Ara, sağ Şut, sol Orta, alt Pas; savunmada üst Değiştir, sağ Kaydır, sol Müdahale, alt Baskı (basılı; joystick dış bandı ile koşarak baskı, başparmağı Baskı'dan Müdahale/Kaydır'a kaydırınca o hareket). Vuruş: butona basınca oyuncunun üstünde topun gerçek yolu belirir; parmağınla yolu çiz: yön = sürükleme yönü, kavis = izin bükülmesi, güç = basılı tutma; bırakınca vurur (ne görüyorsan o). Kısa dokunuş (0,2 s altı, sürüklemeden) nişan açmaz: Pas/Ara joystick yönündeki arkadaşa tek pas, Şut joystick yönüne düz şut. Pas ve Ara her zaman yerden, Orta her zaman havadan. Top sana gelirken Pas/Şut'a basarsan gelişine vurur (⚡); joystick ilk dokunuş yönüdür. Sahipsiz topta rakiple aynı anda yetişiyorsan iki yay belirir: o anda Müdahale/Kaydır bas (erken basan atmış olur). Taktik (Kolay seviye): maç öncesi tek seçim (formasyon · doktrin · mesafe) ve kural seti; maç içinde üstteki ◀ ▶ (ya da [ ve ] tuşları) savunma↔hücum kaydırıcısı (1 dk uyum bedeli, değişiklik hakkından düşmez); tetiklenen kural ekranın üstünde yeşil etiketle görünür, rakibinki yalnız “rakip taktik değiştirdi”. Klavyede yön tuşları nişandır (vuruş tuşuna bastıktan sonra ilk 0,25 s), sonra nişan kilitlenir ve nişana dik yön tuşu falso verir; tuşu basılı tutmak güç. C kamera, P duraklat, Esc çık; Değiştir'i (Q / üst buton) basılı tutmak kaleciyi çıkarır; gol sevincini dokunarak atla.</p>
         </div>
         <div class="panel">
           <h3>Takımlar</h3>
@@ -680,7 +680,7 @@ const PLAY = { on: false, side: 0, camMode: 'full', minutes: 10, keys: 'arrows',
 let teamOverride = null; // uygulama katmani (Dilim 1): maci hazir TeamIn nesneleriyle baslatir
 const IN = { joyId: null, joyBase: null, mx: 0, my: 0, joyK: 0, press: false, acts: [], keys: new Set(), ptrBtn: new Map(), kick: null, kbKick: null, swDown: null, slideOver: null };
 const GK_HOLD_MS = 300; // Degistir bu kadar basili tutulunca kaleci cikisi
-const POWER_MS = { shoot: 900, pass: 600, through: 600, cross: 700 };
+const POWER_MS = { shoot: 900, pass: 900, through: 900, cross: 800 }; // guc dolma suresi (ms); 1 Kasim: pas/ara 600 -> 900 (nisan cok hizli uzuyordu)
 const JOY_SPRINT = 1.5, JOY_MAX = 1.9; // joystick: sprint esigi ve topuzun en uzak noktasi (ic halka yaricapi katinda)
 const powerOf = (t0, kind) => Math.min(1, (performance.now() - t0) / POWER_MS[kind]);
 const TAP_MS = 200; // bundan kisa ve surukelenmeyen basis tek vurus (nisan acilmaz)
@@ -771,6 +771,17 @@ function pressBtn(b, down, ptrId, x, y) {
   }
   if (down) IN.acts.push(b.def);
 }
+// klavyede nisan ve falso: vurus tusu basildiktan sonra ilk 0,25 s yon tuslari nisani belirler, sonra nisan kilitlenir ve nisana dik
+// yon tusu falso verir (sag/sol: topun kivrilacagi taraf), nisan yonundeki tus etkisiz. Onizlemede gorunur.
+const KB_AIM_LOCK_MS = 250;
+function kbAimUpdate() {
+  const kk = IN.kbKick; if (!kk) return;
+  const [kx, ky] = kbDir(); const km = Math.hypot(kx, ky);
+  const held = performance.now() - kk.t0;
+  if (held < KB_AIM_LOCK_MS) { if (km > 0) { kk.ax = kx / km; kk.ay = ky / km; } return; }
+  if (Math.hypot(kk.ax, kk.ay) < 0.1) { const cp = controlledPlayer(st, PLAY.side); if (cp) { kk.ax = cp.hx; kk.ay = cp.hy; } }
+  if (km > 0) { const perp = (kx * -kk.ay + ky * kk.ax); kk.curve = Math.abs(perp) > 0.3 ? Math.sign(perp) * 0.8 : 0; } // nisanin sagi/solu
+}
 function kbDir() {
   const k = IN.keys, wasd = PLAY.keys === 'wasd';
   let mx = (k.has('ArrowRight') || (wasd && k.has('KeyD')) ? 1 : 0) - (k.has('ArrowLeft') || (wasd && k.has('KeyA')) ? 1 : 0);
@@ -855,7 +866,7 @@ addEventListener('keydown', (e) => {
   const atk = inPossession();
   const act = Object.keys(KB_DEF).find((k) => kb[k] === e.code);
   if (act) {
-    if (atk) { if (!IN.kbKick) IN.kbKick = { id: act, t0: performance.now() }; }
+    if (atk) { if (!IN.kbKick) { const [kx, ky] = kbDir(); IN.kbKick = { id: act, t0: performance.now(), ax: kx, ay: ky, curve: 0 }; } }
     else if (KB_DEF[act] === 'press') IN.press = true;
     else if (KB_DEF[act] === 'switch') IN.swDown = performance.now();
     else IN.acts.push(KB_DEF[act]);
@@ -881,9 +892,10 @@ addEventListener('keyup', (e) => {
   if (KB_DEF[act] === 'press') IN.press = false;
   if (IN.kbKick && IN.kbKick.id === act) {
     const held = performance.now() - IN.kbKick.t0;
-    const [mx, my] = kbDir();
+    kbAimUpdate();
     const tap = held < TAP_MS;
-    IN.acts.push({ act, power: tap ? TAP_POWER[act] : powerOf(IN.kbKick.t0, act), ax: mx, ay: my, curve: 0, tap });
+    const [mx, my] = tap ? kbDir() : [IN.kbKick.ax, IN.kbKick.ay];
+    IN.acts.push({ act, power: tap ? TAP_POWER[act] : powerOf(IN.kbKick.t0, act), ax: mx, ay: my, curve: tap ? 0 : IN.kbKick.curve, tap });
     IN.kbKick = null;
   }
 });
@@ -1048,14 +1060,16 @@ function aimInfo(cp) {
   if (!(k && k.aimed) && performance.now() - t0 < TAP_MS) return null; // kisa dokunusta nisan acilmaz
   const pw = powerOf(t0, id);
   let ax = 0, ay = 0;
+  if (kk) kbAimUpdate();
   if (k && k.aimed) { ax = k.ax; ay = k.ay; }
+  else if (kk && Math.hypot(kk.ax, kk.ay) > 0.1 && performance.now() - kk.t0 >= KB_AIM_LOCK_MS) { ax = kk.ax; ay = kk.ay; }
   else {
     const m = Math.hypot(IN.mx, IN.my);
     if (IN.joyId !== null && m > 0.15) { ax = IN.mx / m; ay = IN.my / m; }
     else { const [kx, ky] = kbDir(); const km = Math.hypot(kx, ky); if (km > 0) { ax = kx / km; ay = ky / km; } else { ax = cp.hx; ay = cp.hy; } }
   }
   const len = id === 'shoot' ? 10 + 25 * pw : id === 'through' ? 16 + 20 * pw : id === 'cross' ? 14 + 30 * pw : 8 + 32 * pw;
-  return { id, pw, ax, ay, len, curve: k ? k.curve : 0 };
+  return { id, pw, ax, ay, len, curve: k ? k.curve : kk ? kk.curve : 0 };
 }
 
 // butonun altinda top ya da oyuncu var mi (ekran pikseli)

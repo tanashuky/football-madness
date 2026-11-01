@@ -120,3 +120,11 @@ Commit sırası: 8ee1406 hız/pencereler → dd51833 şekiller → 7402036 göre
 - Ayağa/kanada koşular: pas değerlemesi koşu hedefini kullanıyor artık (`_run` hedefi), yine de 'all' 2,37 vs 'b' 2,88 → kapalı kalıyor.
 - 11–16 m dönüşüm %18 (gerçek ~%12–15): kabul edilebilir aralıkta, dokunulmadı.
 - 200 maç: gol 2,48 · beraberlik %27 · golsüz %7 · 5+ %10 · şut 8,7 · korner 0,72 · ofsayt 0,39 · duran top payı %22.
+
+## Geri bildirim turu 2 (1 Kasım akşam)
+
+- Duran topu kullanacak oyuncuya pres yok (`st.restartTaker !== carrier`): kaleci aut/degaj kullanırken dibine rakip gelmiyor. Penaltıda ceza sahası içindeki oyuncular koşarak çıkar (urg 0,9).
+- `keepAway`: oyuncu dışarıda, hedef dışarıda ama yol çemberden geçiyorsa çemberin etrafından dolaşır (teğet noktası); önceden çember kenarında takılıyordu (bek topun arkasında kalıyordu).
+- Kaleci: güvenli pas (p ≥ 0,8) yoksa uzaklaştırma öncelik sırası (kendi pasını kovalamasın). Not: kalecinin kendi (restart olmayan) pasını geri alması kural olarak serbest; aut sonrası ikinci dokunuş yasağı testte 0.
+- Klavye falso: vuruş tuşuna bastıktan sonra ilk 0,25 s yön tuşları nişan, sonra nişan kilitlenir, nişana dik yön tuşu kavis (±0,8); önizlemede görünür. Güç dolma süresi pas/ara 600 → 900 ms, orta 800.
+- Taktik düğmesi duraklat/kaydırıcı yanına; dar ekranda kaydırıcı etiketi gizli.
