@@ -126,6 +126,7 @@
     </div>
   </section>
 </main>
+<script src="vendor/lottie.min.js"></script>
 <script>
 // ---- yardimcilar ----
 const $ = (id) => document.getElementById(id);
@@ -179,7 +180,7 @@ function validate(f) {
     const okDim = want && f.img.width === want[0] && f.img.height === want[1];
     checks.push([okDim ? 'ok' : 'bad', `${f.img.width}×${f.img.height} px${want ? ' (beklenen ' + want.join('×') + ')' : ''}`]);
   }
-  if (t.ext === 'json') { try { const j = JSON.parse(f.text); checks.push([j.v !== undefined && j.layers ? 'ok' : 'warn', j.v !== undefined && j.layers ? `Lottie v${j.v}, ${j.layers.length} katman, ${j.op - j.ip} kare` : 'Lottie yapısı tanınmadı']); } catch (e) { checks.push(['bad', 'JSON çözümlenemedi']); } }
+  if (t.ext === 'json') { try { const j = JSON.parse(f.text); if (j.v !== undefined && j.layers) { const frames = (j.op || 0) - (j.ip || 0), dur = frames / (j.fr || 30); checks.push(['ok', `Lottie v${j.v}, ${j.layers.length} katman, ${j.w}×${j.h}, ${frames} kare @ ${j.fr} fps`]); checks.push([dur <= 1.6 ? 'ok' : 'warn', `Süre ${dur.toFixed(2)} s (hedef 1–1,5 s)`]); checks.push([(f.size / 1024) <= 100 ? 'ok' : 'warn', `${(f.size / 1024).toFixed(0)} KB (hedef 100 KB altı)`]); const hasImg = (j.assets || []).some((a) => a.p || a.u); if (hasImg) checks.push(['bad', 'Gömülü bitmap var: yalnız vektör katman']); if (j.layers.some((l) => l.ty === 5)) checks.push(['warn', 'Metin katmanı var: şekle çevir']); } else checks.push(['warn', 'Lottie yapısı tanınmadı']); } catch (e) { checks.push(['bad', 'JSON çözümlenemedi']); } }
   return { ok: !checks.some((c) => c[0] === 'bad'), checks, type: t.type };
 }
 // ---- dosya yukleme ----
@@ -219,7 +220,20 @@ function renderPreview() {
   if (!f) { $('big').innerHTML = ''; $('bigHint').textContent = ''; return; }
   if (f.img) { $('big').innerHTML = `<img src="${f.img.src}" style="width:100%;border-radius:8px;background:#0b100e">`; $('bigHint').textContent = f.v.type === 'ball' ? 'Sahada 10–16 px: desen dönüşte okunmalı.' : 'Saha çizgileri ve oyuncular kodla çizilir; tema yalnız çevre ve zemin tonu.'; }
   else if (f.name.endsWith('.svg')) { $('big').innerHTML = f.v.type === 'kit' ? shirtSvg(recolor(f.text)) : recolor(f.text); $('bigHint').textContent = f.v.type === 'kit' ? 'Forma siluetiyle kırpılmış desen; renkler soldaki seçiciden.' : f.v.type === 'crest' ? '512 px, 448 px güvenli alan; arma otomatik yerleşir.' : ''; }
-  else { $('big').innerHTML = '<p class="muted">Lottie önizlemesi oyunda; burada yalnız yapı kontrolü.</p>'; $('bigHint').textContent = ''; }
+  else if (f.v.type === 'goalfx') { lottiePreview(f); }
+  else { $('big').innerHTML = '<p class="muted">Önizleme yok.</p>'; $('bigHint').textContent = ''; }
+}
+// ---- Lottie onizleme: saha ustunde, orta noktada, 1x ve dongu ----
+let anim = null;
+function lottiePreview(f) {
+  if (typeof lottie === 'undefined') { $('big').innerHTML = '<p class="muted">Lottie oynatıcı yüklenemedi (vendor/lottie.min.js).</p>'; return; }
+  if (anim) { anim.destroy(); anim = null; }
+  $('big').innerHTML = `<div class="pitch" id="fxPitch" style="max-width:none"><div id="fx" style="position:absolute;left:50%;top:50%;width:46%;aspect-ratio:1;transform:translate(-50%,-50%)"></div><div class="dot" style="left:46%;top:50%;background:${$('c1').value}"><b>9</b></div><div class="dot" style="left:60%;top:44%;background:#2b5fb8"><b>4</b></div></div><div class="row" style="margin-top:8px"><button class="btn sm" id="fxPlay">Oynat</button><label style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px"><input type="checkbox" id="fxLoop"> döngü</label><label style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px">boyut <input type="range" id="fxSize" min="20" max="90" value="46" style="width:110px"></label><span class="muted" id="fxInfo" style="font-size:12px"></span></div>`;
+  const data = JSON.parse(f.text);
+  const start = () => { if (anim) anim.destroy(); anim = lottie.loadAnimation({ container: $('fx'), renderer: 'svg', loop: $('fxLoop').checked, autoplay: true, animationData: data }); anim.addEventListener('DOMLoaded', () => { $('fxInfo').textContent = `${anim.totalFrames} kare · ${(anim.totalFrames / anim.frameRate).toFixed(2)} s`; }); };
+  $('fxPlay').onclick = start; $('fxLoop').onchange = start; $('fxSize').oninput = () => { $('fx').style.width = $('fxSize').value + '%'; };
+  start();
+  $('bigHint').textContent = 'Efekt saha ortasında, oyuncu daireleriyle aynı ölçekte; 1–1,5 s içinde bitmeli, koyu yeşil üstünde okunmalı. Koyu zemin için de bak: kart ve rapor ekranlarında aynı efekt kullanılabilir.';
 }
 // ---- renkler ----
 const PRESETS = [['#c8102e', '#ffffff', '#1b1b1b'], ['#1d4ed8', '#ffffff', '#f59e0b'], ['#111827', '#f3f4f6', '#ef4444'], ['#15803d', '#ffffff', '#111827'], ['#f59e0b', '#1f2937', '#ffffff'], ['#7c3aed', '#fde68a', '#111827'], ['#0ea5e9', '#0f172a', '#ffffff'], ['#ffffff', '#111827', '#c8102e']];
@@ -263,9 +277,12 @@ const SAMPLES = {
   'kit_halves_v1.svg': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 500"><rect width="400" height="500" fill="#FF0000"/><rect x="200" width="200" height="500" fill="#00FF00"/><rect x="0" y="0" width="400" height="22" fill="#0000FF"/></svg>`,
   'kit_chest_v1.svg': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 500"><rect width="400" height="500" fill="#FF0000"/><rect y="150" width="400" height="90" fill="#00FF00"/><rect y="170" width="400" height="12" fill="#0000FF"/><rect y="218" width="400" height="12" fill="#0000FF"/></svg>`,
   'crest_shield_v1.svg': CREST_TPL.replace(/<!--[\s\S]*?-->/g, '').replace(/<rect x="32"[^>]*\/>/, ''),
+  'goalfx_burst_v1.json': JSON.stringify({ v: '5.7.4', fr: 30, ip: 0, op: 36, w: 512, h: 512, nm: 'burst', ddd: 0, assets: [], layers: [
+    { ddd: 0, ind: 1, ty: 4, nm: 'ring', sr: 1, ks: { o: { a: 1, k: [{ t: 0, s: [100] }, { t: 30, s: [0] }] }, r: { a: 0, k: 0 }, p: { a: 0, k: [256, 256, 0] }, a: { a: 0, k: [0, 0, 0] }, s: { a: 1, k: [{ t: 0, s: [10, 10, 100] }, { t: 30, s: [200, 200, 100] }] } }, ao: 0, shapes: [{ ty: 'gr', it: [{ ty: 'el', p: { a: 0, k: [0, 0] }, s: { a: 0, k: [200, 200] } }, { ty: 'st', c: { a: 0, k: [1, 0.85, 0.3, 1] }, o: { a: 0, k: 100 }, w: { a: 0, k: 18 } }, { ty: 'tr', p: { a: 0, k: [0, 0] }, a: { a: 0, k: [0, 0] }, s: { a: 0, k: [100, 100] }, r: { a: 0, k: 0 }, o: { a: 0, k: 100 } }] }], ip: 0, op: 36, st: 0 },
+    ...[0, 45, 90, 135, 180, 225, 270, 315].map((deg, i) => ({ ddd: 0, ind: 2 + i, ty: 4, nm: 'spark' + i, sr: 1, ks: { o: { a: 1, k: [{ t: 2, s: [100] }, { t: 32, s: [0] }] }, r: { a: 0, k: deg }, p: { a: 0, k: [256, 256, 0] }, a: { a: 0, k: [0, 0, 0] }, s: { a: 0, k: [100, 100, 100] } }, ao: 0, shapes: [{ ty: 'gr', it: [{ ty: 'rc', p: { a: 1, k: [{ t: 2, s: [40, 0] }, { t: 32, s: [230, 0] }] }, s: { a: 1, k: [{ t: 2, s: [60, 16] }, { t: 32, s: [20, 6] }] }, r: { a: 0, k: 8 } }, { ty: 'fl', c: { a: 0, k: [1, 1, 1, 1] }, o: { a: 0, k: 100 } }, { ty: 'tr', p: { a: 0, k: [0, 0] }, a: { a: 0, k: [0, 0] }, s: { a: 0, k: [100, 100] }, r: { a: 0, k: 0 }, o: { a: 0, k: 100 } }] }], ip: 0, op: 36, st: 0 })) ] }),
   'crest_circle_v1.svg': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><circle cx="256" cy="256" r="220" fill="#FF0000" stroke="#000000" stroke-width="10"/><circle cx="256" cy="256" r="170" fill="#00FF00"/><polygon points="256,150 286,230 370,230 302,280 326,362 256,312 186,362 210,280 142,230 226,230" fill="#0000FF"/></svg>`,
 };
-$('samples').onclick = () => addFiles(Object.entries(SAMPLES).map(([n, t]) => new File([t], n, { type: 'image/svg+xml' })));
+$('samples').onclick = () => addFiles(Object.entries(SAMPLES).map(([n, t]) => new File([t], n, { type: n.endsWith('.json') ? 'application/json' : 'image/svg+xml' })));
 // ---- katalog ----
 $('addRow').onclick = () => { const f = state.sel; if (!f) return; const q = (s) => '"' + String(s || '').replace(/"/g, '""') + '"'; $('csv').value += `\n${f.name},${q($('mTr').value)},${q($('mEn').value)},${q($('mDesc').value)},${$('mTier').value},${$('mSeason').value}`; };
 $('dlCsv').onclick = () => download('katalog.csv', $('csv').value, 'text/csv');
