@@ -6261,6 +6261,8 @@ function fitCanvas() {
 addEventListener('resize', fitCanvas);
 function draw(alpha, now = performance.now()) {
   const Wc = cv.width, Hc = cv.height;
+  // gizli ya da sifir boyutlu tuval (uygulama ekranlari, dondurme ani): cizim yok (olcek sonsuz/NaN olur, createRadialGradient firlatir)
+  if (!(Wc > 0 && Hc > 0) || (document.body.classList.contains('app') && !PLAY.on)) return;
   const PW = 105 + 2 * PADX, PH = 68 + 2 * PADY;
   let s, ox, oy;
   if (CAM.mode === 'smart') {
@@ -6396,6 +6398,7 @@ function draw(alpha, now = performance.now()) {
     const life = { clean: 0.9, foul: 0.9, card: 0.9, int: 0.6, kick: 0.45, save: 0.6, throw: 0.8, aim: 0.7, skill: 0.7 }[f.kind] ?? 0.8;
     if (age < -0.01 || age > life) continue;
     const fx = X(f.x), fy = Y(f.y);
+    if (!Number.isFinite(fx) || !Number.isFinite(fy) || !Number.isFinite(r)) continue;
     const fade = age < life * 0.4 ? 1 : 1 - (age - life * 0.4) / (life * 0.6);
     ctx.save(); ctx.globalAlpha = Math.max(0, fade);
     if (f.kind === 'clean' || f.kind === 'foul' || f.kind === 'card') {
@@ -8155,7 +8158,7 @@ function appInit() {
 window.addEventListener('hashchange', () => { if (location.hash !== '#dev') { document.body.classList.add('app'); render(); } });
 appInit();
 </script>
-<div class="dev">demo · sürüm 03.11 12:52 · <a href="#dev" style="color:inherit" onclick="document.body.classList.remove('app')">geliştirici</a></div>
+<div class="dev">demo · sürüm 03.11 13:34 · <a href="#dev" style="color:inherit" onclick="document.body.classList.remove('app')">geliştirici</a></div>
 
 </body>
 </html>
