@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Kadro karti cercevesi tabani. viewBox 240x300; 9-slice: kenar 16 px (koseler sabit, kenarlar uzar). Kademe renkleri: bronz #B87333, gumus #C0C7CE, altin #F2D94E. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 300" width="240" height="300">
+  <defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1D2A23"/><stop offset="1" stop-color="#0F1713"/></linearGradient></defs>
+  <rect x="1" y="1" width="238" height="298" rx="14" fill="url(#bg)" stroke="#2A3A33" stroke-width="2"/>
+  <rect x="8" y="8" width="224" height="284" rx="10" fill="none" stroke="#2A3A33" stroke-opacity=".6" stroke-width="1"/>
+</svg>

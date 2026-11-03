@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Kulup bayragi tabani. viewBox 300x200. Arma sol ustte 56x56 alana otomatik yerlesir (x 16..72, y 16..72); o alani bos birak. Renkler yer tutucu. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 200" width="300" height="200">
+  <rect width="300" height="200" fill="#FF0000"/>
+  <rect x="0" y="150" width="300" height="50" fill="#00FF00"/>
+  <rect x="16" y="16" width="56" height="56" fill="none" stroke="#000000" stroke-opacity=".25" stroke-dasharray="4 4"/>
+</svg>

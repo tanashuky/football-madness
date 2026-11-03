@@ -1,0 +1,17 @@
+:root {
+  --night: #0E1512;   /* zemin */
+  --stand: #17211D;   /* paneller, kartlar */
+  --line: #2A3A33;    /* ayiricilar, pasif buton */
+  --grass: #2F6B3A;   /* saha */
+  --grass2: #2A6034;  /* saha seritleri */
+  --chalk: #E9EFE9;   /* ana metin, saha cizgileri */
+  --mist: #93A59B;    /* ikincil metin */
+  --flood: #F2D94E;   /* tek vurgu: secili oge, canli rozeti, birincil buton */
+  --good: #5FC38A;    /* temiz mudahale, artis */
+  --warn: #E0A63F;    /* yorgun, sure azaliyor */
+  --bad: #E5483F;     /* kirmizi kart, sakatlik */
+  --info: #6FA8FF;    /* baglanti, okuma notu */
+  --home-gk: #7A2622; --away-gk: #22406F; /* kaleci daireleri (koyu ton) */
+  --font-display: "Barlow Condensed", "Arial Narrow", sans-serif;
+  --font-body: "Inter", system-ui, sans-serif;
+}

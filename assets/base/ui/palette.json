@@ -1,0 +1,19 @@
+{
+  "night": "#0E1512",
+  "stand": "#17211D",
+  "line": "#2A3A33",
+  "grass": "#2F6B3A",
+  "grass2": "#2A6034",
+  "chalk": "#E9EFE9",
+  "mist": "#93A59B",
+  "flood": "#F2D94E",
+  "good": "#5FC38A",
+  "warn": "#E0A63F",
+  "bad": "#E5483F",
+  "info": "#6FA8FF",
+  "tier": {
+    "bronze": "#B87333",
+    "silver": "#C0C7CE",
+    "gold": "#F2D94E"
+  }
+}

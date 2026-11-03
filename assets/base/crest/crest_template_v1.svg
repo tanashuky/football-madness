@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Football Madness arma sablonu. viewBox 512x512, guvenli alan 448 px (kenarlardan 32 px). Renkler: #FF0000 ana, #00FF00 ikinci, #0000FF ucuncu. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <path d="M256 36 L448 96 V272 Q448 416 256 476 Q64 416 64 272 V96 Z" fill="#FF0000" stroke="#000000" stroke-width="10"/>
+  <path d="M256 70 L416 120 V270 Q416 390 256 440 Q96 390 96 270 V120 Z" fill="#00FF00"/>
+  <circle cx="256" cy="256" r="70" fill="#0000FF"/>
+  <!-- guvenli alan rehberi -->
+  <rect x="32" y="32" width="448" height="448" fill="none" stroke="#000000" stroke-opacity=".2" stroke-dasharray="8 8"/>
+</svg>
