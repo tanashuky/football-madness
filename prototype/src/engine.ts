@@ -268,6 +268,8 @@ export interface MatchState {
   tacticChanges: [number, number];
   phase: [number, number]; // sekil fazi: 0 savunma sekli, 1 hucum sekli (gecis kademeli)
   rot: [RotState[], RotState[]]; // rotasyon donguleri (takim basina)
+  stepN: number; // atilan adim sayisi (kayit/tekrar icin)
+  rec: Recorder | null; // girdi kaydi (null: tekrar oynatiliyor ya da kapali)
   rotHome: Map<PState, PState>; // oyuncu -> evini kullandigi oyuncu (rotasyonda); yoksa kendisi
   reads: [ReadResult | null, ReadResult | null]; // rakibi okuma sonucu
   zoneShots: [number[], number[]]; // hucum eden tarafin sutlari bolgeye gore (sol/orta/sag, kendi cercevesinde)
@@ -809,6 +811,66 @@ export function validateTeam(t: TeamIn, label: string) {
     }
   }
 }
+// ---------- Girdi kaydi ve tekrar (Dilim 2) ----------
+// Mac deterministiktir: ayni seed + ayni takimlar + ayni P + ayni komut dizisi (hangi adimda hangi cagri) = ayni mac.
+// Her durum degistiren disa acik cagri (girdi, taktik, degisiklik, kontrol) adim numarasiyla kaydedilir; girdi yalniz degisince.
+// Tekrar: replayMatch(kayit) ayni motoru kosturur; stateHash ile sonuc dogrulanir (sunucu dogrulamasi ayni yolu kullanir).
+export type RecOp = 'in' | 'tac' | 'ment' | 'duty' | 'rules' | 'rot' | 'sub' | 'auto' | 'ctl' | 'asw';
+export interface RecCmd { k: number; op: RecOp; s: 0 | 1; a: any[] }
+export interface Recorder { v: 1; seed: number; knockout: boolean; teams: [TeamIn, TeamIn]; P: Record<string, any>; cmds: RecCmd[]; last: [string, string] }
+export interface Replay { v: 1; seed: number; knockout: boolean; teams: [TeamIn, TeamIn]; P: Record<string, any>; cmds: RecCmd[]; steps: number; hash: number; score: [number, number] }
+function rec(st: MatchState, op: RecOp, side: 0 | 1, a: any[]) { if (st.rec) st.rec.cmds.push({ k: st.stepN, op, s: side, a }); }
+export function replayOf(st: MatchState): Replay | null {
+  if (!st.rec) return null;
+  const { v, seed, knockout, teams, P: pp, cmds } = st.rec;
+  return { v, seed, knockout, teams, P: pp, cmds: cmds.slice(), steps: st.stepN, hash: stateHash(st), score: [st.stats[0].goals, st.stats[1].goals] };
+}
+// durum ozeti: top, oyuncular (konum, kondisyon), skor, saat; FNV-1a 32 bit (yuvarlanmis degerler: platformlar arasi ayni)
+export function stateHash(st: MatchState): number {
+  let h = 0x811c9dc5 >>> 0;
+  const mix = (n: number) => { const v = Math.round(n * 100) | 0; for (let i = 0; i < 4; i++) { h ^= (v >>> (i * 8)) & 0xff; h = Math.imul(h, 0x01000193) >>> 0; } };
+  mix(st.t); mix(st.clock); mix(st.ball.x); mix(st.ball.y); mix(st.ball.z); mix(st.ball.vx); mix(st.ball.vy);
+  for (const p of st.players) { mix(p.x); mix(p.y); mix(p.k); mix(p.off ? 1 : 0); }
+  mix(st.stats[0].goals); mix(st.stats[1].goals); mix(st.stats[0].shots); mix(st.stats[1].shots); mix(st.events.length);
+  return h >>> 0;
+}
+export function applyCmd(st: MatchState, c: RecCmd) {
+  const s = c.s;
+  switch (c.op) {
+    case 'in': setInput(st, s, c.a[0]); break;
+    case 'tac': setTactic(st, s, c.a[0], c.a[1]); break;
+    case 'ment': setMentality(st, s, c.a[0]); break;
+    case 'duty': setDuty(st, s, c.a[0], c.a[1]); break;
+    case 'rules': setRules(st, s, c.a[0]); break;
+    case 'rot': setRotations(st, s, c.a[0]); break;
+    case 'sub': userSub(st, s, c.a[0], c.a[1]); break;
+    case 'auto': autoSubsFor(st, s); break;
+    case 'ctl': setControl(st, s, c.a[0], c.a[1], c.a[2], c.a[3]); break;
+    case 'asw': setAutoSwitch(st, s, c.a[0]); break;
+  }
+}
+// tekrar: kaydi bastan oynatir; onStep her adimdan sonra cagrilir (izleyici icin); maxSteps ile kismi tekrar
+export function replayMatch(r: Replay, onStep?: (st: MatchState, k: number) => void, maxSteps?: number): MatchState {
+  const savedP = JSON.parse(JSON.stringify(P));
+  Object.assign(P, JSON.parse(JSON.stringify(r.P)));
+  const teams = JSON.parse(JSON.stringify(r.teams)) as [TeamIn, TeamIn];
+  const st = createMatch(teams[0], teams[1], r.seed, { knockout: r.knockout });
+  st.rec = null;
+  const n = Math.min(r.steps, maxSteps ?? r.steps);
+  let ci = 0;
+  while (st.stepN < n && !st.done) {
+    while (ci < r.cmds.length && r.cmds[ci].k <= st.stepN) { applyCmd(st, r.cmds[ci]); ci++; }
+    step(st);
+    if (onStep) onStep(st, st.stepN);
+  }
+  Object.assign(P, savedP);
+  return st;
+}
+export function verifyReplay(r: Replay): { ok: boolean; hash: number; score: [number, number] } {
+  const st = replayMatch(r);
+  const hash = stateHash(st);
+  return { ok: hash === r.hash && st.stats[0].goals === r.score[0] && st.stats[1].goals === r.score[1], hash, score: [st.stats[0].goals, st.stats[1].goals] };
+}
 export function createMatch(a0: TeamIn, b0: TeamIn, seed: number, opts?: { knockout?: boolean }): MatchState {
   validateTeam(a0, a0.name ?? 'A'); validateTeam(b0, b0.name ?? 'B');
   FLIP = false;
@@ -911,6 +973,8 @@ export function createMatch(a0: TeamIn, b0: TeamIn, seed: number, opts?: { knock
     phase: [0, 0],
     rot: [[], []],
     rotHome: new Map(),
+    stepN: 0,
+    rec: { v: 1, seed, knockout: !!opts?.knockout, teams: JSON.parse(JSON.stringify([a0, b0])), P: JSON.parse(JSON.stringify(P)), cmds: [], last: ['', ''] },
     reads: [null, null],
     zoneShots: [[0, 0, 0], [0, 0, 0]],
     zoneEntries: [[0, 0, 0], [0, 0, 0]],
@@ -947,7 +1011,7 @@ export function createMatch(a0: TeamIn, b0: TeamIn, seed: number, opts?: { knock
     seed,
     dt: P.dt,
   };
-  for (const sd of [0, 1] as const) if (st.teams[sd].tactic.rotations) setRotations(st, sd, st.teams[sd].tactic.rotations);
+  (st as any)._inTac = true; for (const sd of [0, 1] as const) if (st.teams[sd].tactic.rotations) setRotations(st, sd, st.teams[sd].tactic.rotations); (st as any)._inTac = false;
   kickoff(st, 0);
   return st;
 }
@@ -1008,6 +1072,7 @@ function dutyOf(st: MatchState, p: PState): Duty { return st.teams[p.side].dutie
 // uyumsuz takim gec doner ve terste kalir. Olu topta aninda tabana doner.
 export interface RotState { players: PState[]; shift: number; pending: number | null; pendingAt: number; lastT: number }
 export function setRotations(st: MatchState, side: 0 | 1, cycles: number[][] | undefined) {
+  if (st.rec && !(st as any)._inTac) rec(st, 'rot', side, [cycles ? cycles.map((c) => [...c]) : undefined]);
   const t = st.teams[side];
   t.tactic = { ...t.tactic, rotations: cycles && cycles.length ? cycles.map((c) => [...c]) : undefined };
   const live = st.players.filter((p) => p.side === side && !p.off);
@@ -1075,7 +1140,7 @@ function rotStep(st: MatchState) {
     if (changed) applyRot(st, s);
   }
 }
-export function setDuty(st: MatchState, side: 0 | 1, num: number, d: Duty) { const t = st.teams[side]; t.duties = { ...(t.duties ?? {}), [num]: { ...(t.duties?.[num] ?? {}), ...d } }; }
+export function setDuty(st: MatchState, side: 0 | 1, num: number, d: Duty) { rec(st, 'duty', side, [num, { ...d }]); const t = st.teams[side]; t.duties = { ...(t.duties ?? {}), [num]: { ...(t.duties?.[num] ?? {}), ...d } }; }
 function tEff(st: MatchState, side: 0 | 1): number {
   return st.teams[side].T - (st.clock < st.adaptUntil[side] ? 10 : 0);
 }
@@ -1892,6 +1957,7 @@ function separate(st: MatchState) {
 // Taktik degisikligi hemen uygulanir; 5 oyun dakikasi uyum suresi boyunca T -10. Mac basina en fazla 3 degisiklik.
 export function setTactic(st: MatchState, side: 0 | 1, patch: Partial<TacticIn>, formation?: Formation): boolean {
   if (st.tacticChanges[side] >= 3) return false;
+  rec(st, 'tac', side, [JSON.parse(JSON.stringify(patch)), formation]);
   const t = st.teams[side];
   const formChange = !!formation && formation !== t.formation;
   if (formChange) { t.formation = formation!; patch = { ...patch }; if (patch.shapeDef === undefined) patch.shapeDef = undefined; }
@@ -1910,7 +1976,7 @@ export function setTactic(st: MatchState, side: 0 | 1, patch: Partial<TacticIn>,
       p.pos = pos[p.idx];
     }
   }
-  if (formChange || patch.rotations !== undefined) setRotations(st, side, patch.rotations ?? t.tactic.rotations);
+  if (formChange || patch.rotations !== undefined) { (st as any)._inTac = true; setRotations(st, side, patch.rotations ?? t.tactic.rotations); (st as any)._inTac = false; }
   st.tacticChanges[side]++;
   st.adaptUntil[side] = st.clock + P.adaptMin * 60;
   st.events.push({ t: st.clock, type: 'tactic', side, text: formation ?? '' });
@@ -1975,7 +2041,7 @@ function rulesStep(st: MatchState) {
     }
   }
 }
-export function setRules(st: MatchState, side: 0 | 1, rules: Rule[]) { st.teams[side].rules = rules.slice(0, RULES_MAX); }
+export function setRules(st: MatchState, side: 0 | 1, rules: Rule[]) { rec(st, 'rules', side, [JSON.parse(JSON.stringify(rules))]); st.teams[side].rules = rules.slice(0, RULES_MAX); }
 // Kolay seviye kaydiricisi: savunma (-2) .. hucum (+2); hat, pres, bek/orta saha cikisi, kosu ve tempo birlikte kayar; 1 oyun dk uyum, degisiklik hakkindan dusmez
 // ---------- Dusunen bot (mimari 2.1, 4. katman): gozlem -> hipotez -> (ic simulasyon) -> ayar ----------
 // Derinlik: 1 (Yari pro) 20 dk pencere / 2 aday, 2 (Pro) 15 dk / 3, 3 (Dunya) 10 dk / 5, 4 (Efsane) 8 dk / 8. Amator dusunmez.
@@ -2064,6 +2130,7 @@ function thinkStep(st: MatchState) {
   }
 }
 export function setMentality(st: MatchState, side: 0 | 1, m: number): void {
+  rec(st, 'ment', side, [m]);
   m = clamp(Math.round(m), -2, 2);
   const t = st.teams[side];
   if (!st.baseTactic[side]) st.baseTactic[side] = { ...t.tactic };
@@ -2165,6 +2232,7 @@ function applySubs(st: MatchState, halfTime = false) {
 // otomatik degisiklik kurali: kaleci yoksa yedek kaleci; sakat oyuncu; 60. dakikadan sonra tukenen oyuncu
 // kullanicinin degisikligi: secilen oyuncu cikar, secilen yedek girer; ilk olu topta uygulanir
 export function userSub(st: MatchState, side: 0 | 1, outNum: number, innNum: number): boolean {
+  rec(st, 'sub', side, [outNum, innNum]);
   if (st.subsLeft[side] <= 0) return false;
   const out = st.players.find((p) => p.side === side && !p.off && p.num === outNum);
   const inn = st.bench[side].find((b) => b.off && !b.subbed && b.num === innNum);
@@ -2174,7 +2242,7 @@ export function userSub(st: MatchState, side: 0 | 1, outNum: number, innNum: num
 }
 export function pendingSubs(st: MatchState, side: 0 | 1) { return st.subQueue.filter((q) => q.side === side).map((q) => ({ out: q.out.num, inn: q.inn.num })); }
 // kullanici takiminda sakatlik / kaleci atilmasi karari kullanicinin (kisa duraklama paneli); sure dolarsa sayfa autoSubsFor cagirir
-export function autoSubsFor(st: MatchState, side: 0 | 1) { autoSubs(st, side); }
+export function autoSubsFor(st: MatchState, side: 0 | 1) { rec(st, 'auto', side, []); autoSubs(st, side); }
 export function suggestedSub(st: MatchState, side: 0 | 1, outNum: number): number | null {
   const out = st.players.find((p) => p.side === side && !p.off && p.num === outNum); if (!out) return null;
   const bench = st.bench[side].filter((b) => b.off && !b.subbed);
@@ -2244,6 +2312,7 @@ function say(st: MatchState, k: LogEntry['k'], s: 0 | 1, a?: PState | null, b?: 
 // ---------- Ana adim ----------
 export function step(st: MatchState) {
   if (st.done) return;
+  st.stepN++;
   FLIP = st.half % 2 === 0;
   const dt = st.dt;
   FACE_DT = dt;
@@ -2681,6 +2750,7 @@ function aiDecide(st: MatchState, c: PState) {
 
 // ---------- Kullanici kontrolu: API ----------
 export function setControl(st: MatchState, side: 0 | 1, mode: 'none' | 'team', assistPass: 0 | 1 | 2 = 0, assistShot: 0 | 1 | 2 = 1, opts: { autoSwitch?: boolean } = {}) {
+  rec(st, 'ctl', side, [mode, assistPass, assistShot, { ...opts }]);
   if (mode === 'none') { st.control[side] = null; return; }
   st.control[side] = { mode: 'team', player: null, input: { mx: 0, my: 0, sprint: false, press: false }, actAt: -9, assistPass, assistShot, cooldown: 0, switchCd: 0, holdStart: 0, lastInputT: 0, duelUntil: new Map(), autoSwitch: opts.autoSwitch ?? true, manualUntil: -9, lastSwitchT: -9, kick: null, pre: null, press50: null };
   pickControlled(st, side);
@@ -2688,12 +2758,13 @@ export function setControl(st: MatchState, side: 0 | 1, mode: 'none' | 'team', a
 export function setInput(st: MatchState, side: 0 | 1, input: UserInput) {
   const ctl = st.control[side];
   if (!ctl) return;
+  if (st.rec) { const key = JSON.stringify(input); if (key !== st.rec.last[side] || input.act) { st.rec.last[side] = key; rec(st, 'in', side, [input]); } }
   const act = input.act;
   ctl.input = { mx: input.mx, my: input.my, sprint: input.sprint, press: input.press, gkRush: input.gkRush, act: act ?? ctl.input.act, power: act ? input.power : ctl.input.power, ax: act ? input.ax : ctl.input.ax, ay: act ? input.ay : ctl.input.ay, curve: act ? input.curve : ctl.input.curve, tap: act ? input.tap : ctl.input.tap };
   if (act) ctl.actAt = st.t;
   if (act || hyp(input.mx, input.my) > 0.15) ctl.lastInputT = st.t;
 }
-export function setAutoSwitch(st: MatchState, side: 0 | 1, on: boolean) { const ctl = st.control[side]; if (ctl) ctl.autoSwitch = on; }
+export function setAutoSwitch(st: MatchState, side: 0 | 1, on: boolean) { rec(st, 'asw', side, [on]); const ctl = st.control[side]; if (ctl) ctl.autoSwitch = on; }
 export function controlledPlayer(st: MatchState, side: 0 | 1): PState | null { return st.control[side]?.player ?? null; }
 // kontrol edilen futbolcu: topa sahipken tasiyici, pas ucustayken alici, savunmada topa en yakin saha oyuncusu
 function pickControlled(st: MatchState, side: 0 | 1, exclude?: PState | null) {

@@ -86,6 +86,7 @@ body.play #mentBar { display: flex; }
 #pauseBox[hidden] { display: none; }
 #tacBtn { position: fixed; top: max(8px, env(safe-area-inset-top, 0px)); left: calc(max(10px, env(safe-area-inset-left, 0px)) + 250px); z-index: 950; display: none; font: 600 13px/1 var(--font-body); color: var(--chalk); background: rgba(10,12,16,.7); border: 1px solid rgba(255,255,255,.2); border-radius: 8px; padding: 9px 12px; }
 body.play #tacBtn { display: block; }
+body.replay #tacBtn, body.replay #mentBar { display: none !important; }
 #layerBtn { position: fixed; top: max(8px, env(safe-area-inset-top, 0px)); right: calc(max(10px, env(safe-area-inset-right, 0px)) + 132px); z-index: 950; display: none; font: 600 13px/1 var(--font-body); color: var(--muted); background: rgba(10,12,16,.7); border: 1px solid rgba(255,255,255,.2); border-radius: 8px; padding: 9px 12px; }
 #layerBtn[aria-pressed="true"] { color: var(--chalk); border-color: var(--warn); }
 body.play #layerBtn { display: block; }
@@ -813,6 +814,102 @@ function validateTeam(t, label) {
         }
     }
 }
+function rec(st, op, side, a) { if (st.rec)
+    st.rec.cmds.push({ k: st.stepN, op, s: side, a }); }
+function replayOf(st) {
+    if (!st.rec)
+        return null;
+    const { v, seed, knockout, teams, P: pp, cmds } = st.rec;
+    return { v, seed, knockout, teams, P: pp, cmds: cmds.slice(), steps: st.stepN, hash: stateHash(st), score: [st.stats[0].goals, st.stats[1].goals] };
+}
+// durum ozeti: top, oyuncular (konum, kondisyon), skor, saat; FNV-1a 32 bit (yuvarlanmis degerler: platformlar arasi ayni)
+function stateHash(st) {
+    let h = 0x811c9dc5 >>> 0;
+    const mix = (n) => { const v = Math.round(n * 100) | 0; for (let i = 0; i < 4; i++) {
+        h ^= (v >>> (i * 8)) & 0xff;
+        h = Math.imul(h, 0x01000193) >>> 0;
+    } };
+    mix(st.t);
+    mix(st.clock);
+    mix(st.ball.x);
+    mix(st.ball.y);
+    mix(st.ball.z);
+    mix(st.ball.vx);
+    mix(st.ball.vy);
+    for (const p of st.players) {
+        mix(p.x);
+        mix(p.y);
+        mix(p.k);
+        mix(p.off ? 1 : 0);
+    }
+    mix(st.stats[0].goals);
+    mix(st.stats[1].goals);
+    mix(st.stats[0].shots);
+    mix(st.stats[1].shots);
+    mix(st.events.length);
+    return h >>> 0;
+}
+function applyCmd(st, c) {
+    const s = c.s;
+    switch (c.op) {
+        case 'in':
+            setInput(st, s, c.a[0]);
+            break;
+        case 'tac':
+            setTactic(st, s, c.a[0], c.a[1]);
+            break;
+        case 'ment':
+            setMentality(st, s, c.a[0]);
+            break;
+        case 'duty':
+            setDuty(st, s, c.a[0], c.a[1]);
+            break;
+        case 'rules':
+            setRules(st, s, c.a[0]);
+            break;
+        case 'rot':
+            setRotations(st, s, c.a[0]);
+            break;
+        case 'sub':
+            userSub(st, s, c.a[0], c.a[1]);
+            break;
+        case 'auto':
+            autoSubsFor(st, s);
+            break;
+        case 'ctl':
+            setControl(st, s, c.a[0], c.a[1], c.a[2], c.a[3]);
+            break;
+        case 'asw':
+            setAutoSwitch(st, s, c.a[0]);
+            break;
+    }
+}
+// tekrar: kaydi bastan oynatir; onStep her adimdan sonra cagrilir (izleyici icin); maxSteps ile kismi tekrar
+function replayMatch(r, onStep, maxSteps) {
+    const savedP = JSON.parse(JSON.stringify(P));
+    Object.assign(P, JSON.parse(JSON.stringify(r.P)));
+    const teams = JSON.parse(JSON.stringify(r.teams));
+    const st = createMatch(teams[0], teams[1], r.seed, { knockout: r.knockout });
+    st.rec = null;
+    const n = Math.min(r.steps, maxSteps ?? r.steps);
+    let ci = 0;
+    while (st.stepN < n && !st.done) {
+        while (ci < r.cmds.length && r.cmds[ci].k <= st.stepN) {
+            applyCmd(st, r.cmds[ci]);
+            ci++;
+        }
+        step(st);
+        if (onStep)
+            onStep(st, st.stepN);
+    }
+    Object.assign(P, savedP);
+    return st;
+}
+function verifyReplay(r) {
+    const st = replayMatch(r);
+    const hash = stateHash(st);
+    return { ok: hash === r.hash && st.stats[0].goals === r.score[0] && st.stats[1].goals === r.score[1], hash, score: [st.stats[0].goals, st.stats[1].goals] };
+}
 function createMatch(a0, b0, seed, opts) {
     validateTeam(a0, a0.name ?? 'A');
     validateTeam(b0, b0.name ?? 'B');
@@ -917,6 +1014,8 @@ function createMatch(a0, b0, seed, opts) {
         phase: [0, 0],
         rot: [[], []],
         rotHome: new Map(),
+        stepN: 0,
+        rec: { v: 1, seed, knockout: !!opts?.knockout, teams: JSON.parse(JSON.stringify([a0, b0])), P: JSON.parse(JSON.stringify(P)), cmds: [], last: ['', ''] },
         reads: [null, null],
         zoneShots: [[0, 0, 0], [0, 0, 0]],
         zoneEntries: [[0, 0, 0], [0, 0, 0]],
@@ -953,9 +1052,11 @@ function createMatch(a0, b0, seed, opts) {
         seed,
         dt: P.dt,
     };
+    st._inTac = true;
     for (const sd of [0, 1])
         if (st.teams[sd].tactic.rotations)
             setRotations(st, sd, st.teams[sd].tactic.rotations);
+    st._inTac = false;
     kickoff(st, 0);
     return st;
 }
@@ -1028,6 +1129,8 @@ const s_stats = (st, side) => st.stats[side];
 const NO_DUTY = {};
 function dutyOf(st, p) { return st.teams[p.side].duties?.[p.num] ?? NO_DUTY; }
 function setRotations(st, side, cycles) {
+    if (st.rec && !st._inTac)
+        rec(st, 'rot', side, [cycles ? cycles.map((c) => [...c]) : undefined]);
     const t = st.teams[side];
     t.tactic = { ...t.tactic, rotations: cycles && cycles.length ? cycles.map((c) => [...c]) : undefined };
     const live = st.players.filter((p) => p.side === side && !p.off);
@@ -1153,7 +1256,7 @@ function rotStep(st) {
             applyRot(st, s);
     }
 }
-function setDuty(st, side, num, d) { const t = st.teams[side]; t.duties = { ...(t.duties ?? {}), [num]: { ...(t.duties?.[num] ?? {}), ...d } }; }
+function setDuty(st, side, num, d) { rec(st, 'duty', side, [num, { ...d }]); const t = st.teams[side]; t.duties = { ...(t.duties ?? {}), [num]: { ...(t.duties?.[num] ?? {}), ...d } }; }
 function tEff(st, side) {
     return st.teams[side].T - (st.clock < st.adaptUntil[side] ? 10 : 0);
 }
@@ -2250,6 +2353,7 @@ function separate(st) {
 function setTactic(st, side, patch, formation) {
     if (st.tacticChanges[side] >= 3)
         return false;
+    rec(st, 'tac', side, [JSON.parse(JSON.stringify(patch)), formation]);
     const t = st.teams[side];
     const formChange = !!formation && formation !== t.formation;
     if (formChange) {
@@ -2278,8 +2382,11 @@ function setTactic(st, side, patch, formation) {
             p.pos = pos[p.idx];
         }
     }
-    if (formChange || patch.rotations !== undefined)
+    if (formChange || patch.rotations !== undefined) {
+        st._inTac = true;
         setRotations(st, side, patch.rotations ?? t.tactic.rotations);
+        st._inTac = false;
+    }
     st.tacticChanges[side]++;
     st.adaptUntil[side] = st.clock + P.adaptMin * 60;
     st.events.push({ t: st.clock, type: 'tactic', side, text: formation ?? '' });
@@ -2377,7 +2484,7 @@ function rulesStep(st) {
         }
     }
 }
-function setRules(st, side, rules) { st.teams[side].rules = rules.slice(0, RULES_MAX); }
+function setRules(st, side, rules) { rec(st, 'rules', side, [JSON.parse(JSON.stringify(rules))]); st.teams[side].rules = rules.slice(0, RULES_MAX); }
 // Kolay seviye kaydiricisi: savunma (-2) .. hucum (+2); hat, pres, bek/orta saha cikisi, kosu ve tempo birlikte kayar; 1 oyun dk uyum, degisiklik hakkindan dusmez
 // ---------- Dusunen bot (mimari 2.1, 4. katman): gozlem -> hipotez -> (ic simulasyon) -> ayar ----------
 // Derinlik: 1 (Yari pro) 20 dk pencere / 2 aday, 2 (Pro) 15 dk / 3, 3 (Dunya) 10 dk / 5, 4 (Efsane) 8 dk / 8. Amator dusunmez.
@@ -2488,6 +2595,7 @@ function thinkStep(st) {
     }
 }
 function setMentality(st, side, m) {
+    rec(st, 'ment', side, [m]);
     m = clamp(Math.round(m), -2, 2);
     const t = st.teams[side];
     if (!st.baseTactic[side])
@@ -2612,6 +2720,7 @@ function applySubs(st, halfTime = false) {
 // otomatik degisiklik kurali: kaleci yoksa yedek kaleci; sakat oyuncu; 60. dakikadan sonra tukenen oyuncu
 // kullanicinin degisikligi: secilen oyuncu cikar, secilen yedek girer; ilk olu topta uygulanir
 function userSub(st, side, outNum, innNum) {
+    rec(st, 'sub', side, [outNum, innNum]);
     if (st.subsLeft[side] <= 0)
         return false;
     const out = st.players.find((p) => p.side === side && !p.off && p.num === outNum);
@@ -2623,7 +2732,7 @@ function userSub(st, side, outNum, innNum) {
 }
 function pendingSubs(st, side) { return st.subQueue.filter((q) => q.side === side).map((q) => ({ out: q.out.num, inn: q.inn.num })); }
 // kullanici takiminda sakatlik / kaleci atilmasi karari kullanicinin (kisa duraklama paneli); sure dolarsa sayfa autoSubsFor cagirir
-function autoSubsFor(st, side) { autoSubs(st, side); }
+function autoSubsFor(st, side) { rec(st, 'auto', side, []); autoSubs(st, side); }
 function suggestedSub(st, side, outNum) {
     const out = st.players.find((p) => p.side === side && !p.off && p.num === outNum);
     if (!out)
@@ -2706,6 +2815,7 @@ function say(st, k, s, a, b, c) {
 function step(st) {
     if (st.done)
         return;
+    st.stepN++;
     FLIP = st.half % 2 === 0;
     const dt = st.dt;
     FACE_DT = dt;
@@ -3241,6 +3351,7 @@ function aiDecide(st, c) {
 }
 // ---------- Kullanici kontrolu: API ----------
 function setControl(st, side, mode, assistPass = 0, assistShot = 1, opts = {}) {
+    rec(st, 'ctl', side, [mode, assistPass, assistShot, { ...opts }]);
     if (mode === 'none') {
         st.control[side] = null;
         return;
@@ -3252,6 +3363,13 @@ function setInput(st, side, input) {
     const ctl = st.control[side];
     if (!ctl)
         return;
+    if (st.rec) {
+        const key = JSON.stringify(input);
+        if (key !== st.rec.last[side] || input.act) {
+            st.rec.last[side] = key;
+            rec(st, 'in', side, [input]);
+        }
+    }
     const act = input.act;
     ctl.input = { mx: input.mx, my: input.my, sprint: input.sprint, press: input.press, gkRush: input.gkRush, act: act ?? ctl.input.act, power: act ? input.power : ctl.input.power, ax: act ? input.ax : ctl.input.ax, ay: act ? input.ay : ctl.input.ay, curve: act ? input.curve : ctl.input.curve, tap: act ? input.tap : ctl.input.tap };
     if (act)
@@ -3259,7 +3377,7 @@ function setInput(st, side, input) {
     if (act || hyp(input.mx, input.my) > 0.15)
         ctl.lastInputT = st.t;
 }
-function setAutoSwitch(st, side, on) { const ctl = st.control[side]; if (ctl)
+function setAutoSwitch(st, side, on) { rec(st, 'asw', side, [on]); const ctl = st.control[side]; if (ctl)
     ctl.autoSwitch = on; }
 function controlledPlayer(st, side) { return st.control[side]?.player ?? null; }
 // kontrol edilen futbolcu: topa sahipken tasiyici, pas ucustayken alici, savunmada topa en yakin saha oyuncusu
@@ -6075,8 +6193,10 @@ function frameBody(now) {
     let guard = 0;
     while (acc >= 1 && !st.done && guard++ < 200) {
       prev = snapshot();
-      if (PLAY.on) feedInput();
-      step(st);
+      if (REPLAY) { const c = REPLAY.rep.cmds; while (REPLAY.ci < c.length && c[REPLAY.ci].k <= st.stepN) applyCmd(st, c[REPLAY.ci++]); if (st.stepN >= REPLAY.rep.steps) { REPLAY.done = true; } }
+      else if (PLAY.on) feedInput();
+      if (REPLAY && REPLAY.done) { if (!st.done) { st.done = true; st.events.push({ t: st.clock, type: 'end', side: 0 }); } }
+      else step(st);
       acc -= 1;
       watchEvents();
       if (!Number.isFinite(st.ball.x) && !nanWarned) { nanWarned = true; console.error('Motor: top/oyuncu konumu NaN', st.players.filter((p) => !Number.isFinite(p.x)).map((p) => p.side + ':' + p.num)); }
@@ -6342,6 +6462,7 @@ function draw(alpha, now = performance.now()) {
 // Sol yarida yuzen joystick (dis halka = sprint); sag altta elmas duzeninde dort baglamsal buton.
 // Hucum: ust Ara, sag Sut, sol Orta, alt Pas. Savunma: ust Degistir, sag Kaydir, sol Mudahale, alt Baski (basili).
 // Vurus: butona basinca nisan oku acilir; ilk 12 px surukleme yon, yana kayma falso, basili tutma guc; birakinca vurus.
+let REPLAY = null; // { rep, ci, done } tekrar izlenirken
 const PLAY = { on: false, side: 0, camMode: 'full', minutes: 10, keys: 'arrows', autoSwitch: true, speed: 1.3, ball: 1.4, names: 'auto', t0: 0, paused: false, mode: 'team', hooks: null, endAt: 0 };
 let teamOverride = null; // uygulama katmani (Dilim 1): maci hazir TeamIn nesneleriyle baslatir
 const IN = { joyId: null, joyBase: null, mx: 0, my: 0, joyK: 0, press: false, acts: [], keys: new Set(), ptrBtn: new Map(), kick: null, kbKick: null, swDown: null, slideOver: null };
@@ -6593,9 +6714,9 @@ function startPlay() {
 function exitPlay() {
   if (!PLAY.on) return;
   if (PLAY.paused) togglePause();
-  PLAY.on = false; PLAY.endAt = 0; TAC.open = false; document.getElementById('tacPanel').hidden = true;
+  PLAY.on = false; PLAY.endAt = 0; TAC.open = false; document.getElementById('tacPanel').hidden = true; REPLAY = null;
   const hooks = PLAY.hooks; PLAY.hooks = null;
-  document.body.classList.remove('play', 'portrait');
+  document.body.classList.remove('play', 'portrait', 'replay');
   CAM.phone = false; CAM.overlay = false; CAM.mode = 'full';
   P.clockRate = 6; P.dt = 0.1; P.playSpeed = 1;
   IN.acts.length = 0; IN.press = false; IN.joyId = null; IN.mx = 0; IN.my = 0; IN.joyK = 0; IN.kick = null; IN.kbKick = null; IN.ptrBtn.clear();
@@ -6629,6 +6750,28 @@ window.FM = {
   exit: () => exitPlay(),
   setMode(m) { if (!PLAY.on) return; PLAY.mode = m; if (m === 'team') setControl(st, PLAY.side, 'team', PLAY.assistP ?? 0, PLAY.assistS ?? 1, { autoSwitch: PLAY.autoSwitch }); else setControl(st, PLAY.side, 'none'); },
   state: () => st,
+  replay: () => replayOf(st), // o anki macin kaydi (girdi dizisi + hash)
+  verify: (rep) => verifyReplay(rep),
+  // tekrar izleme: kayit ayni motorda bastan oynatilir; kontrol yok, kaydirici yok; hiz 1x
+  watchReplay(rep, o = {}) {
+    Object.assign(P, JSON.parse(JSON.stringify(rep.P)));
+    const teams = JSON.parse(JSON.stringify(rep.teams));
+    teamOverride = () => teams;
+    PLAY.on = true; PLAY.side = o.side ?? 0; PLAY.minutes = 90 / (rep.P.clockRate * rep.P.playSpeed); PLAY.keys = 'arrows'; PLAY.autoSwitch = false;
+    PLAY.speed = rep.P.playSpeed || 1.3; PLAY.ball = o.ball ?? 1.4; PLAY.names = o.names ?? 'auto'; PLAY.t0 = performance.now(); PLAY.paused = false; PLAY.mode = 'sim'; PLAY.hooks = { onEnd: o.onEnd, onExit: o.onExit }; PLAY.endAt = 0;
+    knockout = !!rep.knockout;
+    ment = 0; document.getElementById('mentOut').textContent = 'Tekrar';
+    document.body.classList.add('play');
+    CAM.phone = true; CAM.overlay = true;
+    applyCam(o.cam ?? 'full');
+    newMatch(rep.seed);
+    st.rec = null;
+    REPLAY = { rep, ci: 0, done: false };
+    document.body.classList.add('replay'); banner('TEKRAR', 'info', 'kayıttan oynatılıyor');
+    LAYER.on = true; document.getElementById('layerBtn').setAttribute('aria-pressed', true);
+    onResize();
+    speed = 1;
+  },
   setMent: (m) => setMent(m),
   pause: () => { if (!PLAY.paused) togglePause(); },
   resume: () => { if (PLAY.paused) togglePause(); },
@@ -6650,7 +6793,7 @@ document.getElementById('exitPlay').addEventListener('click', exitPlay);
 let ment = 0;
 const MENT_LABEL = { '-2': 'Otobüs', '-1': 'Savunma', '0': 'Dengeli', '1': 'Hücum', '2': 'Tam hücum' };
 function setMent(m) {
-  if (!st || !PLAY.on) return;
+  if (!st || !PLAY.on || REPLAY) return;
   ment = Math.max(-2, Math.min(2, m));
   setMentality(st, PLAY.side, ment);
   document.getElementById('mentOut').textContent = MENT_LABEL[String(ment)];
@@ -6673,7 +6816,7 @@ document.getElementById('pausePlay').addEventListener('click', togglePause);
 const TAC = { open: false, half: false, subOut: null, decide: null, timer: null, msg: '', tab: 'yaklasim', draft: null }; // decide: { kind: 'injury'|'red'|'gk', player, until(ms) }
 const TL = { press: ['Düşük', 'Orta', 'Yüksek'], line: ['Derin', 'Orta', 'Önde'], tempo: ['Yavaş', 'Normal', 'Hızlı'], style: ['Kısa pas', 'Dengeli', 'Direkt'], width: ['Dar', 'Normal', 'Geniş'] };
 function openTac(half = false, decide = null) {
-  if (!PLAY.on || st.done) return;
+  if (!PLAY.on || st.done || REPLAY) return;
   TAC.open = true; TAC.half = half; TAC.subOut = decide ? decide.player : null; TAC.decide = decide; TAC.draft = null; TAC.msg = '';
   TAC.tab = decide ? 'degisiklik' : (TAC.tab || 'yaklasim');
   if (TAC.timer) { clearInterval(TAC.timer); TAC.timer = null; }
@@ -7692,6 +7835,15 @@ SCREENS.room = (c) => { const { me, opp } = roomTeams(c); const st = APP.db.sett
     const sb = $('rSim'); if (sb) sb.onclick = () => startMatchFlow(c, me, opp, home, true);
   } }; };
 
+// son macin kaydi (girdi dizisi): rapor ekranindan tekrar izlenir ve dogrulanir (Dilim 2)
+function saveReplay(st) { try { const r = replayOf(st); if (r) localStorage.setItem('fm.lastReplay', JSON.stringify(r)); } catch (e) { console.error('replay kaydi', e); } }
+function loadReplay() { try { return JSON.parse(localStorage.getItem('fm.lastReplay') || 'null'); } catch (e) { return null; } }
+function watchLastReplay(c) {
+  const r = loadReplay(); if (!r) { toast('Kayıtlı tekrar yok'); return; }
+  document.body.classList.remove('app');
+  try { FM.watchReplay(r, { cam: APP.db.settings.cam, ball: APP.db.settings.ball, names: APP.db.settings.names, onEnd: () => { document.body.classList.add('app'); render(); }, onExit: () => { document.body.classList.add('app'); render(); } }); }
+  catch (e) { console.error(e); try { FM.exit(); } catch (e2) {} document.body.classList.add('app'); render(); toast('Tekrar açılamadı: ' + (e && e.message ? e.message : e)); }
+}
 function startMatchFlow(c, me, opp, home, instant) {
   const s = APP.db.settings;
   const teams = home ? [me, opp] : [opp, me];
@@ -7699,15 +7851,15 @@ function startMatchFlow(c, me, opp, home, instant) {
   if (home) me.home = true; else opp.home = true;
   const seed = (c.seed ?? (Date.now() % 1000000)) | 0;
   const finish = (st) => { const rep = buildReport(st, side, c); afterMatch(c, rep); go('report', { rep, c }, false); };
-  if (instant) { P.clockRate = 90 / (c.minutes || s.minutes); P.dt = 0.1; P.playSpeed = 1; const st = simulate(teams[0], teams[1], seed); P.clockRate = 6; finish(st); return; }
+  if (instant) { P.clockRate = 90 / (c.minutes || s.minutes); P.dt = 0.1; P.playSpeed = 1; const st = simulate(teams[0], teams[1], seed); P.clockRate = 6; localStorage.removeItem('fm.lastReplay'); finish(st); return; }
   // sahaya cikmadan once iki takimi dogrula; hata varsa uygulama ekraninda kal ve nedenini goster (eskiden gelistirici sayfasina dusuyordu)
   try { validateTeam(teams[0], teams[0].name); validateTeam(teams[1], teams[1].name); } catch (e) { console.error(e); toast('Maç başlatılamadı: ' + (e && e.message ? e.message : e)); return; }
   document.body.classList.remove('app');
   try {
     FM.startMatch({ teams, side, minutes: c.minutes || s.minutes, keys: s.keys, autoSwitch: s.autoSwitch, assistP: s.assistP, assistS: s.assistS, ball: s.ball, names: s.names, cam: s.cam, mode: s.mode, seed,
-      onEnd: (st) => { document.body.classList.add('app'); finish(st); },
+      onEnd: (st) => { document.body.classList.add('app'); saveReplay(st); finish(st); },
       onExit: (st) => { document.body.classList.add('app'); if (st && !st.done) { // terk edildi: kalan sure simule edilir
-        setControl(st, side, 'none'); let g = 0; while (!st.done && g++ < 40000) step(st); toast('Maç terk edildi: kalan süre simüle edildi'); } if (st) finish(st); else render(); } });
+        setControl(st, side, 'none'); let g = 0; while (!st.done && g++ < 40000) step(st); toast('Maç terk edildi: kalan süre simüle edildi'); } if (st) { saveReplay(st); finish(st); } else render(); } });
   } catch (e) {
     console.error(e); try { FM.exit(); } catch (e2) {} document.body.classList.add('app'); render(); toast('Maç başlatılamadı: ' + (e && e.message ? e.message : e));
   }
@@ -7745,9 +7897,12 @@ SCREENS.report = (c) => { const r = c.rep; const me = r.side; return { title: 'M
     <div class="card"><h3>Olaylar</h3>${r.events.length ? r.events.map((e) => `<div class="ev"><div class="t">${e.t}'</div><div>${e.type === 'half' ? '<span class="tag">Devre arası</span>' : `<span class="tag ${e.type === 'goal' ? 'y' : e.type === 'red' ? 'r' : e.type === 'yellow' ? 'o' : ''}">${esc(r.teams[e.side].short)}</span> ${esc(e.text)}${e.who ? ' · ' + esc(e.who) : ''}`}</div></div>`).join('') : '<p>Olay yok</p>'}</div>
     ${r.players ? `<div class="card"><h3>Oyuncular <small>${esc(r.teams[r.side].short)}</small></h3>${r.players.map((p) => `<div class="row" style="justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--line);font-size:13px"><span><b>${p.num}</b> ${esc(p.name)} <span class="muted">${POS_TR[p.pos] || p.pos}</span>${p.goals ? ' ⚽'.repeat(p.goals) : ''}${p.yellow ? ' 🟨' : ''}${p.red ? ' 🟥' : ''}${p.injured ? ' ✚' : ''}${p.subbed ? ' <span class="muted">↩</span>' : ''}</span><span class="muted">xG ${p.xg.toFixed(2)} · kond. ${p.k}</span></div>`).join('')}</div>` : ''}
     ${r.tactics ? `<div class="card"><h3>Taktik zaman çizelgesi</h3>${r.tactics.length ? r.tactics.map((e) => `<div class="ev"><div class="t">${e.t}'</div><div>${esc(e.text)}</div></div>`).join('') : '<p class="muted">Maç içinde taktik değişikliği yapılmadı.</p>'}<p class="muted">${(r.ruleCounts || []).length ? 'Kural tetiklenmeleri: ' + r.ruleCounts.map(([k, v]) => `${esc(k)} ×${v}`).join(', ') + ' · ' : ''}Rotasyon çevirmesi: sen ${r.rotations.count} · rakip ${r.rotations.oppCount}</p></div>` : ''}
+    <div class="card"><h3>Tekrar ve doğrulama <small>Dilim 2</small></h3><p>Maç, girdi dizisi olarak kaydedilir; aynı motor baştan koşturunca aynı sonucu verir. Online'da sunucu bu yolla skoru doğrular.</p><p class="muted" id="rVerify">${loadReplay() && !r.instant ? 'Doğrulanıyor…' : 'Anında simülasyonda kayıt yok.'}</p></div>
     <div class="card"><h3>Maç sonu <small>Faz 3</small></h3><p>Moral, yorgunluk, rol puanı, FM geliri, görev ve sezon pası ilerlemesi demoda yok. Tekrar oynatıcı ve paylaşım da sonra.</p></div>
   </div>
-`, foot: r.kind === 'mm' ? `<button class="btn prim" data-go="mmOpp">Tekrar oyna</button><button class="btn" id="rHome">Ana menü</button>` : `<button class="btn prim" data-go="solo">Lige dön</button>`, after: () => { const h = $('rHome'); if (h) h.onclick = () => { APP.stack.length = 0; go('home', {}, false); }; } }; };
+`, foot: `${loadReplay() && !r.instant ? '<button class="btn" id="rReplay">Tekrarı izle</button>' : ''}${r.kind === 'mm' ? `<button class="btn prim" data-go="mmOpp">Tekrar oyna</button><button class="btn" id="rHome">Ana menü</button>` : `<button class="btn prim" data-go="solo">Lige dön</button>`}`, after: () => { const h = $('rHome'); if (h) h.onclick = () => { APP.stack.length = 0; go('home', {}, false); }; const rp = $('rReplay'); if (rp) rp.onclick = () => watchLastReplay(c);
+    // dogrulama: kayit ayni motorda bastan kosturulur, hash ve skor karsilastirilir (sunucu dogrulamasinin yerel provasi)
+    const rv = $('rVerify'); if (rv) setTimeout(() => { try { const rep = loadReplay(); if (!rep) { rv.textContent = ''; return; } const t0 = performance.now(); const v = FM.verify(rep); rv.textContent = v.ok ? `Tekrar doğrulandı ✓ (${rep.cmds.length} komut, ${Math.round(performance.now() - t0)} ms)` : `Tekrar doğrulanamadı ✗ (hash ${v.hash} ≠ ${rep.hash})`; } catch (e) { rv.textContent = 'Doğrulama hatası: ' + e.message; } }, 50); } }; };
 
 // --- Solo Lig ---
 const SOLO_POOL = [
@@ -7946,7 +8101,7 @@ function appInit() {
 window.addEventListener('hashchange', () => { if (location.hash !== '#dev') { document.body.classList.add('app'); render(); } });
 appInit();
 </script>
-<div class="dev">demo · sürüm 02.11 00:16 · <a href="#dev" style="color:inherit" onclick="document.body.classList.remove('app')">geliştirici</a></div>
+<div class="dev">demo · sürüm 03.11 10:49 · <a href="#dev" style="color:inherit" onclick="document.body.classList.remove('app')">geliştirici</a></div>
 
 </body>
 </html>

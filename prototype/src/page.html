@@ -71,6 +71,7 @@ body.play #mentBar { display: flex; }
 #pauseBox[hidden] { display: none; }
 #tacBtn { position: fixed; top: max(8px, env(safe-area-inset-top, 0px)); left: calc(max(10px, env(safe-area-inset-left, 0px)) + 250px); z-index: 950; display: none; font: 600 13px/1 var(--font-body); color: var(--chalk); background: rgba(10,12,16,.7); border: 1px solid rgba(255,255,255,.2); border-radius: 8px; padding: 9px 12px; }
 body.play #tacBtn { display: block; }
+body.replay #tacBtn, body.replay #mentBar { display: none !important; }
 #layerBtn { position: fixed; top: max(8px, env(safe-area-inset-top, 0px)); right: calc(max(10px, env(safe-area-inset-right, 0px)) + 132px); z-index: 950; display: none; font: 600 13px/1 var(--font-body); color: var(--muted); background: rgba(10,12,16,.7); border: 1px solid rgba(255,255,255,.2); border-radius: 8px; padding: 9px 12px; }
 #layerBtn[aria-pressed="true"] { color: var(--chalk); border-color: var(--warn); }
 body.play #layerBtn { display: block; }
@@ -449,8 +450,10 @@ function frameBody(now) {
     let guard = 0;
     while (acc >= 1 && !st.done && guard++ < 200) {
       prev = snapshot();
-      if (PLAY.on) feedInput();
-      step(st);
+      if (REPLAY) { const c = REPLAY.rep.cmds; while (REPLAY.ci < c.length && c[REPLAY.ci].k <= st.stepN) applyCmd(st, c[REPLAY.ci++]); if (st.stepN >= REPLAY.rep.steps) { REPLAY.done = true; } }
+      else if (PLAY.on) feedInput();
+      if (REPLAY && REPLAY.done) { if (!st.done) { st.done = true; st.events.push({ t: st.clock, type: 'end', side: 0 }); } }
+      else step(st);
       acc -= 1;
       watchEvents();
       if (!Number.isFinite(st.ball.x) && !nanWarned) { nanWarned = true; console.error('Motor: top/oyuncu konumu NaN', st.players.filter((p) => !Number.isFinite(p.x)).map((p) => p.side + ':' + p.num)); }
@@ -716,6 +719,7 @@ function draw(alpha, now = performance.now()) {
 // Sol yarida yuzen joystick (dis halka = sprint); sag altta elmas duzeninde dort baglamsal buton.
 // Hucum: ust Ara, sag Sut, sol Orta, alt Pas. Savunma: ust Degistir, sag Kaydir, sol Mudahale, alt Baski (basili).
 // Vurus: butona basinca nisan oku acilir; ilk 12 px surukleme yon, yana kayma falso, basili tutma guc; birakinca vurus.
+let REPLAY = null; // { rep, ci, done } tekrar izlenirken
 const PLAY = { on: false, side: 0, camMode: 'full', minutes: 10, keys: 'arrows', autoSwitch: true, speed: 1.3, ball: 1.4, names: 'auto', t0: 0, paused: false, mode: 'team', hooks: null, endAt: 0 };
 let teamOverride = null; // uygulama katmani (Dilim 1): maci hazir TeamIn nesneleriyle baslatir
 const IN = { joyId: null, joyBase: null, mx: 0, my: 0, joyK: 0, press: false, acts: [], keys: new Set(), ptrBtn: new Map(), kick: null, kbKick: null, swDown: null, slideOver: null };
@@ -967,9 +971,9 @@ function startPlay() {
 function exitPlay() {
   if (!PLAY.on) return;
   if (PLAY.paused) togglePause();
-  PLAY.on = false; PLAY.endAt = 0; TAC.open = false; document.getElementById('tacPanel').hidden = true;
+  PLAY.on = false; PLAY.endAt = 0; TAC.open = false; document.getElementById('tacPanel').hidden = true; REPLAY = null;
   const hooks = PLAY.hooks; PLAY.hooks = null;
-  document.body.classList.remove('play', 'portrait');
+  document.body.classList.remove('play', 'portrait', 'replay');
   CAM.phone = false; CAM.overlay = false; CAM.mode = 'full';
   P.clockRate = 6; P.dt = 0.1; P.playSpeed = 1;
   IN.acts.length = 0; IN.press = false; IN.joyId = null; IN.mx = 0; IN.my = 0; IN.joyK = 0; IN.kick = null; IN.kbKick = null; IN.ptrBtn.clear();
@@ -1003,6 +1007,28 @@ window.FM = {
   exit: () => exitPlay(),
   setMode(m) { if (!PLAY.on) return; PLAY.mode = m; if (m === 'team') setControl(st, PLAY.side, 'team', PLAY.assistP ?? 0, PLAY.assistS ?? 1, { autoSwitch: PLAY.autoSwitch }); else setControl(st, PLAY.side, 'none'); },
   state: () => st,
+  replay: () => replayOf(st), // o anki macin kaydi (girdi dizisi + hash)
+  verify: (rep) => verifyReplay(rep),
+  // tekrar izleme: kayit ayni motorda bastan oynatilir; kontrol yok, kaydirici yok; hiz 1x
+  watchReplay(rep, o = {}) {
+    Object.assign(P, JSON.parse(JSON.stringify(rep.P)));
+    const teams = JSON.parse(JSON.stringify(rep.teams));
+    teamOverride = () => teams;
+    PLAY.on = true; PLAY.side = o.side ?? 0; PLAY.minutes = 90 / (rep.P.clockRate * rep.P.playSpeed); PLAY.keys = 'arrows'; PLAY.autoSwitch = false;
+    PLAY.speed = rep.P.playSpeed || 1.3; PLAY.ball = o.ball ?? 1.4; PLAY.names = o.names ?? 'auto'; PLAY.t0 = performance.now(); PLAY.paused = false; PLAY.mode = 'sim'; PLAY.hooks = { onEnd: o.onEnd, onExit: o.onExit }; PLAY.endAt = 0;
+    knockout = !!rep.knockout;
+    ment = 0; document.getElementById('mentOut').textContent = 'Tekrar';
+    document.body.classList.add('play');
+    CAM.phone = true; CAM.overlay = true;
+    applyCam(o.cam ?? 'full');
+    newMatch(rep.seed);
+    st.rec = null;
+    REPLAY = { rep, ci: 0, done: false };
+    document.body.classList.add('replay'); banner('TEKRAR', 'info', 'kayıttan oynatılıyor');
+    LAYER.on = true; document.getElementById('layerBtn').setAttribute('aria-pressed', true);
+    onResize();
+    speed = 1;
+  },
   setMent: (m) => setMent(m),
   pause: () => { if (!PLAY.paused) togglePause(); },
   resume: () => { if (PLAY.paused) togglePause(); },
@@ -1024,7 +1050,7 @@ document.getElementById('exitPlay').addEventListener('click', exitPlay);
 let ment = 0;
 const MENT_LABEL = { '-2': 'Otobüs', '-1': 'Savunma', '0': 'Dengeli', '1': 'Hücum', '2': 'Tam hücum' };
 function setMent(m) {
-  if (!st || !PLAY.on) return;
+  if (!st || !PLAY.on || REPLAY) return;
   ment = Math.max(-2, Math.min(2, m));
   setMentality(st, PLAY.side, ment);
   document.getElementById('mentOut').textContent = MENT_LABEL[String(ment)];
@@ -1047,7 +1073,7 @@ document.getElementById('pausePlay').addEventListener('click', togglePause);
 const TAC = { open: false, half: false, subOut: null, decide: null, timer: null, msg: '', tab: 'yaklasim', draft: null }; // decide: { kind: 'injury'|'red'|'gk', player, until(ms) }
 const TL = { press: ['Düşük', 'Orta', 'Yüksek'], line: ['Derin', 'Orta', 'Önde'], tempo: ['Yavaş', 'Normal', 'Hızlı'], style: ['Kısa pas', 'Dengeli', 'Direkt'], width: ['Dar', 'Normal', 'Geniş'] };
 function openTac(half = false, decide = null) {
-  if (!PLAY.on || st.done) return;
+  if (!PLAY.on || st.done || REPLAY) return;
   TAC.open = true; TAC.half = half; TAC.subOut = decide ? decide.player : null; TAC.decide = decide; TAC.draft = null; TAC.msg = '';
   TAC.tab = decide ? 'degisiklik' : (TAC.tab || 'yaklasim');
   if (TAC.timer) { clearInterval(TAC.timer); TAC.timer = null; }

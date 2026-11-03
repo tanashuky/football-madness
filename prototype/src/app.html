@@ -319,6 +319,15 @@ SCREENS.room = (c) => { const { me, opp } = roomTeams(c); const st = APP.db.sett
     const sb = $('rSim'); if (sb) sb.onclick = () => startMatchFlow(c, me, opp, home, true);
   } }; };
 
+// son macin kaydi (girdi dizisi): rapor ekranindan tekrar izlenir ve dogrulanir (Dilim 2)
+function saveReplay(st) { try { const r = replayOf(st); if (r) localStorage.setItem('fm.lastReplay', JSON.stringify(r)); } catch (e) { console.error('replay kaydi', e); } }
+function loadReplay() { try { return JSON.parse(localStorage.getItem('fm.lastReplay') || 'null'); } catch (e) { return null; } }
+function watchLastReplay(c) {
+  const r = loadReplay(); if (!r) { toast('Kayıtlı tekrar yok'); return; }
+  document.body.classList.remove('app');
+  try { FM.watchReplay(r, { cam: APP.db.settings.cam, ball: APP.db.settings.ball, names: APP.db.settings.names, onEnd: () => { document.body.classList.add('app'); render(); }, onExit: () => { document.body.classList.add('app'); render(); } }); }
+  catch (e) { console.error(e); try { FM.exit(); } catch (e2) {} document.body.classList.add('app'); render(); toast('Tekrar açılamadı: ' + (e && e.message ? e.message : e)); }
+}
 function startMatchFlow(c, me, opp, home, instant) {
   const s = APP.db.settings;
   const teams = home ? [me, opp] : [opp, me];
@@ -326,15 +335,15 @@ function startMatchFlow(c, me, opp, home, instant) {
   if (home) me.home = true; else opp.home = true;
   const seed = (c.seed ?? (Date.now() % 1000000)) | 0;
   const finish = (st) => { const rep = buildReport(st, side, c); afterMatch(c, rep); go('report', { rep, c }, false); };
-  if (instant) { P.clockRate = 90 / (c.minutes || s.minutes); P.dt = 0.1; P.playSpeed = 1; const st = simulate(teams[0], teams[1], seed); P.clockRate = 6; finish(st); return; }
+  if (instant) { P.clockRate = 90 / (c.minutes || s.minutes); P.dt = 0.1; P.playSpeed = 1; const st = simulate(teams[0], teams[1], seed); P.clockRate = 6; localStorage.removeItem('fm.lastReplay'); finish(st); return; }
   // sahaya cikmadan once iki takimi dogrula; hata varsa uygulama ekraninda kal ve nedenini goster (eskiden gelistirici sayfasina dusuyordu)
   try { validateTeam(teams[0], teams[0].name); validateTeam(teams[1], teams[1].name); } catch (e) { console.error(e); toast('Maç başlatılamadı: ' + (e && e.message ? e.message : e)); return; }
   document.body.classList.remove('app');
   try {
     FM.startMatch({ teams, side, minutes: c.minutes || s.minutes, keys: s.keys, autoSwitch: s.autoSwitch, assistP: s.assistP, assistS: s.assistS, ball: s.ball, names: s.names, cam: s.cam, mode: s.mode, seed,
-      onEnd: (st) => { document.body.classList.add('app'); finish(st); },
+      onEnd: (st) => { document.body.classList.add('app'); saveReplay(st); finish(st); },
       onExit: (st) => { document.body.classList.add('app'); if (st && !st.done) { // terk edildi: kalan sure simule edilir
-        setControl(st, side, 'none'); let g = 0; while (!st.done && g++ < 40000) step(st); toast('Maç terk edildi: kalan süre simüle edildi'); } if (st) finish(st); else render(); } });
+        setControl(st, side, 'none'); let g = 0; while (!st.done && g++ < 40000) step(st); toast('Maç terk edildi: kalan süre simüle edildi'); } if (st) { saveReplay(st); finish(st); } else render(); } });
   } catch (e) {
     console.error(e); try { FM.exit(); } catch (e2) {} document.body.classList.add('app'); render(); toast('Maç başlatılamadı: ' + (e && e.message ? e.message : e));
   }
@@ -372,9 +381,12 @@ SCREENS.report = (c) => { const r = c.rep; const me = r.side; return { title: 'M
     <div class="card"><h3>Olaylar</h3>${r.events.length ? r.events.map((e) => `<div class="ev"><div class="t">${e.t}'</div><div>${e.type === 'half' ? '<span class="tag">Devre arası</span>' : `<span class="tag ${e.type === 'goal' ? 'y' : e.type === 'red' ? 'r' : e.type === 'yellow' ? 'o' : ''}">${esc(r.teams[e.side].short)}</span> ${esc(e.text)}${e.who ? ' · ' + esc(e.who) : ''}`}</div></div>`).join('') : '<p>Olay yok</p>'}</div>
     ${r.players ? `<div class="card"><h3>Oyuncular <small>${esc(r.teams[r.side].short)}</small></h3>${r.players.map((p) => `<div class="row" style="justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--line);font-size:13px"><span><b>${p.num}</b> ${esc(p.name)} <span class="muted">${POS_TR[p.pos] || p.pos}</span>${p.goals ? ' ⚽'.repeat(p.goals) : ''}${p.yellow ? ' 🟨' : ''}${p.red ? ' 🟥' : ''}${p.injured ? ' ✚' : ''}${p.subbed ? ' <span class="muted">↩</span>' : ''}</span><span class="muted">xG ${p.xg.toFixed(2)} · kond. ${p.k}</span></div>`).join('')}</div>` : ''}
     ${r.tactics ? `<div class="card"><h3>Taktik zaman çizelgesi</h3>${r.tactics.length ? r.tactics.map((e) => `<div class="ev"><div class="t">${e.t}'</div><div>${esc(e.text)}</div></div>`).join('') : '<p class="muted">Maç içinde taktik değişikliği yapılmadı.</p>'}<p class="muted">${(r.ruleCounts || []).length ? 'Kural tetiklenmeleri: ' + r.ruleCounts.map(([k, v]) => `${esc(k)} ×${v}`).join(', ') + ' · ' : ''}Rotasyon çevirmesi: sen ${r.rotations.count} · rakip ${r.rotations.oppCount}</p></div>` : ''}
+    <div class="card"><h3>Tekrar ve doğrulama <small>Dilim 2</small></h3><p>Maç, girdi dizisi olarak kaydedilir; aynı motor baştan koşturunca aynı sonucu verir. Online'da sunucu bu yolla skoru doğrular.</p><p class="muted" id="rVerify">${loadReplay() && !r.instant ? 'Doğrulanıyor…' : 'Anında simülasyonda kayıt yok.'}</p></div>
     <div class="card"><h3>Maç sonu <small>Faz 3</small></h3><p>Moral, yorgunluk, rol puanı, FM geliri, görev ve sezon pası ilerlemesi demoda yok. Tekrar oynatıcı ve paylaşım da sonra.</p></div>
   </div>
-`, foot: r.kind === 'mm' ? `<button class="btn prim" data-go="mmOpp">Tekrar oyna</button><button class="btn" id="rHome">Ana menü</button>` : `<button class="btn prim" data-go="solo">Lige dön</button>`, after: () => { const h = $('rHome'); if (h) h.onclick = () => { APP.stack.length = 0; go('home', {}, false); }; } }; };
+`, foot: `${loadReplay() && !r.instant ? '<button class="btn" id="rReplay">Tekrarı izle</button>' : ''}${r.kind === 'mm' ? `<button class="btn prim" data-go="mmOpp">Tekrar oyna</button><button class="btn" id="rHome">Ana menü</button>` : `<button class="btn prim" data-go="solo">Lige dön</button>`}`, after: () => { const h = $('rHome'); if (h) h.onclick = () => { APP.stack.length = 0; go('home', {}, false); }; const rp = $('rReplay'); if (rp) rp.onclick = () => watchLastReplay(c);
+    // dogrulama: kayit ayni motorda bastan kosturulur, hash ve skor karsilastirilir (sunucu dogrulamasinin yerel provasi)
+    const rv = $('rVerify'); if (rv) setTimeout(() => { try { const rep = loadReplay(); if (!rep) { rv.textContent = ''; return; } const t0 = performance.now(); const v = FM.verify(rep); rv.textContent = v.ok ? `Tekrar doğrulandı ✓ (${rep.cmds.length} komut, ${Math.round(performance.now() - t0)} ms)` : `Tekrar doğrulanamadı ✗ (hash ${v.hash} ≠ ${rep.hash})`; } catch (e) { rv.textContent = 'Doğrulama hatası: ' + e.message; } }, 50); } }; };
 
 // --- Solo Lig ---
 const SOLO_POOL = [
