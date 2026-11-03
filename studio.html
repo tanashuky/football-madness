@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Football Madness · Kozmetik Stüdyosu</title>
+<style>
+  :root { --bg: #0e1512; --panel: #16201b; --line: rgba(255,255,255,.12); --chalk: #e9efe9; --muted: #9aa89f; --good: #5ad28a; --warn: #f0c35a; --bad: #e5483f; --grass: #2f7a3e; --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--chalk); font: 14px/1.45 var(--font); }
+  header { display: flex; align-items: center; justify-content: space-between; padding: 12px 18px; border-bottom: 1px solid var(--line); gap: 12px; flex-wrap: wrap; }
+  header h1 { margin: 0; font-size: 18px; letter-spacing: .04em; }
+  header h1 span { color: var(--muted); font-weight: 400; }
+  main { display: grid; grid-template-columns: minmax(280px, 380px) 1fr; gap: 16px; padding: 16px 18px; }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+  .panel h2 { margin: 0 0 8px; font-size: 14px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  #drop { border: 2px dashed rgba(255,255,255,.3); border-radius: 12px; padding: 22px; text-align: center; color: var(--muted); cursor: pointer; transition: border-color .15s; }
+  #drop.over { border-color: var(--good); color: var(--chalk); }
+  #drop { display: block; }
+  #drop input { display: none; }
+  .card .crest svg, .card .shirt svg, #vsA svg, #vsB svg, #big svg, .file .thumb svg { width: 100%; height: 100%; display: block; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; background: #223029; color: var(--chalk); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; font: 600 13px var(--font); cursor: pointer; }
+  .btn:hover { border-color: rgba(255,255,255,.35); }
+  .btn.prim { background: var(--warn); color: #1b1a0c; border-color: transparent; }
+  .btn.sm { padding: 5px 9px; font-size: 12px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .colors { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
+  .colors label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+  .colors input[type=color] { width: 100%; height: 36px; border: 1px solid var(--line); border-radius: 8px; background: #0b100e; padding: 2px; }
+  .presets { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+  .presets button { width: 28px; height: 28px; border-radius: 50%; border: 2px solid rgba(255,255,255,.4); cursor: pointer; }
+  #files { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+  .file { display: grid; grid-template-columns: 36px 1fr auto; gap: 8px; align-items: center; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
+  .file.sel { border-color: var(--warn); }
+  .file .thumb { width: 36px; height: 36px; border-radius: 6px; background: #0b100e; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .file .thumb svg, .file .thumb img { width: 100%; height: 100%; object-fit: contain; }
+  .file .nm { font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .file .meta { font-size: 11px; color: var(--muted); }
+  .badge { font-size: 11px; padding: 2px 7px; border-radius: 999px; border: 1px solid var(--line); }
+  .badge.ok { color: var(--good); border-color: rgba(90,210,138,.5); }
+  .badge.bad { color: var(--bad); border-color: rgba(229,72,63,.5); }
+  .badge.warn { color: var(--warn); border-color: rgba(240,195,90,.5); }
+  #checks { margin: 8px 0 0; padding: 0; list-style: none; font-size: 12px; }
+  #checks li { padding: 3px 0; display: flex; gap: 8px; }
+  #checks li::before { content: '•'; }
+  #checks li.ok { color: var(--good); } #checks li.bad { color: var(--bad); } #checks li.warn { color: var(--warn); }
+  .previews { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+  .pv { background: #0b100e; border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+  .pv h3 { margin: 0 0 8px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+  .pitch { position: relative; background: var(--grass); background-image: repeating-linear-gradient(90deg, rgba(255,255,255,.04) 0 40px, transparent 40px 80px); border: 2px solid rgba(233,239,233,.6); border-radius: 6px; aspect-ratio: 105 / 68; width: 100%; overflow: hidden; }
+  .pitch::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; border-left: 2px solid rgba(233,239,233,.5); }
+  .pitch::after { content: ''; position: absolute; left: 50%; top: 50%; width: 18%; aspect-ratio: 1; transform: translate(-50%, -50%); border: 2px solid rgba(233,239,233,.5); border-radius: 50%; }
+  .dot { position: absolute; width: 26px; height: 26px; margin: -13px 0 0 -13px; border-radius: 50%; border: 2px solid #fff; display: flex; align-items: center; justify-content: center; font: 700 11px/1 var(--font); color: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.5); overflow: hidden; }
+  .dot svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .dot b { position: relative; text-shadow: 0 1px 2px rgba(0,0,0,.8); }
+  .card { width: 240px; height: 300px; border-radius: 14px; background: linear-gradient(180deg, #1d2a23, #0f1713); border: 1px solid var(--line); display: flex; flex-direction: column; align-items: center; justify-content: flex-end; padding: 12px; position: relative; overflow: hidden; margin: 0 auto; }
+  .card .shirt { width: 170px; height: 170px; position: absolute; top: 24px; left: 35px; }
+  .card .crest { width: 44px; height: 44px; position: absolute; top: 12px; left: 12px; }
+  .card .name { font: 700 16px var(--font); } .card .pos { color: var(--muted); font-size: 12px; }
+  .big { width: 100%; max-width: 320px; margin: 0 auto; display: block; }
+  .meta-form { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+  .meta-form label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); }
+  .meta-form input, .meta-form select { background: #0b100e; color: var(--chalk); border: 1px solid var(--line); border-radius: 8px; padding: 7px 8px; font: 13px var(--font); }
+  .meta-form label.full { grid-column: 1 / -1; }
+  textarea { width: 100%; min-height: 80px; background: #0b100e; color: var(--chalk); border: 1px solid var(--line); border-radius: 8px; padding: 8px; font: 12px ui-monospace, monospace; }
+  .muted { color: var(--muted); }
+  .hint { font-size: 12px; color: var(--muted); margin: 6px 0 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>FOOTBALL MADNESS <span>· Kozmetik Stüdyosu</span></h1>
+  <div class="row">
+    <button class="btn sm" id="tplKit">Forma şablonu indir</button>
+    <button class="btn sm" id="tplCrest">Arma şablonu indir</button>
+    <button class="btn sm" id="samples">Örnekleri yükle</button>
+    <a class="btn sm" href="index.html">Oyuna dön</a>
+  </div>
+</header>
+<main>
+  <section>
+    <div class="panel">
+      <h2>Dosyalar</h2>
+      <label id="drop">SVG / PNG / JSON dosyalarını buraya sürükle ya da tıkla<br><span class="muted">kit_* · crest_* · ball_* · stadium_* · goalfx_* · frame_* · flag_*</span><input type="file" id="pick" multiple accept=".svg,.png,.json"></label>
+      <div id="files"></div>
+      <p class="hint">Dosya adı türü belirler: <code>kit_hoops_v1.svg</code>, <code>crest_shield_v1.svg</code>, <code>ball_classic_v1.png</code>… Küçük harf, Türkçe karakter yok.</p>
+    </div>
+    <div class="panel" style="margin-top:14px">
+      <h2>Renkler <span class="muted" style="text-transform:none;letter-spacing:0">(yer tutucular #FF0000 · #00FF00 · #0000FF)</span></h2>
+      <div class="colors">
+        <label>Ana<input type="color" id="c1" value="#c8102e"></label>
+        <label>İkinci<input type="color" id="c2" value="#ffffff"></label>
+        <label>Üçüncü<input type="color" id="c3" value="#1b1b1b"></label>
+      </div>
+      <div class="presets" id="presets"></div>
+      <p class="hint">Oyuncu bu üç rengi kendi seçer; desen renkten bağımsız olmalı. Kontrastı birkaç kombinasyonla kontrol et.</p>
+    </div>
+    <div class="panel" style="margin-top:14px">
+      <h2>Kontrol</h2>
+      <div id="status" class="muted">Dosya seç.</div>
+      <ul id="checks"></ul>
+    </div>
+    <div class="panel" style="margin-top:14px">
+      <h2>Katalog satırı</h2>
+      <div class="meta-form">
+        <label>Ad (TR)<input id="mTr" placeholder="Çubuklu"></label>
+        <label>Ad (EN)<input id="mEn" placeholder="Hoops"></label>
+        <label>Kademe<select id="mTier"><option>A</option><option>B</option><option>C</option><option>D</option></select></label>
+        <label>Sezon<input id="mSeason" type="number" value="1" min="1"></label>
+        <label class="full">Açıklama<input id="mDesc" placeholder="Kısa açıklama"></label>
+      </div>
+      <div class="row" style="margin-top:8px"><button class="btn sm" id="addRow">Satırı ekle</button><button class="btn sm" id="dlCsv">katalog.csv indir</button><button class="btn sm" id="dlZip">Geçen dosyaları indir</button></div>
+      <textarea id="csv" readonly>dosya,ad_tr,ad_en,aciklama,kademe,sezon</textarea>
+    </div>
+  </section>
+  <section>
+    <div class="panel">
+      <h2>Önizleme</h2>
+      <div class="previews">
+        <div class="pv"><h3>Sahada</h3><div class="pitch" id="pitch"></div><p class="hint">Oyuncu 26 px daire: forma yalnız ana renk + ikinci renk + desen olarak okunur.</p></div>
+        <div class="pv"><h3>Kadro kartı</h3><div class="card" id="card"><div class="crest" id="cardCrest"></div><div class="shirt" id="cardShirt"></div><div class="name">Koç</div><div class="pos">Forvet · 9</div></div></div>
+        <div class="pv"><h3>Büyük</h3><div id="big" class="big"></div><p class="hint" id="bigHint"></p></div>
+        <div class="pv"><h3>Maç önü</h3><div class="row" style="justify-content:center;gap:18px"><div id="vsA" style="width:96px;height:96px"></div><b style="font-size:22px">vs</b><div id="vsB" style="width:96px;height:96px"></div></div><p class="hint">Rakip arma ile yan yana okunabilirlik.</p></div>
+      </div>
+    </div>
+  </section>
+</main>
+<script>
+// ---- yardimcilar ----
+const $ = (id) => document.getElementById(id);
+const PH = { '#ff0000': 'c1', '#00ff00': 'c2', '#0000ff': 'c3', 'red': 'c1', 'lime': 'c2', 'blue': 'c3' };
+const state = { files: [], sel: null };
+const TYPES = { kit: 'Forma deseni', crest: 'Arma', ball: 'Top', stadium: 'Stadyum teması', goalfx: 'Gol kutlaması', frame: 'Kart çerçevesi', flag: 'Bayrak' };
+const typeOf = (name) => { const m = /^(kit|crest|ball|stadium|goalfx|frame|flag)_[a-z0-9]+(?:_[a-z0-9]+)*_v\d+\.(svg|png|json)$/.exec(name); return m ? { type: m[1], ext: m[2] } : null; };
+function recolor(svgText) {
+  const c = { c1: $('c1').value, c2: $('c2').value, c3: $('c3').value };
+  return svgText.replace(/#ff0000|#f00\b|#00ff00|#0f0\b|#0000ff|#00f\b|\bred\b|\blime\b|\bblue\b/gi, (m) => { const k = m.toLowerCase(); const key = k === '#f00' ? '#ff0000' : k === '#0f0' ? '#00ff00' : k === '#00f' ? '#0000ff' : k; return c[PH[key]] ?? m; });
+}
+// jersey clip path (400x500 viewBox): forma siluet
+const SHIRT = 'M120 40 L170 20 Q200 40 230 20 L280 40 L360 90 L330 170 L290 150 L290 470 L110 470 L110 150 L70 170 L40 90 Z';
+function shirtSvg(patternSvg) {
+  // desen SVG'si forma siluetiyle kirpilir; desen yoksa duz ana renk
+  const inner = patternSvg ? patternSvg.replace(/<\?xml[^>]*>/, '').replace(/<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '') : `<rect width="400" height="500" fill="${$('c1').value}"/>`;
+  return `<svg viewBox="0 0 400 500" xmlns="http://www.w3.org/2000/svg"><defs><clipPath id="sh"><path d="${SHIRT}"/></clipPath></defs><g clip-path="url(#sh)">${inner}</g><path d="${SHIRT}" fill="none" stroke="rgba(0,0,0,.55)" stroke-width="6"/><path d="M170 20 Q200 60 230 20" fill="none" stroke="rgba(0,0,0,.45)" stroke-width="5"/></svg>`;
+}
+function dotSvg(patternSvg) {
+  const inner = patternSvg ? patternSvg.replace(/<\?xml[^>]*>/, '').replace(/<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '') : `<rect width="400" height="500" fill="${$('c1').value}"/>`;
+  return `<svg viewBox="100 120 200 200" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">${inner}</svg>`;
+}
+// ---- dogrulama ----
+function validate(f) {
+  const checks = [];
+  const t = typeOf(f.name);
+  if (!t) { checks.push(['bad', 'Dosya adı kurala uymuyor: tür_ad_vN.uzantı (küçük harf, Türkçe karakter yok)']); return { ok: false, checks, type: null }; }
+  checks.push(['ok', `Tür: ${TYPES[t.type]} (${t.ext})`]);
+  const kb = f.size / 1024;
+  const maxKb = t.ext === 'svg' ? 50 : t.ext === 'json' ? 200 : t.type === 'stadium' ? 1500 : 200;
+  checks.push([kb <= maxKb ? 'ok' : 'bad', `Boyut ${kb.toFixed(1)} KB (sınır ${maxKb} KB)`]);
+  const expectExt = { kit: 'svg', crest: 'svg', frame: 'svg', flag: 'svg', ball: 'png', stadium: 'png', goalfx: 'json' }[t.type];
+  if (t.ext !== expectExt && !(t.type === 'ball' && t.ext === 'svg')) checks.push(['bad', `${TYPES[t.type]} için beklenen uzantı .${expectExt}`]);
+  if (t.ext === 'svg') {
+    const doc = new DOMParser().parseFromString(f.text, 'image/svg+xml');
+    const root = doc.documentElement;
+    if (root.nodeName !== 'svg' || doc.querySelector('parsererror')) { checks.push(['bad', 'SVG çözümlenemedi']); return { ok: false, checks, type: t.type }; }
+    const vb = (root.getAttribute('viewBox') || '').split(/[\s,]+/).map(Number);
+    const want = { kit: [400, 500], crest: [512, 512], frame: [240, 300], flag: [300, 200], ball: [128, 128] }[t.type];
+    if (vb.length === 4 && want && vb[2] === want[0] && vb[3] === want[1]) checks.push(['ok', `viewBox ${vb[2]}×${vb[3]}`]); else checks.push(['bad', `viewBox ${vb.length === 4 ? vb[2] + '×' + vb[3] : 'yok'}; beklenen ${want ? want.join('×') : '-'}`]);
+    for (const tag of ['text', 'image', 'filter', 'foreignObject', 'script', 'style']) { const n = doc.getElementsByTagName(tag).length; if (n) checks.push([tag === 'style' ? 'warn' : 'bad', `<${tag}> kullanılmış (${n}): ${tag === 'text' ? 'yollara çevir' : tag === 'style' ? 'satır içi fill/stroke tercih edilir' : 'izin yok'}`]); }
+    const low = f.text.toLowerCase();
+    const hasPH = /#ff0000|#f00\b|\bred\b/.test(low), hasPH2 = /#00ff00|#0f0\b|\blime\b/.test(low);
+    if (t.type === 'kit' || t.type === 'crest') { checks.push([hasPH ? 'ok' : 'bad', hasPH ? 'Ana renk yer tutucusu (#FF0000) var' : 'Ana renk yer tutucusu (#FF0000) yok — renkler oyuncu tarafından seçilir']); checks.push([hasPH2 ? 'ok' : 'warn', hasPH2 ? 'İkinci renk yer tutucusu var' : 'İkinci renk yer tutucusu (#00FF00) yok (tek renkli desen olabilir)']); }
+    const other = (low.match(/#[0-9a-f]{6}\b/g) || []).filter((h) => !['#ff0000', '#00ff00', '#0000ff', '#000000', '#ffffff'].includes(h));
+    if ((t.type === 'kit' || t.type === 'crest') && other.length) checks.push(['warn', `Sabit renkler var (${[...new Set(other)].slice(0, 4).join(', ')}): yalnız kontur/gri için kullan`]);
+    if (t.type === 'crest') { const els = doc.querySelectorAll('path, circle, rect, polygon, ellipse'); checks.push([els.length ? 'ok' : 'bad', `${els.length} şekil`]); }
+  }
+  if (t.ext === 'png' && f.img) {
+    const want = { ball: [128, 128], stadium: [2048, 1365] }[t.type];
+    const okDim = want && f.img.width === want[0] && f.img.height === want[1];
+    checks.push([okDim ? 'ok' : 'bad', `${f.img.width}×${f.img.height} px${want ? ' (beklenen ' + want.join('×') + ')' : ''}`]);
+  }
+  if (t.ext === 'json') { try { const j = JSON.parse(f.text); checks.push([j.v !== undefined && j.layers ? 'ok' : 'warn', j.v !== undefined && j.layers ? `Lottie v${j.v}, ${j.layers.length} katman, ${j.op - j.ip} kare` : 'Lottie yapısı tanınmadı']); } catch (e) { checks.push(['bad', 'JSON çözümlenemedi']); } }
+  return { ok: !checks.some((c) => c[0] === 'bad'), checks, type: t.type };
+}
+// ---- dosya yukleme ----
+async function addFiles(list) {
+  for (const file of list) {
+    const f = { name: file.name.toLowerCase(), size: file.size, text: '', img: null, blob: file };
+    const t = typeOf(f.name);
+    if (!t || t.ext !== 'png') f.text = await file.text();
+    if (t && t.ext === 'png') await new Promise((res) => { const im = new Image(); im.onload = () => { f.img = im; res(); }; im.onerror = res; im.src = URL.createObjectURL(file); });
+    f.v = validate(f);
+    state.files = state.files.filter((x) => x.name !== f.name); state.files.push(f);
+    state.sel = f;
+  }
+  renderFiles(); renderPreview();
+}
+function renderFiles() {
+  $('files').innerHTML = state.files.map((f, i) => `<div class="file ${f === state.sel ? 'sel' : ''}" data-i="${i}"><div class="thumb">${thumb(f)}</div><div><div class="nm">${f.name}</div><div class="meta">${f.v.type ? TYPES[f.v.type] : '?'} · ${(f.size / 1024).toFixed(1)} KB</div></div><span class="badge ${f.v.ok ? 'ok' : 'bad'}">${f.v.ok ? 'geçti' : 'hata'}</span></div>`).join('');
+  for (const el of document.querySelectorAll('.file')) el.onclick = () => { state.sel = state.files[+el.dataset.i]; renderFiles(); renderPreview(); };
+}
+function thumb(f) { if (f.img) return `<img src="${f.img.src}">`; if (f.name.endsWith('.svg')) return recolor(f.text); return '<span class="muted">json</span>'; }
+// ---- onizleme ----
+function renderPreview() {
+  const f = state.sel;
+  $('status').textContent = f ? (f.v.ok ? `${f.name}: geçti` : `${f.name}: düzeltme gerekli`) : 'Dosya seç.';
+  $('checks').innerHTML = f ? f.v.checks.map(([k, m]) => `<li class="${k}">${m}</li>`).join('') : '';
+  const kit = state.files.find((x) => x.v.type === 'kit' && (x === f || !f || f.v.type !== 'kit')) || state.files.find((x) => x.v.type === 'kit');
+  const crest = state.files.find((x) => x.v.type === 'crest' && (x === f || !f || f.v.type !== 'crest')) || state.files.find((x) => x.v.type === 'crest');
+  const kitSvg = kit ? recolor(kit.text) : null, crestSvg = crest ? recolor(crest.text) : null;
+  // saha: 11 oyuncu
+  const pos = [[4, 34], [30, 9], [22, 26], [22, 42], [30, 59], [38, 34], [47, 21], [47, 47], [64, 10], [70, 34], [64, 58]];
+  const opp = [[101, 34], [75, 59], [83, 42], [83, 26], [75, 9], [67, 34], [58, 47], [58, 21], [41, 58], [35, 34], [41, 10]];
+  $('pitch').innerHTML = pos.map(([x, y], i) => `<div class="dot" style="left:${x / 105 * 100}%;top:${y / 68 * 100}%">${i === 0 ? '<svg viewBox="0 0 1 1"><rect width="1" height="1" fill="#7a2622"/></svg>' : dotSvg(kitSvg)}<b>${i + 1}</b></div>`).join('') + opp.map(([x, y], i) => `<div class="dot" style="left:${x / 105 * 100}%;top:${y / 68 * 100}%;background:${i === 0 ? '#22406f' : '#2b5fb8'}"><b>${i + 1}</b></div>`).join('');
+  $('cardShirt').innerHTML = shirtSvg(kitSvg);
+  $('cardCrest').innerHTML = crestSvg || '';
+  $('vsA').innerHTML = crestSvg || `<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" fill="${$('c1').value}" stroke="#fff" stroke-width="3"/></svg>`;
+  $('vsB').innerHTML = `<svg viewBox="0 0 100 100"><path d="M50 6 L90 20 V52 Q90 82 50 94 Q10 82 10 52 V20 Z" fill="#2b5fb8" stroke="#fff" stroke-width="3"/><circle cx="50" cy="50" r="16" fill="#fff"/></svg>`;
+  if (!f) { $('big').innerHTML = ''; $('bigHint').textContent = ''; return; }
+  if (f.img) { $('big').innerHTML = `<img src="${f.img.src}" style="width:100%;border-radius:8px;background:#0b100e">`; $('bigHint').textContent = f.v.type === 'ball' ? 'Sahada 10–16 px: desen dönüşte okunmalı.' : 'Saha çizgileri ve oyuncular kodla çizilir; tema yalnız çevre ve zemin tonu.'; }
+  else if (f.name.endsWith('.svg')) { $('big').innerHTML = f.v.type === 'kit' ? shirtSvg(recolor(f.text)) : recolor(f.text); $('bigHint').textContent = f.v.type === 'kit' ? 'Forma siluetiyle kırpılmış desen; renkler soldaki seçiciden.' : f.v.type === 'crest' ? '512 px, 448 px güvenli alan; arma otomatik yerleşir.' : ''; }
+  else { $('big').innerHTML = '<p class="muted">Lottie önizlemesi oyunda; burada yalnız yapı kontrolü.</p>'; $('bigHint').textContent = ''; }
+}
+// ---- renkler ----
+const PRESETS = [['#c8102e', '#ffffff', '#1b1b1b'], ['#1d4ed8', '#ffffff', '#f59e0b'], ['#111827', '#f3f4f6', '#ef4444'], ['#15803d', '#ffffff', '#111827'], ['#f59e0b', '#1f2937', '#ffffff'], ['#7c3aed', '#fde68a', '#111827'], ['#0ea5e9', '#0f172a', '#ffffff'], ['#ffffff', '#111827', '#c8102e']];
+$('presets').innerHTML = PRESETS.map((p, i) => `<button title="${p.join(' ')}" data-i="${i}" style="background:linear-gradient(135deg, ${p[0]} 50%, ${p[1]} 50%)"></button>`).join('');
+$('presets').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; const p = PRESETS[+b.dataset.i]; $('c1').value = p[0]; $('c2').value = p[1]; $('c3').value = p[2]; renderFiles(); renderPreview(); };
+for (const id of ['c1', 'c2', 'c3']) $(id).oninput = () => { renderFiles(); renderPreview(); };
+// ---- drop ----
+const drop = $('drop');
+drop.ondragover = (e) => { e.preventDefault(); drop.classList.add('over'); };
+drop.ondragleave = () => drop.classList.remove('over');
+drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove('over'); addFiles([...e.dataTransfer.files]); };
+$('pick').onchange = (e) => addFiles([...e.target.files]);
+// ---- sablonlar ve ornekler ----
+const KIT_TPL = `<?xml version="1.0" encoding="UTF-8"?>
+<!-- Football Madness forma deseni sablonu. viewBox 400x500. Renkler: #FF0000 ana, #00FF00 ikinci, #0000FF ucuncu (oyunda oyuncunun sectigi renkle degistirilir).
+     Forma silueti oyunda kirpilir; deseni tum alana ciz. Metin, bitmap, filtre yok. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 500" width="400" height="500">
+  <rect width="400" height="500" fill="#FF0000"/>
+  <!-- desen buraya: ornek yatay cubuk -->
+  <g fill="#00FF00"><rect y="90" width="400" height="50"/><rect y="190" width="400" height="50"/><rect y="290" width="400" height="50"/><rect y="390" width="400" height="50"/></g>
+  <!-- siluet rehberi (teslimde silinebilir, zararsiz) -->
+  <path d="${SHIRT}" fill="none" stroke="#000000" stroke-opacity=".25" stroke-width="2"/>
+</svg>`;
+const CREST_TPL = `<?xml version="1.0" encoding="UTF-8"?>
+<!-- Football Madness arma sablonu. viewBox 512x512, guvenli alan 448 px (kenarlardan 32 px). Renkler: #FF0000 ana, #00FF00 ikinci, #0000FF ucuncu. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <path d="M256 36 L448 96 V272 Q448 416 256 476 Q64 416 64 272 V96 Z" fill="#FF0000" stroke="#000000" stroke-width="10"/>
+  <path d="M256 70 L416 120 V270 Q416 390 256 440 Q96 390 96 270 V120 Z" fill="#00FF00"/>
+  <circle cx="256" cy="256" r="70" fill="#0000FF"/>
+  <!-- guvenli alan rehberi -->
+  <rect x="32" y="32" width="448" height="448" fill="none" stroke="#000000" stroke-opacity=".2" stroke-dasharray="8 8"/>
+</svg>`;
+function download(name, text, type = 'image/svg+xml') { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; a.click(); }
+$('tplKit').onclick = () => download('kit_template_v1.svg', KIT_TPL);
+$('tplCrest').onclick = () => download('crest_template_v1.svg', CREST_TPL);
+const SAMPLES = {
+  'kit_plain_v1.svg': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 500"><rect width="400" height="500" fill="#FF0000"/><rect x="0" y="0" width="400" height="24" fill="#00FF00"/></svg>`,
+  'kit_hoops_v1.svg': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 500"><rect width="400" height="500" fill="#FF0000"/><g fill="#00FF00"><rect y="90" width="400" height="50"/><rect y="190" width="400" height="50"/><rect y="290" width="400" height="50"/><rect y="390" width="400" height="50"/></g></svg>`,
+  'kit_stripes_v1.svg': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 500"><rect width="400" height="500" fill="#FF0000"/><g fill="#00FF00"><rect x="60" width="40" height="500"/><rect x="140" width="40" height="500"/><rect x="220" width="40" height="500"/><rect x="300" width="40" height="500"/></g></svg>`,
+  'kit_sash_v1.svg': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 500"><rect width="400" height="500" fill="#FF0000"/><polygon points="0,0 120,0 400,420 400,500 320,500 0,120" fill="#00FF00"/></svg>`,
+  'kit_halves_v1.svg': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 500"><rect width="400" height="500" fill="#FF0000"/><rect x="200" width="200" height="500" fill="#00FF00"/><rect x="0" y="0" width="400" height="22" fill="#0000FF"/></svg>`,
+  'kit_chest_v1.svg': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 500"><rect width="400" height="500" fill="#FF0000"/><rect y="150" width="400" height="90" fill="#00FF00"/><rect y="170" width="400" height="12" fill="#0000FF"/><rect y="218" width="400" height="12" fill="#0000FF"/></svg>`,
+  'crest_shield_v1.svg': CREST_TPL.replace(/<!--[\s\S]*?-->/g, '').replace(/<rect x="32"[^>]*\/>/, ''),
+  'crest_circle_v1.svg': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><circle cx="256" cy="256" r="220" fill="#FF0000" stroke="#000000" stroke-width="10"/><circle cx="256" cy="256" r="170" fill="#00FF00"/><polygon points="256,150 286,230 370,230 302,280 326,362 256,312 186,362 210,280 142,230 226,230" fill="#0000FF"/></svg>`,
+};
+$('samples').onclick = () => addFiles(Object.entries(SAMPLES).map(([n, t]) => new File([t], n, { type: 'image/svg+xml' })));
+// ---- katalog ----
+$('addRow').onclick = () => { const f = state.sel; if (!f) return; const q = (s) => '"' + String(s || '').replace(/"/g, '""') + '"'; $('csv').value += `\n${f.name},${q($('mTr').value)},${q($('mEn').value)},${q($('mDesc').value)},${$('mTier').value},${$('mSeason').value}`; };
+$('dlCsv').onclick = () => download('katalog.csv', $('csv').value, 'text/csv');
+$('dlZip').onclick = () => { for (const f of state.files) if (f.v.ok) download(f.name, f.blob || f.text, f.blob ? f.blob.type : 'image/svg+xml'); };
+renderPreview();
+</script>
+</body>
+</html>
