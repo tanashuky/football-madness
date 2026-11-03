@@ -96,7 +96,59 @@ body.app.play #app { display: none; }
 const APP = { key: 'fm.demo.v1', db: null, screen: 'login', stack: [], ctx: {} };
 const DEF_SETTINGS = { keys: 'arrows', assistP: 0, assistS: 1, autoSwitch: true, ball: 1.4, names: 'auto', cam: 'full', mode: 'team', minutes: 10 };
 function dbLoad() { try { APP.db = JSON.parse(localStorage.getItem(APP.key)) || null; } catch (e) { APP.db = null; } if (!APP.db) APP.db = { account: null, settings: { ...DEF_SETTINGS }, team: null, solo: null, roster: null, mm: { elo: 1000, last: null, played: 0 } }; APP.db.settings = { ...DEF_SETTINGS, ...(APP.db.settings || {}) }; }
-function dbSave() { try { localStorage.setItem(APP.key, JSON.stringify(APP.db)); } catch (e) {} }
+function dbSave() { APP.db.updatedAt = Date.now(); try { localStorage.setItem(APP.key, JSON.stringify(APP.db)); } catch (e) {} CLOUD.schedulePush(); }
+// ---------- Bulut (Dilim 2b): hesap + bulut kayit. Supabase anahtari verilince calisir; yoksa her sey yerelde kalir. ----------
+// Yapilandirma: FM_CLOUD sabiti (derlemede doldurulur) ya da localStorage 'fm.cloud' ({url, anon}) ile gecersiz kilinir.
+const FM_CLOUD = { url: '__SUPABASE_URL__', anon: '__SUPABASE_ANON__' };
+const CLOUD = {
+  sb: null, user: null, state: 'off', // off | loading | ready | error
+  cfg() { try { const o = JSON.parse(localStorage.getItem('fm.cloud') || 'null'); if (o && o.url && o.anon) return o; } catch (e) {} return FM_CLOUD.url && !FM_CLOUD.url.startsWith('__') ? FM_CLOUD : null; },
+  async init() {
+    const cfg = this.cfg(); if (!cfg) { this.state = 'off'; return; }
+    this.state = 'loading';
+    try {
+      const mod = window.__supabaseMock ? window.__supabaseMock : await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm');
+      this.sb = mod.createClient(cfg.url, cfg.anon, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
+      const { data } = await this.sb.auth.getSession();
+      this.user = data?.session?.user ?? null;
+      this.sb.auth.onAuthStateChange((_ev, session) => { const was = !!this.user; this.user = session?.user ?? null; if (!was && this.user) this.afterSignIn(); if (APP.screen === 'settings' || APP.screen === 'login') render(); });
+      this.state = 'ready';
+      if (this.user) await this.pull();
+    } catch (e) { console.error('bulut', e); this.state = 'error'; }
+    if (APP.screen === 'login' || APP.screen === 'settings') render();
+  },
+  label() { if (!this.user) return 'Bağlı değil'; const p = this.user.app_metadata?.provider || 'e-posta'; return `${this.user.email || this.user.id.slice(0, 8)} · ${p === 'email' ? 'e-posta' : p}`; },
+  async signInOAuth(provider) { if (!this.sb) return; const { error } = await this.sb.auth.signInWithOAuth({ provider, options: { redirectTo: location.origin + location.pathname } }); if (error) toast('Giriş hatası: ' + error.message); },
+  async signInEmail(email) { if (!this.sb) return; const { error } = await this.sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname } }); toast(error ? 'Hata: ' + error.message : 'Giriş bağlantısı e-postana gönderildi'); },
+  async signOut() { if (!this.sb) return; await this.sb.auth.signOut(); this.user = null; toast('Çıkış yapıldı; kayıt bu cihazda duruyor'); render(); },
+  // ilk giris: bulutta kayit varsa ve yereldekinden yeniyse (ya da yerel hesap yoksa) bulut kazanir; yoksa yerel buluta yazilir
+  async afterSignIn() { const r = await this.pull(); if (!r) await this.push(); toast('Hesap bağlandı: ' + this.label()); },
+  async pull() {
+    if (!this.sb || !this.user) return false;
+    const { data, error } = await this.sb.from('saves').select('data, updated_at').eq('profile', this.user.id).maybeSingle();
+    if (error) { console.error(error); return false; }
+    if (!data) return false;
+    const cloudAt = new Date(data.updated_at).getTime(), localAt = APP.db.updatedAt || 0;
+    if (!APP.db.account || cloudAt > localAt) { APP.db = { ...data.data, updatedAt: cloudAt }; try { localStorage.setItem(APP.key, JSON.stringify(APP.db)); } catch (e) {} ensureRoster(); if (APP.screen === 'login' && APP.db.account) go('home', {}, false); else render(); toast('Bulut kaydı yüklendi'); return true; }
+    return true;
+  },
+  _timer: null,
+  schedulePush() { if (!this.sb || !this.user) return; clearTimeout(this._timer); this._timer = setTimeout(() => this.push(), 1500); },
+  async push() {
+    if (!this.sb || !this.user) return;
+    const { error } = await this.sb.from('saves').upsert({ profile: this.user.id, data: APP.db, updated_at: new Date(APP.db.updatedAt || Date.now()).toISOString() });
+    if (error) { console.error('push', error); this.lastErr = error.message; } else this.lastPush = Date.now();
+    if (APP.screen === 'settings') { const el = $('cloudStatus'); if (el) el.textContent = this.statusText(); }
+  },
+  statusText() { if (this.state === 'off') return 'Bulut yapılandırılmadı (demo: kayıt yalnız bu cihazda).'; if (this.state === 'loading') return 'Bağlanıyor…'; if (this.state === 'error') return 'Bulut hatası; kayıt yerelde.'; if (!this.user) return 'Giriş yapılmadı; kayıt yalnız bu cihazda.'; return `${this.label()} · ${this.lastErr ? 'son eşitleme hatası: ' + this.lastErr : this.lastPush ? 'eşitlendi ' + new Date(this.lastPush).toLocaleTimeString('tr-TR') : 'eşitleniyor…'}`; },
+};
+function authButtons() {
+  if (CLOUD.state === 'off') return '';
+  if (CLOUD.user) return `<p class="muted">Hesap: ${esc(CLOUD.label())}</p>`;
+  return `<div class="row" style="justify-content:center"><button class="btn" data-oauth="google">Google ile</button><button class="btn" data-oauth="apple">Apple ile</button></div>
+    <div class="row" style="justify-content:center;margin-top:6px"><input id="emailIn" type="email" placeholder="e-posta" style="background:#0b100e;color:var(--chalk);border:1px solid var(--line);border-radius:8px;padding:9px 10px;font:14px var(--font-body)"><button class="btn" id="emailGo">Bağlantı gönder</button></div>`;
+}
+function bindAuth() { for (const b of document.querySelectorAll('[data-oauth]')) b.onclick = () => CLOUD.signInOAuth(b.dataset.oauth); const eg = $('emailGo'); if (eg) eg.onclick = () => { const v = $('emailIn').value.trim(); if (v) CLOUD.signInEmail(v); }; }
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const $ = (id) => document.getElementById(id);
 function toast(msg) { const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg; $('app').appendChild(t); setTimeout(() => t.remove(), 2200); }
@@ -239,10 +291,10 @@ $('aBody').addEventListener('click', (e) => { const b = e.target.closest('[data-
 SCREENS.login = () => ({ title: 'Football <span>Madness</span>', noBack: true, html: `
   <div class="center">
     <div class="logo">Football <span>Madness</span></div>
-    <p class="muted">Dilim 1 demo · tek dokunuşla misafir girişi. Google, Apple ve e-posta girişi Faz 3'te.</p>
-    <div class="row"><button class="btn prim" id="guest">Misafir olarak başla</button></div>
-    <p class="muted">Kayıt bu cihazda tutulur; hesaba bağlama sonra.</p>
-  </div>`, after: () => { $('guest').onclick = () => { if (!APP.db.account) go('setup', {}, false); else go('home', {}, false); }; } });
+    <div class="row"><button class="btn prim" id="guest">${APP.db.account ? 'Devam et' : 'Misafir olarak başla'}</button></div>
+    ${authButtons()}
+    <p class="muted">${CLOUD.state === 'off' ? 'Kayıt bu cihazda tutulur; hesaba bağlama bulut açılınca.' : CLOUD.user ? 'Kayıt bulutta; her cihazdan devam edebilirsin.' : 'Hesap bağlarsan kayıt buluta alınır; misafir devam edersen bu cihazda kalır, sonra bağlayabilirsin.'}</p>
+  </div>`, after: () => { $('guest').onclick = () => { if (!APP.db.account) go('setup', {}, false); else go('home', {}, false); }; bindAuth(); } });
 
 SCREENS.setup = () => ({ title: 'Kulüp kurulumu', noBack: true, html: `
   <div class="cards">
@@ -569,15 +621,17 @@ SCREENS.settings = () => { const s = APP.db.settings; const sel = (id, k, opts) 
       ${sel('Varsayılan oyun modu', 'mode', [['team', 'Team play'], ['sim', 'Total simulation']])}
     </div></div>
     <div class="card"><h3>Tanı <small>hata kaydı</small></h3>${(() => { let e = null; try { e = JSON.parse(localStorage.getItem('fm.lastError') || 'null'); } catch (x) {} return e ? `<p class="muted">${new Date(e.t).toLocaleString('tr-TR')} · ${esc(e.build || '')}</p><pre style="white-space:pre-wrap;word-break:break-word;font-size:11px;background:rgba(0,0,0,.25);padding:8px;border-radius:8px;max-height:180px;overflow:auto">${esc('[' + e.where + '] ' + e.msg)}</pre><div class="row"><button class="btn sm" id="errClr">Kaydı sil</button></div>` : '<p>Kayıtlı hata yok.</p>'; })()}</div>
-    <div class="card"><h3>Hesap</h3><p>Misafir hesabı · ${esc(APP.db.account?.club.name || '')}. Ses, dil, bildirimler, medya izinleri ve hesap silme Faz 3'te.</p><div class="row"><button class="btn ghost" id="reset">Demoyu sıfırla</button><button class="btn ghost" id="devp">Geliştirici sayfası</button></div></div>
+    <div class="card"><h3>Hesap ve bulut kaydı</h3><p>${esc(APP.db.account?.club.name || '')} · <span id="cloudStatus">${esc(CLOUD.statusText())}</span></p>${authButtons()}<div class="row" style="margin-top:8px">${CLOUD.user ? '<button class="btn sm" id="cloudSync">Şimdi eşitle</button><button class="btn sm ghost" id="cloudOut">Çıkış</button>' : ''}<button class="btn ghost" id="reset">Demoyu sıfırla</button><button class="btn ghost" id="devp">Geliştirici sayfası</button></div><p class="muted">Ses, dil, bildirimler, medya izinleri ve hesap silme Faz 3'te.</p></div>
   </div>`, after: () => { for (const el of document.querySelectorAll('.sk')) el.onchange = () => { let v = el.value; if (v === 'true') v = true; else if (v === 'false') v = false; else if (!isNaN(+v) && el.dataset.k !== 'keys') v = +v; APP.db.settings[el.dataset.k] = v; dbSave(); };
     $('reset').onclick = () => { if (confirm('Tüm demo kaydı silinsin mi?')) { localStorage.removeItem(APP.key); location.reload(); } };
+    bindAuth(); const cs = $('cloudSync'); if (cs) cs.onclick = async () => { await CLOUD.push(); toast('Eşitlendi'); }; const co = $('cloudOut'); if (co) co.onclick = () => CLOUD.signOut();
     const ec = $('errClr'); if (ec) ec.onclick = () => { localStorage.removeItem('fm.lastError'); go('settings', {}, false); };
     $('devp').onclick = () => { document.body.classList.remove('app'); location.hash = '#dev'; }; } }; };
 
 // --- baslangic ---
 function appInit() {
   dbLoad();
+  CLOUD.init();
   if (location.hash === '#dev') return; // gelistirici sayfasi (eski test sayfasi)
   document.body.classList.add('app');
   if (!APP.db.account) go('login', {}, false); else go('home', {}, false);

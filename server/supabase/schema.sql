@@ -128,3 +128,12 @@ create policy "own inventory read" on inventory for select using (exists (select
 create policy "friends" on friendships for all using (auth.uid() = a or auth.uid() = b);
 create policy "own purchases read" on purchases for select using (auth.uid() = profile);
 -- Not: FM/PP/gg/elo sütunları istemciden güncellenmez: ayrı bir "clubs_client_update" görünümü ya da kolon düzeyi yetkiyle kısıtlanır (deploy adımında).
+
+-- Bulut kayit (Dilim 2b ilk adim): istemcinin yerel kaydinin tamami (jsonb); normalize tablolar Sürüm 1'de doldurulur
+create table if not exists saves (
+  profile uuid primary key references auth.users(id) on delete cascade,
+  data jsonb not null,
+  updated_at timestamptz default now()
+);
+alter table saves enable row level security;
+create policy "own save" on saves for all using (auth.uid() = profile) with check (auth.uid() = profile);
