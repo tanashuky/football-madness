@@ -1,0 +1,31 @@
+# Supabase deploy: server/ ya da motor degisince Edge Function'i yayinlar; migrasyonlar server/supabase/migrations/ altindan uygulanir.
+name: supabase-deploy
+on:
+  push:
+    branches: [main]
+    paths: ['server/**', 'prototype/src/engine.ts', '.github/workflows/supabase.yml']
+  workflow_dispatch:
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      PROJECT_REF: hukoepbvntsksefzguxl
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Motoru fonksiyona kopyala (tek kaynak)
+        run: cp prototype/src/engine.ts server/supabase/functions/verify-match/engine.ts
+      - name: Edge Function deploy
+        working-directory: server
+        run: supabase functions deploy verify-match --project-ref "$PROJECT_REF" --no-verify-jwt=false
+      - name: Migrasyonlar (varsa)
+        if: ${{ env.SUPABASE_DB_PASSWORD != '' }}
+        working-directory: server
+        env:
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          supabase link --project-ref "$PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+          supabase db push
