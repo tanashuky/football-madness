@@ -979,13 +979,14 @@ function exitPlay() {
   const hooks = PLAY.hooks; PLAY.hooks = null;
   document.body.classList.remove('play', 'portrait', 'replay');
   CAM.phone = false; CAM.overlay = false; CAM.mode = 'full';
-  P.clockRate = 6; P.dt = 0.1; P.playSpeed = 1;
   IN.acts.length = 0; IN.press = false; IN.joyId = null; IN.mx = 0; IN.my = 0; IN.joyK = 0; IN.kick = null; IN.kbKick = null; IN.ptrBtn.clear();
   fitCanvas();
   teamOverride = null;
   const fin = st;
-  newMatch(seed);
+  // terk edilen macin kalan suresi ayni P ile simule edilmeli (kayit/tekrar tutarliligi): onExit once, P sifirlama sonra
   if (hooks && hooks.onExit) hooks.onExit(fin);
+  P.clockRate = 6; P.dt = 0.1; P.playSpeed = 1;
+  newMatch(seed);
 }
 // ---------- Uygulama API'si (Dilim 1 demo katmani) ----------
 // startMatch: hazir TeamIn'lerle maci baslatir; mode 'team' (Team play) ya da 'sim' (Total simulation: kontrol yok, izleme);
