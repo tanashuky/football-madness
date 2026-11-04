@@ -20,7 +20,7 @@ jobs:
         run: cp prototype/src/engine.ts server/supabase/functions/verify-match/engine.ts
       - name: Edge Function deploy
         working-directory: server
-        run: supabase functions deploy verify-match --project-ref "$PROJECT_REF" --no-verify-jwt=false
+        run: supabase functions deploy verify-match --project-ref "$PROJECT_REF" --yes
       - name: Migrasyonlar (varsa)
         if: ${{ env.SUPABASE_DB_PASSWORD != '' }}
         working-directory: server
@@ -28,4 +28,4 @@ jobs:
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
           supabase link --project-ref "$PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
-          supabase db push
+          supabase db push --yes
