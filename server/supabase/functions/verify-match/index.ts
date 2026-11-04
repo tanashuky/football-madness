@@ -17,14 +17,17 @@ Deno.serve(async (req) => {
     const t0 = Date.now();
     const v = verifyReplay(replay);
     const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
-    const { data: club } = await admin.from('clubs').select('id').eq('owner', u.user.id).single();
-    const row = { kind, minutes, home: club?.id ?? null, seed: replay.seed, reported_score: replay.score, verified_score: v.score, reported_hash: replay.hash, verified_hash: v.hash, status: v.ok ? 'verified' : 'rejected', verified_at: new Date().toISOString() };
+    let { data: club } = await admin.from('clubs').select('id').eq('owner', u.user.id).maybeSingle();
+    if (!club) { const t = replay.teams?.[body.side ?? 0] ?? {}; const ins = await admin.from('clubs').insert({ owner: u.user.id, name: t.name ?? 'Kulüp', short: t.short ?? 'KLP', color: t.color ?? null }).select('id').single(); club = ins.data; }
+    const row = { kind: kind ?? 'friendly', minutes: minutes ?? 10, home: club?.id ?? null, opp_template: body.opp ?? null, seed: replay.seed, reported_score: replay.score, verified_score: v.score, reported_hash: replay.hash, verified_hash: v.hash, status: v.ok ? 'verified' : 'rejected', verified_at: new Date().toISOString() };
     const { data: m, error } = await admin.from('matches').insert(row).select('id').single();
     if (error) return new Response(error.message, { status: 500 });
     // kayıt dosyası (gzip) depoya: replays/<id>.json.gz
-    const gz = new Response(new Blob([JSON.stringify(replay)]).stream().pipeThrough(new CompressionStream('gzip')));
-    await admin.storage.from('replays').upload(`${m.id}.json.gz`, await gz.arrayBuffer(), { contentType: 'application/gzip' });
-    await admin.from('matches').update({ replay_path: `replays/${m.id}.json.gz` }).eq('id', m.id);
+    try {
+      const gz = new Response(new Blob([JSON.stringify(replay)]).stream().pipeThrough(new CompressionStream('gzip')));
+      const up = await admin.storage.from('replays').upload(`${m.id}.json.gz`, await gz.arrayBuffer(), { contentType: 'application/gzip' });
+      if (!up.error) await admin.from('matches').update({ replay_path: `replays/${m.id}.json.gz` }).eq('id', m.id);
+    } catch (e) { console.error('replay upload', e); }
     return Response.json({ id: m.id, ok: v.ok, score: v.score, ms: Date.now() - t0 });
   } catch (e) {
     return new Response(String(e), { status: 500 });
