@@ -99,7 +99,7 @@ function dbLoad() { try { APP.db = JSON.parse(localStorage.getItem(APP.key)) || 
 function dbSave() { APP.db.updatedAt = Date.now(); try { localStorage.setItem(APP.key, JSON.stringify(APP.db)); } catch (e) {} CLOUD.schedulePush(); }
 // ---------- Bulut (Dilim 2b): hesap + bulut kayit. Supabase anahtari verilince calisir; yoksa her sey yerelde kalir. ----------
 // Yapilandirma: FM_CLOUD sabiti (derlemede doldurulur) ya da localStorage 'fm.cloud' ({url, anon}) ile gecersiz kilinir.
-const FM_CLOUD = { url: '__SUPABASE_URL__', anon: '__SUPABASE_ANON__' };
+const FM_CLOUD = { url: '__SUPABASE_URL__', anon: '__SUPABASE_ANON__', providers: '__SUPABASE_PROVIDERS__' }; // providers: 'email' | 'email,google,apple' (saglayici Supabase'de acilinca)
 const CLOUD = {
   sb: null, user: null, state: 'off', // off | loading | ready | error
   cfg() { try { const o = JSON.parse(localStorage.getItem('fm.cloud') || 'null'); if (o && o.url && o.anon) return o; } catch (e) {} return FM_CLOUD.url && !FM_CLOUD.url.startsWith('__') ? FM_CLOUD : null; },
@@ -145,7 +145,8 @@ const CLOUD = {
 function authButtons() {
   if (CLOUD.state === 'off') return '';
   if (CLOUD.user) return `<p class="muted">Hesap: ${esc(CLOUD.label())}</p>`;
-  return `<div class="row" style="justify-content:center"><button class="btn" data-oauth="google">Google ile</button><button class="btn" data-oauth="apple">Apple ile</button></div>
+  const prov = String(FM_CLOUD.providers || '').startsWith('__') ? 'email' : FM_CLOUD.providers;
+  return `<div class="row" style="justify-content:center">${prov.includes('google') ? '<button class="btn" data-oauth="google">Google ile</button>' : ''}${prov.includes('apple') ? '<button class="btn" data-oauth="apple">Apple ile</button>' : ''}</div>
     <div class="row" style="justify-content:center;margin-top:6px"><input id="emailIn" type="email" placeholder="e-posta" style="background:#0b100e;color:var(--chalk);border:1px solid var(--line);border-radius:8px;padding:9px 10px;font:14px var(--font-body)"><button class="btn" id="emailGo">Bağlantı gönder</button></div>`;
 }
 function bindAuth() { for (const b of document.querySelectorAll('[data-oauth]')) b.onclick = () => CLOUD.signInOAuth(b.dataset.oauth); const eg = $('emailGo'); if (eg) eg.onclick = () => { const v = $('emailIn').value.trim(); if (v) CLOUD.signInEmail(v); }; }
