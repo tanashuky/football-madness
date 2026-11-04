@@ -7691,7 +7691,9 @@ const CLOUD = {
     this.lastVerify = { state: 'pending' }; const t0 = performance.now();
     try {
       const { data, error } = await this.sb.functions.invoke('verify-match', { body: { kind: c?.kind === 'solo' ? 'solo_league' : 'friendly', minutes: c?.minutes || APP.db.settings.minutes, side: c?.home === false ? 1 : 0, opp: c?.tpl || null, replay: rep } });
-      this.lastVerify = error ? { state: 'error', msg: error.message || String(error) } : { state: 'done', ok: !!data?.ok, score: data?.score, ms: data?.ms, total: Math.round(performance.now() - t0), id: data?.id };
+      let msg = error ? (error.message || String(error)) : '';
+      if (error && error.context && typeof error.context.text === 'function') { try { const body = await error.context.text(); if (body) msg += ' — ' + body.slice(0, 300); msg += ` (HTTP ${error.context.status})`; } catch (e2) {} }
+      this.lastVerify = error ? { state: 'error', msg } : { state: 'done', ok: !!data?.ok, score: data?.score, ms: data?.ms, total: Math.round(performance.now() - t0), id: data?.id };
     } catch (e) { this.lastVerify = { state: 'error', msg: e.message || String(e) }; }
     const el = $('rServer'); if (el) el.textContent = this.verifyText();
   },
@@ -8196,7 +8198,7 @@ function appInit() {
 window.addEventListener('hashchange', () => { if (location.hash !== '#dev') { document.body.classList.add('app'); render(); } });
 appInit();
 </script>
-<div class="dev">demo · sürüm 04.11 14:43 · <a href="#dev" style="color:inherit" onclick="document.body.classList.remove('app')">geliştirici</a></div>
+<div class="dev">demo · sürüm 04.11 23:53 · <a href="#dev" style="color:inherit" onclick="document.body.classList.remove('app')">geliştirici</a></div>
 
 </body>
 </html>
