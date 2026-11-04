@@ -484,6 +484,7 @@ function watchEvents() {
     else if (e.type === 'yellow') banner('SARI KART', 'yellow', `${tm.short} · #${e.player}`);
     else if (e.type === 'red') { banner('KIRMIZI KART', 'red', `${tm.short} · #${e.player}`); if (PLAY.on && PLAY.hooks && e.side === PLAY.side) { const isGk = !!pl && pl.pos === 'GK'; setTimeout(() => openTac(false, { kind: isGk ? 'gk' : 'red', player: e.player, until: performance.now() + 15000 }), 700); } }
     else if (e.type === 'penalty') banner('PENALTI', 'info', tm.short);
+    else if (e.type === 'miss' && e.text && /direk/.test(e.text)) banner(e.text === 'üst direk' ? 'ÜST DİREK!' : 'DİREK!', 'info', `${tm.short} · #${e.player ?? ''}`);
     else if (e.type === 'injury' && PLAY.on && PLAY.hooks && e.side === PLAY.side) { banner('SAKATLIK', 'red', `${tm.short} · #${e.player}`); setTimeout(() => openTac(false, { kind: 'injury', player: e.player, until: performance.now() + 10000 }), 700); }
     else if (e.type === 'half') { banner('DEVRE ARASI', 'info'); if (PLAY.on && PLAY.hooks) setTimeout(() => openTac(true), 900); }
     else if (e.type === 'end') banner('MAÇ SONU', 'info');

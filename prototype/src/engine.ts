@@ -136,6 +136,7 @@ export interface TeamStats {
   offsides: number;
   subs: number;
   injuries: number;
+  woodwork?: number; // direk/ust direk
 }
 
 interface PState {
@@ -320,6 +321,8 @@ export const P = {
   kickMax: 30, // en sert vurus (m/s)
   ctrlSpeed: 19, // bu hizin ustundeki top ayakla kontrol edilemez: sekerek uzaklasir (blok)
   reach: 0.9, // oyuncunun topa ulasma yaricapi (m)
+  ballR: 0.11, // top yaricapi (m)
+  postW: 0.12, // direk kalinligi (m)
   gkHoldR: 6, // elinde top tutan kaleciye rakip yaklasma mesafesi (m)
   rotGain: 6, // rotasyon: kaydirma icin gereken toplam mesafe kazanci (m)
   rotDelay: 0.6, // rotasyon kararinin uygulanma gecikmesi (s, U 100)
@@ -940,7 +943,7 @@ export function createMatch(a0: TeamIn, b0: TeamIn, seed: number, opts?: { knock
       };
     });
   };
-  const emptyStats = (): TeamStats => ({ goals: 0, shots: 0, onTarget: 0, xg: 0, passes: 0, passesOk: 0, possTicks: 0, fouls: 0, yellows: 0, reds: 0, corners: 0, setPieceGoals: 0, duels: 0, turnovers: 0, offsides: 0, subs: 0, injuries: 0 });
+  const emptyStats = (): TeamStats => ({ goals: 0, shots: 0, onTarget: 0, xg: 0, passes: 0, passesOk: 0, possTicks: 0, fouls: 0, yellows: 0, reds: 0, corners: 0, setPieceGoals: 0, duels: 0, turnovers: 0, offsides: 0, subs: 0, injuries: 0, woodwork: 0 });
   const st: MatchState = {
     teams,
     players,
@@ -2473,7 +2476,8 @@ function deadTime(st: MatchState, sec: number, reason = '') {
   st.restartUntil = Math.max(st.restartUntil, st.t + sec);
   st.holdUntil = Math.max(st.holdUntil, st.t + sec);
   if (reason && reason !== 'GOL' && reason !== 'Kaleci aldı') st.lastRestartT = st.restartUntil;
-  // olu top: bekleyen degisiklikler uygulanir
+  // olu top: bekleyen degisiklikler uygulanir (kaleci topu eline aldiginda oyun durmaz: Kural 3, degisiklik ancak top oyun disindayken)
+  if (reason === 'Kaleci aldı') return;
   autoSubs(st);
   if (st.subQueue.length) {
     applySubs(st);
@@ -2850,6 +2854,7 @@ function userStep(st: MatchState) {
     if (inPoss) continue; // hucum aksiyonlari userCarrier'da
     const c = st.owner;
     // gelisine vurus: top bizde degilken verilen pas/sut/orta niyeti saklanir; top gelince ilk dokunusta uygulanir (2,5 s icinde)
+    if ((inp.act === 'pass' || inp.act === 'through' || inp.act === 'shoot' || inp.act === 'cross') && ctl.actAt <= st.ball.kickT + 1e-6) { inp.act = undefined; dbg('eski_aksiyon_atildi'); continue; } // vurustan once verilmis aksiyon: ikinci vurus olmasin
     if (inp.act === 'pass' || inp.act === 'through' || inp.act === 'shoot' || inp.act === 'cross') {
       let ax0 = inp.ax ?? 0, ay0 = inp.ay ?? 0;
       const an = hyp(ax0, ay0);
@@ -3861,6 +3866,27 @@ function moveBall(st: MatchState) {
     const zc = z0 + (b.z - z0) * u;
     const D = defSideAtX(st, xl);
     const A: 0 | 1 = (1 - D) as 0 | 1;
+    // direk / ust direk: top (yaricap 0,11 m) direk kalinligina (0,12 m) carparsa geri doner; ic yuzeyden sekip iceri de girebilir
+    const dyP = Math.abs(yc - 34) - 3.66, dzP = zc - 2.44;
+    const hitPost = dyP > -P.ballR && dyP < P.postW + P.ballR && zc < 2.44 + P.postW + P.ballR;
+    const hitBar = Math.abs(yc - 34) < 3.66 + P.postW + P.ballR && dzP > -P.ballR && dzP < P.postW + P.ballR;
+    if ((hitPost || hitBar) && (b.shot || hyp(b.vx, b.vy) > 6)) {
+      const inward = hitPost && dyP < P.postW * 0.5 && !hitBar && st.rng() < 0.35; // ic yuzeye carpan topun bir kismi iceri girer
+      if (!inward) {
+        dbg(hitBar ? 'ust_direk' : 'direk');
+        const sp = hyp(b.vx, b.vy);
+        const ang = Math.atan2(b.vy, b.vx);
+        const out = (hitBar ? -0.55 : -0.6) * sp; // geri sekme hizi
+        const scatter = gauss(st.rng) * 0.35;
+        b.x = xl < 1 ? 0.3 : L - 0.3; b.y = yc; b.z = Math.max(0.1, zc);
+        b.vx = Math.abs(out) * (xl < 1 ? 1 : -1) * Math.cos(scatter) ; b.vy = Math.sin(ang) * sp * 0.4 + Math.abs(out) * Math.sin(scatter) * 0.5;
+        b.vz = hitBar ? -Math.abs(b.vz) * 0.5 - 2 : b.vz * 0.6; b.sw = 0; b.dip = 0;
+        b.kind = 'loose'; b.intended = null; b.noTouch = null;
+        if (b.shot) { st.events.push({ t: st.clock, type: 'miss', side: A, player: b.kicker?.num, xg: b.shot.xg, text: hitBar ? 'üst direk' : 'direk' } as any); b.shot = null; }
+        st.stats[A].woodwork = (st.stats[A].woodwork ?? 0) + 1;
+        return;
+      }
+    }
     if (Math.abs(yc - 34) < 3.66 && zc < 2.44) {
       const fr = b.fromRestart, k = b.kicker;
       if (fr && k && k.side === D) {
