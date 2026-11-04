@@ -7618,7 +7618,7 @@ function dbLoad() { try { APP.db = JSON.parse(localStorage.getItem(APP.key)) || 
 function dbSave() { APP.db.updatedAt = Date.now(); try { localStorage.setItem(APP.key, JSON.stringify(APP.db)); } catch (e) {} CLOUD.schedulePush(); }
 // ---------- Bulut (Dilim 2b): hesap + bulut kayit. Supabase anahtari verilince calisir; yoksa her sey yerelde kalir. ----------
 // Yapilandirma: FM_CLOUD sabiti (derlemede doldurulur) ya da localStorage 'fm.cloud' ({url, anon}) ile gecersiz kilinir.
-const FM_CLOUD = { url: '__SUPABASE_URL__', anon: '__SUPABASE_ANON__' };
+const FM_CLOUD = { url: 'https://hukoepbvntsksefzguxl.supabase.co', anon: 'sb_publishable_8m8DORbwGcE-tiWPMfGV2g_tg3k2TEU' };
 const CLOUD = {
   sb: null, user: null, state: 'off', // off | loading | ready | error
   cfg() { try { const o = JSON.parse(localStorage.getItem('fm.cloud') || 'null'); if (o && o.url && o.anon) return o; } catch (e) {} return FM_CLOUD.url && !FM_CLOUD.url.startsWith('__') ? FM_CLOUD : null; },
@@ -7626,7 +7626,7 @@ const CLOUD = {
     const cfg = this.cfg(); if (!cfg) { this.state = 'off'; return; }
     this.state = 'loading';
     try {
-      const mod = window.__supabaseMock ? window.__supabaseMock : await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm');
+      const mod = window.__supabaseMock ? window.__supabaseMock : await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/+esm');
       this.sb = mod.createClient(cfg.url, cfg.anon, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
       const { data } = await this.sb.auth.getSession();
       this.user = data?.session?.user ?? null;
@@ -8158,7 +8158,7 @@ function appInit() {
 window.addEventListener('hashchange', () => { if (location.hash !== '#dev') { document.body.classList.add('app'); render(); } });
 appInit();
 </script>
-<div class="dev">demo · sürüm 03.11 13:34 · <a href="#dev" style="color:inherit" onclick="document.body.classList.remove('app')">geliştirici</a></div>
+<div class="dev">demo · sürüm 04.11 13:40 · <a href="#dev" style="color:inherit" onclick="document.body.classList.remove('app')">geliştirici</a></div>
 
 </body>
 </html>
