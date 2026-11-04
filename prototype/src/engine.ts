@@ -815,7 +815,7 @@ export function validateTeam(t: TeamIn, label: string) {
 // Mac deterministiktir: ayni seed + ayni takimlar + ayni P + ayni komut dizisi (hangi adimda hangi cagri) = ayni mac.
 // Her durum degistiren disa acik cagri (girdi, taktik, degisiklik, kontrol) adim numarasiyla kaydedilir; girdi yalniz degisince.
 // Tekrar: replayMatch(kayit) ayni motoru kosturur; stateHash ile sonuc dogrulanir (sunucu dogrulamasi ayni yolu kullanir).
-export type RecOp = 'in' | 'tac' | 'ment' | 'duty' | 'rules' | 'rot' | 'sub' | 'auto' | 'ctl' | 'asw';
+export type RecOp = 'in' | 'tac' | 'ment' | 'duty' | 'duties' | 'gorev' | 'rules' | 'rot' | 'sub' | 'auto' | 'ctl' | 'asw';
 export interface RecCmd { k: number; op: RecOp; s: 0 | 1; a: any[] }
 export interface Recorder { v: 1; seed: number; knockout: boolean; teams: [TeamIn, TeamIn]; P: Record<string, any>; cmds: RecCmd[]; last: [string, string] }
 export interface Replay { v: 1; seed: number; knockout: boolean; teams: [TeamIn, TeamIn]; P: Record<string, any>; cmds: RecCmd[]; steps: number; hash: number; score: [number, number] }
@@ -841,6 +841,8 @@ export function applyCmd(st: MatchState, c: RecCmd) {
     case 'tac': setTactic(st, s, c.a[0], c.a[1]); break;
     case 'ment': setMentality(st, s, c.a[0]); break;
     case 'duty': setDuty(st, s, c.a[0], c.a[1]); break;
+    case 'duties': setDuties(st, s, c.a[0]); break;
+    case 'gorev': applyDutiesRules(st, s, c.a[0], c.a[1]); break;
     case 'rules': setRules(st, s, c.a[0]); break;
     case 'rot': setRotations(st, s, c.a[0]); break;
     case 'sub': userSub(st, s, c.a[0], c.a[1]); break;
@@ -1139,6 +1141,20 @@ function rotStep(st: MatchState) {
     }
     if (changed) applyRot(st, s);
   }
+}
+export function setDuties(st: MatchState, side: 0 | 1, du: Record<number, Duty>) { rec(st, 'duties', side, [JSON.parse(JSON.stringify(du))]); st.teams[side].duties = JSON.parse(JSON.stringify(du)); }
+// mac ici panel: gorev kartlari + kurallar tek uygulama = 1 degisiklik hakki, 1 dk uyum (kayda tek komut olarak girer)
+export function applyDutiesRules(st: MatchState, side: 0 | 1, du: Record<number, Duty>, rules: Rule[]): boolean {
+  if (st.tacticChanges[side] >= 3) return false;
+  rec(st, 'gorev', side, [JSON.parse(JSON.stringify(du)), JSON.parse(JSON.stringify(rules))]);
+  const wasRec = st.rec; st.rec = null; // ic cagrilar ayrica kaydedilmesin
+  st.teams[side].duties = JSON.parse(JSON.stringify(du));
+  st.teams[side].rules = rules.slice(0, RULES_MAX);
+  st.rec = wasRec;
+  st.tacticChanges[side]++;
+  st.adaptUntil[side] = st.clock + P.adaptMin * 60;
+  st.events.push({ t: st.clock, type: 'tactic', side, text: 'görev' });
+  return true;
 }
 export function setDuty(st: MatchState, side: 0 | 1, num: number, d: Duty) { rec(st, 'duty', side, [num, { ...d }]); const t = st.teams[side]; t.duties = { ...(t.duties ?? {}), [num]: { ...(t.duties?.[num] ?? {}), ...d } }; }
 function tEff(st: MatchState, side: 0 | 1): number {
@@ -2762,7 +2778,7 @@ export function setInput(st: MatchState, side: 0 | 1, input: UserInput) {
   const act = input.act;
   ctl.input = { mx: input.mx, my: input.my, sprint: input.sprint, press: input.press, gkRush: input.gkRush, act: act ?? ctl.input.act, power: act ? input.power : ctl.input.power, ax: act ? input.ax : ctl.input.ax, ay: act ? input.ay : ctl.input.ay, curve: act ? input.curve : ctl.input.curve, tap: act ? input.tap : ctl.input.tap };
   if (act) ctl.actAt = st.t;
-  if (act || hyp(input.mx, input.my) > 0.15) ctl.lastInputT = st.t;
+  if (act) ctl.lastInputT = st.t; // joystick hareketi adimda sayilir (userStep): kayit sikistirmasi ile uyumlu (ayni girdi tekrar gonderilmez)
 }
 export function setAutoSwitch(st: MatchState, side: 0 | 1, on: boolean) { rec(st, 'asw', side, [on]); const ctl = st.control[side]; if (ctl) ctl.autoSwitch = on; }
 export function controlledPlayer(st: MatchState, side: 0 | 1): PState | null { return st.control[side]?.player ?? null; }
@@ -2790,6 +2806,7 @@ function userStep(st: MatchState) {
     ctl.cooldown = Math.max(0, ctl.cooldown - st.dt);
     ctl.switchCd = Math.max(0, ctl.switchCd - st.dt);
     const inp = ctl.input;
+    if (hyp(inp.mx, inp.my) > 0.15) ctl.lastInputT = st.t; // basili joystick her adimda girdi sayilir
     const cur = ctl.player;
     const inPoss = !!st.owner && st.owner.side === side;
     // tasiyici degisince ya da kontrol edilen oyundan cikinca yeniden secim

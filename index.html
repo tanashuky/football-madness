@@ -864,6 +864,12 @@ function applyCmd(st, c) {
         case 'duty':
             setDuty(st, s, c.a[0], c.a[1]);
             break;
+        case 'duties':
+            setDuties(st, s, c.a[0]);
+            break;
+        case 'gorev':
+            applyDutiesRules(st, s, c.a[0], c.a[1]);
+            break;
         case 'rules':
             setRules(st, s, c.a[0]);
             break;
@@ -1255,6 +1261,22 @@ function rotStep(st) {
         if (changed)
             applyRot(st, s);
     }
+}
+function setDuties(st, side, du) { rec(st, 'duties', side, [JSON.parse(JSON.stringify(du))]); st.teams[side].duties = JSON.parse(JSON.stringify(du)); }
+// mac ici panel: gorev kartlari + kurallar tek uygulama = 1 degisiklik hakki, 1 dk uyum (kayda tek komut olarak girer)
+function applyDutiesRules(st, side, du, rules) {
+    if (st.tacticChanges[side] >= 3)
+        return false;
+    rec(st, 'gorev', side, [JSON.parse(JSON.stringify(du)), JSON.parse(JSON.stringify(rules))]);
+    const wasRec = st.rec;
+    st.rec = null; // ic cagrilar ayrica kaydedilmesin
+    st.teams[side].duties = JSON.parse(JSON.stringify(du));
+    st.teams[side].rules = rules.slice(0, RULES_MAX);
+    st.rec = wasRec;
+    st.tacticChanges[side]++;
+    st.adaptUntil[side] = st.clock + P.adaptMin * 60;
+    st.events.push({ t: st.clock, type: 'tactic', side, text: 'görev' });
+    return true;
 }
 function setDuty(st, side, num, d) { rec(st, 'duty', side, [num, { ...d }]); const t = st.teams[side]; t.duties = { ...(t.duties ?? {}), [num]: { ...(t.duties?.[num] ?? {}), ...d } }; }
 function tEff(st, side) {
@@ -3374,8 +3396,8 @@ function setInput(st, side, input) {
     ctl.input = { mx: input.mx, my: input.my, sprint: input.sprint, press: input.press, gkRush: input.gkRush, act: act ?? ctl.input.act, power: act ? input.power : ctl.input.power, ax: act ? input.ax : ctl.input.ax, ay: act ? input.ay : ctl.input.ay, curve: act ? input.curve : ctl.input.curve, tap: act ? input.tap : ctl.input.tap };
     if (act)
         ctl.actAt = st.t;
-    if (act || hyp(input.mx, input.my) > 0.15)
-        ctl.lastInputT = st.t;
+    if (act)
+        ctl.lastInputT = st.t; // joystick hareketi adimda sayilir (userStep): kayit sikistirmasi ile uyumlu (ayni girdi tekrar gonderilmez)
 }
 function setAutoSwitch(st, side, on) { rec(st, 'asw', side, [on]); const ctl = st.control[side]; if (ctl)
     ctl.autoSwitch = on; }
@@ -3415,6 +3437,8 @@ function userStep(st) {
         ctl.cooldown = Math.max(0, ctl.cooldown - st.dt);
         ctl.switchCd = Math.max(0, ctl.switchCd - st.dt);
         const inp = ctl.input;
+        if (hyp(inp.mx, inp.my) > 0.15)
+            ctl.lastInputT = st.t; // basili joystick her adimda girdi sayilir
         const cur = ctl.player;
         const inPoss = !!st.owner && st.owner.side === side;
         // tasiyici degisince ya da kontrol edilen oyundan cikinca yeniden secim
@@ -6939,7 +6963,7 @@ function renderTac() {
     q('#tShapeReset').onclick = () => { TAC.draft = null; renderTac(); };
     q('#tApplyShape').onclick = () => { const patch = { shapeDef: d.shapeDef.map((x) => [x[0], x[1]]), shapeAtt: d.shapeAtt.map((x) => [x[0], x[1]]), rotations: d.rotations.length ? d.rotations.map((c) => [...c]) : undefined }; const ok = setTactic(st, side, patch, d.formation !== t.formation ? d.formation : undefined); if (ok && !patch.rotations) { /* rotasyonlar temizlendi */ setRotations(st, side, undefined); } TAC.draft = null; banner(ok ? 'ŞEKİL DEĞİŞTİ' : 'HAK KALMADI', 'rule', ok ? '1 dk uyum' : ''); flash(ok ? `Uygulandı: ${d.formation} · ${d.rotations.length} rotasyon · 1 dk uyum` : 'Değişiklik hakkı kalmadı'); };
   }
-  if (q('#tApplyDuty')) q('#tApplyDuty').onclick = () => { if (st.tacticChanges[side] >= 3) { flash('Değişiklik hakkı kalmadı'); return; } const du = {}; for (const s2 of box.querySelectorAll('.du')) { if (s2.value === '') continue; du[s2.dataset.n] = du[s2.dataset.n] || {}; du[s2.dataset.n][s2.dataset.k] = +s2.value; } t.duties = du; const rl = [...box.querySelectorAll('.rl:checked')].map((x) => x.value); if (rl.length > RULES_MAX) { flash(`En çok ${RULES_MAX} kural`); return; } setRules(st, side, rl.map((id) => RULE_TEMPLATES.find((r) => r.id === id)).filter(Boolean)); st.tacticChanges[side]++; st.adaptUntil[side] = st.clock + P.adaptMin * 60; st.events.push({ t: st.clock, type: 'tactic', side, text: 'görev' }); banner('GÖREVLER DEĞİŞTİ', 'rule', '1 dk uyum'); flash(`Uygulandı: ${Object.keys(du).length} görev kartı · ${rl.length} kural · 1 dk uyum`); };
+  if (q('#tApplyDuty')) q('#tApplyDuty').onclick = () => { const du = {}; for (const s2 of box.querySelectorAll('.du')) { if (s2.value === '') continue; du[s2.dataset.n] = du[s2.dataset.n] || {}; du[s2.dataset.n][s2.dataset.k] = +s2.value; } const rl = [...box.querySelectorAll('.rl:checked')].map((x) => x.value); if (rl.length > RULES_MAX) { flash(`En çok ${RULES_MAX} kural`); return; } const ok = applyDutiesRules(st, side, du, rl.map((id) => RULE_TEMPLATES.find((r) => r.id === id)).filter(Boolean)); if (!ok) { flash('Değişiklik hakkı kalmadı'); return; } banner('GÖREVLER DEĞİŞTİ', 'rule', '1 dk uyum'); flash(`Uygulandı: ${Object.keys(du).length} görev kartı · ${rl.length} kural · 1 dk uyum`); };
   box.onclick = (e) => { const o = e.target.closest('[data-out]'); const i = e.target.closest('[data-in]'); if (o) { TAC.subOut = TAC.subOut === +o.dataset.out ? null : +o.dataset.out; renderTac(); } else if (i && TAC.subOut !== null) { const ok = userSub(st, side, TAC.subOut, +i.dataset.in); banner(ok ? 'DEĞİŞİKLİK SIRADA' : 'DEĞİŞİKLİK YAPILAMADI', 'rule', ok ? 'ilk ölü topta' : ''); TAC.subOut = null; renderTac(); } };
   q('#tClose').onclick = () => { if (TAC.decide && TAC.decide.kind !== 'red' && !pendingSubs(st, side).some((q2) => q2.out === TAC.decide.player)) autoSubsFor(st, side); closeTac(); };
 }
@@ -8172,7 +8196,7 @@ function appInit() {
 window.addEventListener('hashchange', () => { if (location.hash !== '#dev') { document.body.classList.add('app'); render(); } });
 appInit();
 </script>
-<div class="dev">demo · sürüm 04.11 14:29 · <a href="#dev" style="color:inherit" onclick="document.body.classList.remove('app')">geliştirici</a></div>
+<div class="dev">demo · sürüm 04.11 14:43 · <a href="#dev" style="color:inherit" onclick="document.body.classList.remove('app')">geliştirici</a></div>
 
 </body>
 </html>
