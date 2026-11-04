@@ -7664,7 +7664,7 @@ const CLOUD = {
 function authButtons() {
   if (CLOUD.state === 'off') return '';
   if (CLOUD.user) return `<p class="muted">Hesap: ${esc(CLOUD.label())} · <a href="#" id="switchAcc" style="color:var(--chalk)">Hesap değiştir</a></p>`;
-  const prov = String(FM_CLOUD.providers || '').startsWith('__') ? 'email' : FM_CLOUD.providers;
+  const prov = (CLOUD.cfg() || {}).providers || (String(FM_CLOUD.providers || '').startsWith('__') ? 'email' : FM_CLOUD.providers);
   return `<div class="row" style="justify-content:center">${prov.includes('google') ? '<button class="btn" data-oauth="google">Google ile</button>' : ''}${prov.includes('apple') ? '<button class="btn" data-oauth="apple">Apple ile</button>' : ''}</div>
     <div class="row" style="justify-content:center;margin-top:6px"><input id="emailIn" type="email" placeholder="e-posta" style="background:#0b100e;color:var(--chalk);border:1px solid var(--line);border-radius:8px;padding:9px 10px;font:14px var(--font-body)"><button class="btn" id="emailGo">Bağlantı gönder</button></div>`;
 }
@@ -8159,7 +8159,7 @@ function appInit() {
 window.addEventListener('hashchange', () => { if (location.hash !== '#dev') { document.body.classList.add('app'); render(); } });
 appInit();
 </script>
-<div class="dev">demo · sürüm 04.11 14:04 · <a href="#dev" style="color:inherit" onclick="document.body.classList.remove('app')">geliştirici</a></div>
+<div class="dev">demo · sürüm 04.11 14:05 · <a href="#dev" style="color:inherit" onclick="document.body.classList.remove('app')">geliştirici</a></div>
 
 </body>
 </html>
