@@ -7663,12 +7663,12 @@ const CLOUD = {
 };
 function authButtons() {
   if (CLOUD.state === 'off') return '';
-  if (CLOUD.user) return `<p class="muted">Hesap: ${esc(CLOUD.label())}</p>`;
+  if (CLOUD.user) return `<p class="muted">Hesap: ${esc(CLOUD.label())} · <a href="#" id="switchAcc" style="color:var(--chalk)">Hesap değiştir</a></p>`;
   const prov = String(FM_CLOUD.providers || '').startsWith('__') ? 'email' : FM_CLOUD.providers;
   return `<div class="row" style="justify-content:center">${prov.includes('google') ? '<button class="btn" data-oauth="google">Google ile</button>' : ''}${prov.includes('apple') ? '<button class="btn" data-oauth="apple">Apple ile</button>' : ''}</div>
     <div class="row" style="justify-content:center;margin-top:6px"><input id="emailIn" type="email" placeholder="e-posta" style="background:#0b100e;color:var(--chalk);border:1px solid var(--line);border-radius:8px;padding:9px 10px;font:14px var(--font-body)"><button class="btn" id="emailGo">Bağlantı gönder</button></div>`;
 }
-function bindAuth() { for (const b of document.querySelectorAll('[data-oauth]')) b.onclick = () => CLOUD.signInOAuth(b.dataset.oauth); const eg = $('emailGo'); if (eg) eg.onclick = () => { const v = $('emailIn').value.trim(); if (v) CLOUD.signInEmail(v); }; }
+function bindAuth() { const sw = $('switchAcc'); if (sw) sw.onclick = async (e) => { e.preventDefault(); if (!confirm('Bu hesaptan çıkılsın mı? Kayıt bulutta kalır; başka hesapla girebilirsin.')) return; await CLOUD.signOut(); go('login', {}, false); }; for (const b of document.querySelectorAll('[data-oauth]')) b.onclick = () => CLOUD.signInOAuth(b.dataset.oauth); const eg = $('emailGo'); if (eg) eg.onclick = () => { const v = $('emailIn').value.trim(); if (v) CLOUD.signInEmail(v); }; }
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const $ = (id) => document.getElementById(id);
 function toast(msg) { const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg; $('app').appendChild(t); setTimeout(() => t.remove(), 2200); }
@@ -7811,7 +7811,7 @@ $('aBody').addEventListener('click', (e) => { const b = e.target.closest('[data-
 SCREENS.login = () => ({ title: 'Football <span>Madness</span>', noBack: true, html: `
   <div class="center">
     <div class="logo">Football <span>Madness</span></div>
-    <div class="row"><button class="btn prim" id="guest">${APP.db.account ? 'Devam et' : 'Misafir olarak başla'}</button></div>
+    <div class="row"><button class="btn prim" id="guest">${APP.db.account ? (CLOUD.user ? 'Oynamaya başla' : 'Devam et') : CLOUD.state === 'off' ? 'Misafir olarak başla' : 'Misafir olarak başla (hesapsız)'}</button></div>
     ${authButtons()}
     <p class="muted">${CLOUD.state === 'off' ? 'Kayıt bu cihazda tutulur; hesaba bağlama bulut açılınca.' : CLOUD.user ? 'Kayıt bulutta; her cihazdan devam edebilirsin.' : 'Hesap bağlarsan kayıt buluta alınır; misafir devam edersen bu cihazda kalır, sonra bağlayabilirsin.'}</p>
   </div>`, after: () => { $('guest').onclick = () => { if (!APP.db.account) go('setup', {}, false); else go('home', {}, false); }; bindAuth(); } });
@@ -8141,10 +8141,10 @@ SCREENS.settings = () => { const s = APP.db.settings; const sel = (id, k, opts) 
       ${sel('Varsayılan oyun modu', 'mode', [['team', 'Team play'], ['sim', 'Total simulation']])}
     </div></div>
     <div class="card"><h3>Tanı <small>hata kaydı</small></h3>${(() => { let e = null; try { e = JSON.parse(localStorage.getItem('fm.lastError') || 'null'); } catch (x) {} return e ? `<p class="muted">${new Date(e.t).toLocaleString('tr-TR')} · ${esc(e.build || '')}</p><pre style="white-space:pre-wrap;word-break:break-word;font-size:11px;background:rgba(0,0,0,.25);padding:8px;border-radius:8px;max-height:180px;overflow:auto">${esc('[' + e.where + '] ' + e.msg)}</pre><div class="row"><button class="btn sm" id="errClr">Kaydı sil</button></div>` : '<p>Kayıtlı hata yok.</p>'; })()}</div>
-    <div class="card"><h3>Hesap ve bulut kaydı</h3><p>${esc(APP.db.account?.club.name || '')} · <span id="cloudStatus">${esc(CLOUD.statusText())}</span></p>${authButtons()}<div class="row" style="margin-top:8px">${CLOUD.user ? '<button class="btn sm" id="cloudSync">Şimdi eşitle</button><button class="btn sm ghost" id="cloudOut">Çıkış</button>' : ''}<button class="btn ghost" id="reset">Demoyu sıfırla</button><button class="btn ghost" id="devp">Geliştirici sayfası</button></div><p class="muted">Ses, dil, bildirimler, medya izinleri ve hesap silme Faz 3'te.</p></div>
+    <div class="card"><h3>Hesap ve bulut kaydı</h3><p>${esc(APP.db.account?.club.name || '')} · <span id="cloudStatus">${esc(CLOUD.statusText())}</span></p>${authButtons()}<div class="row" style="margin-top:8px">${CLOUD.user ? '<button class="btn sm" id="cloudSync">Şimdi eşitle</button><button class="btn sm ghost" id="cloudOut">Hesap değiştir / çıkış</button>' : ''}<button class="btn ghost" id="reset">Demoyu sıfırla</button><button class="btn ghost" id="devp">Geliştirici sayfası</button></div><p class="muted">Ses, dil, bildirimler, medya izinleri ve hesap silme Faz 3'te.</p></div>
   </div>`, after: () => { for (const el of document.querySelectorAll('.sk')) el.onchange = () => { let v = el.value; if (v === 'true') v = true; else if (v === 'false') v = false; else if (!isNaN(+v) && el.dataset.k !== 'keys') v = +v; APP.db.settings[el.dataset.k] = v; dbSave(); };
     $('reset').onclick = () => { if (confirm('Tüm demo kaydı silinsin mi?')) { localStorage.removeItem(APP.key); location.reload(); } };
-    bindAuth(); const cs = $('cloudSync'); if (cs) cs.onclick = async () => { await CLOUD.push(); toast('Eşitlendi'); }; const co = $('cloudOut'); if (co) co.onclick = () => CLOUD.signOut();
+    bindAuth(); const cs = $('cloudSync'); if (cs) cs.onclick = async () => { await CLOUD.push(); toast('Eşitlendi'); }; const co = $('cloudOut'); if (co) co.onclick = async () => { if (!confirm('Bu hesaptan çıkılsın mı? Kayıt bulutta kalır.')) return; await CLOUD.signOut(); go('login', {}, false); };
     const ec = $('errClr'); if (ec) ec.onclick = () => { localStorage.removeItem('fm.lastError'); go('settings', {}, false); };
     $('devp').onclick = () => { document.body.classList.remove('app'); location.hash = '#dev'; }; } }; };
 
@@ -8159,7 +8159,7 @@ function appInit() {
 window.addEventListener('hashchange', () => { if (location.hash !== '#dev') { document.body.classList.add('app'); render(); } });
 appInit();
 </script>
-<div class="dev">demo · sürüm 04.11 13:51 · <a href="#dev" style="color:inherit" onclick="document.body.classList.remove('app')">geliştirici</a></div>
+<div class="dev">demo · sürüm 04.11 14:04 · <a href="#dev" style="color:inherit" onclick="document.body.classList.remove('app')">geliştirici</a></div>
 
 </body>
 </html>
