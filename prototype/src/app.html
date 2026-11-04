@@ -107,7 +107,7 @@ const CLOUD = {
     const cfg = this.cfg(); if (!cfg) { this.state = 'off'; return; }
     this.state = 'loading';
     try {
-      const mod = window.__supabaseMock ? window.__supabaseMock : await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/+esm');
+      const mod = window.__supabaseMock ? window.__supabaseMock : await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.58.0/+esm');
       this.sb = mod.createClient(cfg.url, cfg.anon, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
       const { data } = await this.sb.auth.getSession();
       this.user = data?.session?.user ?? null;
