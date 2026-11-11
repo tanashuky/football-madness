@@ -55,7 +55,7 @@ function hud() {
     return String(html `<div id="mBar">${raw(bar())}</div>
   <div class="mOverlay" id="mPauseBox" hidden><div class="box"><h3>${t('match.pause')}</h3><div class="row"><button class="btn prim" id="mResume">${t('match.resume')}</button><button class="btn ghost" id="mQuit">${t('match.exit')}</button></div></div></div>
   <div class="mOverlay" id="mTacBox" hidden></div>
-  <div class="rotate" id="mRotate">${t('match.rotate')}</div>`);
+  <div class="rotate" id="mRotate"><div>${t('match.rotate')}<br><button class="btn sm ghost" id="mRotExit">${t('match.exit')}</button></div></div>`);
 }
 function bind() {
     const root = $('match');
@@ -63,6 +63,7 @@ function bind() {
     $('mResume').onclick = () => togglePause();
     $('mExit').onclick = () => askExit();
     $('mQuit').onclick = () => askExit();
+    $('mRotExit').onclick = () => askExit();
     $('mCam').onclick = () => { const ks = Object.keys(CAMS); applyCam(ks[(ks.indexOf(M.camKey) + 1) % ks.length]); };
     $('mLayer').onclick = () => { M.layer = !M.layer; $('mLayer').setAttribute('aria-pressed', String(M.layer)); $('mStats').hidden = !M.layer; };
     const dn = $('mentDn'), up = $('mentUp');

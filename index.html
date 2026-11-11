@@ -6061,7 +6061,7 @@ function makeTeam(name, short, gg, opts = {}, names = NAMES_A, color = '#c8302c'
         ...opts,
     };
 }
-{ NAMES_A, NAMES_B };
+{ NAMES_A, NAMES_B, FORMATIONS, FORM_POS, FORM_NUM, fromFrame };
 
 </script>
 <script>
@@ -7704,7 +7704,10 @@ const CLOUD = {
   },
   label() { if (!this.user) return 'Bağlı değil'; const p = this.user.app_metadata?.provider || 'e-posta'; return `${this.user.email || this.user.id.slice(0, 8)} · ${p === 'email' ? 'e-posta' : p}`; },
   async signInOAuth(provider) { if (!this.sb) return; const { error } = await this.sb.auth.signInWithOAuth({ provider, options: { redirectTo: location.origin + location.pathname } }); if (error) toast('Giriş hatası: ' + error.message); },
-  async signInEmail(email) { if (!this.sb) return; const { error } = await this.sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname } }); toast(error ? 'Hata: ' + error.message : 'Giriş bağlantısı e-postana gönderildi'); },
+  async signInEmail(email) { if (!this.sb) return; const { error } = await this.sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname } }); if (!error) this.pendingEmail = email; toast(error ? 'Hata: ' + error.message : 'Giriş kodu e-postana gönderildi'); render(); },
+  // koda giris: ana ekrana eklenen uygulamada baglanti Safari'de acilir, oturum uygulamaya gecmez; kod uygulamanin icinde yazilir
+  pendingEmail: '',
+  async verifyCode(code) { if (!this.sb || !this.pendingEmail) return; const { error } = await this.sb.auth.verifyOtp({ email: this.pendingEmail, token: String(code).replace(/\D/g, ''), type: 'email' }); if (error) toast('Kod geçersiz ya da süresi doldu'); else this.pendingEmail = ''; },
   async signOut() { if (!this.sb) return; await this.sb.auth.signOut(); this.user = null; toast('Çıkış yapıldı; kayıt bu cihazda duruyor'); render(); },
   // ilk giris: bulutta kayit varsa ve yereldekinden yeniyse (ya da yerel hesap yoksa) bulut kazanir; yoksa yerel buluta yazilir
   async afterSignIn() { const r = await this.pull(); if (!r) await this.push(); toast('Hesap bağlandı: ' + this.label()); },
@@ -7747,9 +7750,9 @@ function authButtons() {
   if (CLOUD.user) return `<p class="muted">Hesap: ${esc(CLOUD.label())} · <a href="#" id="switchAcc" style="color:var(--chalk)">Hesap değiştir</a></p>`;
   const prov = (CLOUD.cfg() || {}).providers || (String(FM_CLOUD.providers || '').startsWith('__') ? 'email' : FM_CLOUD.providers);
   return `<div class="row" style="justify-content:center">${prov.includes('google') ? '<button class="btn" data-oauth="google">Google ile</button>' : ''}${prov.includes('apple') ? '<button class="btn" data-oauth="apple">Apple ile</button>' : ''}</div>
-    <div class="row" style="justify-content:center;margin-top:6px"><input id="emailIn" type="email" placeholder="e-posta" style="background:#0b100e;color:var(--chalk);border:1px solid var(--line);border-radius:8px;padding:9px 10px;font:14px var(--font-body)"><button class="btn" id="emailGo">Bağlantı gönder</button></div>`;
+    ${CLOUD.pendingEmail ? `<p class="muted" style="text-align:center">${esc(CLOUD.pendingEmail)} adresine gelen 6 haneli kodu yaz</p><div class="row" style="justify-content:center;margin-top:6px"><input id="codeIn" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="kod" style="background:#0b100e;color:var(--chalk);border:1px solid var(--line);border-radius:8px;padding:9px 10px;font:18px var(--font-body);width:120px;letter-spacing:3px;text-align:center"><button class="btn prim" id="codeGo">Giriş yap</button><button class="btn ghost sm" id="codeBack">başka e-posta</button></div>` : `<div class="row" style="justify-content:center;margin-top:6px"><input id="emailIn" type="email" placeholder="e-posta" style="background:#0b100e;color:var(--chalk);border:1px solid var(--line);border-radius:8px;padding:9px 10px;font:14px var(--font-body)"><button class="btn" id="emailGo">Kod gönder</button></div>`}`;
 }
-function bindAuth() { const sw = $('switchAcc'); if (sw) sw.onclick = async (e) => { e.preventDefault(); if (!confirm('Bu hesaptan çıkılsın mı? Kayıt bulutta kalır; başka hesapla girebilirsin.')) return; await CLOUD.signOut(); go('login', {}, false); }; for (const b of document.querySelectorAll('[data-oauth]')) b.onclick = () => CLOUD.signInOAuth(b.dataset.oauth); const eg = $('emailGo'); if (eg) eg.onclick = () => { const v = $('emailIn').value.trim(); if (v) CLOUD.signInEmail(v); }; }
+function bindAuth() { const sw = $('switchAcc'); if (sw) sw.onclick = async (e) => { e.preventDefault(); if (!confirm('Bu hesaptan çıkılsın mı? Kayıt bulutta kalır; başka hesapla girebilirsin.')) return; await CLOUD.signOut(); go('login', {}, false); }; for (const b of document.querySelectorAll('[data-oauth]')) b.onclick = () => CLOUD.signInOAuth(b.dataset.oauth); const cg = $('codeGo'); if (cg) cg.onclick = () => { const v = $('codeIn').value.trim(); if (v.length >= 6) CLOUD.verifyCode(v); }; const cbk = $('codeBack'); if (cbk) cbk.onclick = () => { CLOUD.pendingEmail = ''; render(); }; const eg = $('emailGo'); if (eg) eg.onclick = () => { const v = $('emailIn').value.trim(); if (v) CLOUD.signInEmail(v); }; }
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const $ = (id) => document.getElementById(id);
 function toast(msg) { const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg; $('app').appendChild(t); setTimeout(() => t.remove(), 2200); }
@@ -8245,7 +8248,7 @@ function appInit() {
 window.addEventListener('hashchange', () => { if (location.hash !== '#dev') { document.body.classList.add('app'); render(); } });
 appInit();
 </script>
-<div class="dev">demo · sürüm 11.11 11:10 · <a href="#dev" style="color:inherit" onclick="document.body.classList.remove('app')">geliştirici</a></div>
+<div class="dev">demo · sürüm 11.11 15:17 · <a href="#dev" style="color:inherit" onclick="document.body.classList.remove('app')">geliştirici</a></div>
 
 </body>
 </html>

@@ -157,3 +157,5 @@ body.teamplay .mTicker { display: none; }
 .row.staff { justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--line); margin: 0; flex-wrap: nowrap; } .row.staff .who { flex: 1; min-width: 0; }
 .row.staff select { background: #0b100e; color: var(--chalk); border: 1px solid var(--line); border-radius: 8px; padding: 7px 8px; max-width: 46%; }
 .card.score b small { font-size: .4em; color: var(--muted); }
+#codeIn { background: #0b100e; color: var(--chalk); border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; min-height: 40px; font-size: 1.1em; width: 120px; letter-spacing: 3px; text-align: center; }
+.rotate .btn { margin-top: 14px; font-family: var(--font-body); font-size: .6em; }

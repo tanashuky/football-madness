@@ -5,7 +5,7 @@ import { replace, store, onSave } from './store.js';
 import { toast } from './ui.js';
 import { t, fmtTime } from './i18n.js';
 export const CLOUD = {
-    sb: null, user: null, state: 'off', lastPush: 0, lastErr: '', _timer: 0, onChange: null,
+    sb: null, user: null, state: 'off', pendingEmail: '', lastPush: 0, lastErr: '', _timer: 0, onChange: null,
     cfg() {
         try {
             const o = JSON.parse(localStorage.getItem('fm.cloud') || 'null');
@@ -50,8 +50,17 @@ export const CLOUD = {
     async signInEmail(email) { if (!this.sb)
         return; const { error } = await this.sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname } }); if (error)
         toast(error.message, 'err');
+    else {
+        this.pendingEmail = email;
+        toast(t('login.email.sent'), 'ok');
+        this.changed();
+    } },
+    // e-postadaki kodla giris: ana ekrana eklenen uygulamada baglanti tarayicida acildigi icin oturum uygulamaya gecmez; kod uygulamanin icinde yazilir
+    async verifyCode(code) { if (!this.sb || !this.pendingEmail)
+        return; const { error } = await this.sb.auth.verifyOtp({ email: this.pendingEmail, token: code.replace(/\D/g, ''), type: 'email' }); if (error)
+        toast(t('login.code.bad') + ' (' + error.message + ')', 'err');
     else
-        toast(t('login.email.sent'), 'ok'); },
+        this.pendingEmail = ''; },
     async signOut() { if (!this.sb)
         return; await this.sb.auth.signOut(); this.user = null; toast(t('cloud.signedout')); this.changed(); },
     async afterSignIn() { const r = await this.pull(); if (!r)

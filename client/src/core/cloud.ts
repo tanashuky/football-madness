@@ -8,7 +8,7 @@ import type { SaveV1 } from '../model/types.js';
 
 type State = 'off' | 'loading' | 'ready' | 'error';
 export const CLOUD = {
-  sb: null as any, user: null as any, state: 'off' as State, lastPush: 0, lastErr: '', _timer: 0 as any, onChange: null as null | (() => void),
+  sb: null as any, user: null as any, state: 'off' as State, pendingEmail: '', lastPush: 0, lastErr: '', _timer: 0 as any, onChange: null as null | (() => void),
   cfg(): { url: string; anon: string; providers: string } | null {
     try { const o = JSON.parse(localStorage.getItem('fm.cloud') || 'null'); if (o && o.url && o.anon) return { providers: 'email', ...o }; } catch (e) {}
     return CONFIG.supabaseUrl ? { url: CONFIG.supabaseUrl, anon: CONFIG.supabaseAnon, providers: CONFIG.providers } : null;
@@ -31,7 +31,9 @@ export const CLOUD = {
   changed() { if (this.onChange) this.onChange(); },
   label(): string { if (!this.user) return '-'; const p = this.user.app_metadata?.provider || 'email'; return `${this.user.email || String(this.user.id).slice(0, 8)} · ${p === 'email' ? 'e-posta' : p}`; },
   async signInOAuth(provider: string) { if (!this.sb) return; const { error } = await this.sb.auth.signInWithOAuth({ provider, options: { redirectTo: location.origin + location.pathname } }); if (error) toast(error.message, 'err'); },
-  async signInEmail(email: string) { if (!this.sb) return; const { error } = await this.sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname } }); if (error) toast(error.message, 'err'); else toast(t('login.email.sent'), 'ok'); },
+  async signInEmail(email: string) { if (!this.sb) return; const { error } = await this.sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname } }); if (error) toast(error.message, 'err'); else { this.pendingEmail = email; toast(t('login.email.sent'), 'ok'); this.changed(); } },
+  // e-postadaki kodla giris: ana ekrana eklenen uygulamada baglanti tarayicida acildigi icin oturum uygulamaya gecmez; kod uygulamanin icinde yazilir
+  async verifyCode(code: string) { if (!this.sb || !this.pendingEmail) return; const { error } = await this.sb.auth.verifyOtp({ email: this.pendingEmail, token: code.replace(/\D/g, ''), type: 'email' }); if (error) toast(t('login.code.bad') + ' (' + error.message + ')', 'err'); else this.pendingEmail = ''; },
   async signOut() { if (!this.sb) return; await this.sb.auth.signOut(); this.user = null; toast(t('cloud.signedout')); this.changed(); },
   async afterSignIn() { const r = await this.pull(); if (!r) await this.push(); toast(t('cloud.linked', { u: this.label() }), 'ok'); },
   // bulut kaydi yereldekinden yeniyse (ya da yerel hesap yoksa) bulut kazanir

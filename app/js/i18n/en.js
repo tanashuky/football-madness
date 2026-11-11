@@ -6,7 +6,7 @@ export const en = {
     'toast.saved': 'Saved',
     'sys.offline': 'No connection · Career is playable', 'sys.online': 'Connected', 'sys.soon': 'Coming soon', 'sys.soon.desc': 'This section opens in the next release.',
     'login.title': 'Welcome', 'login.guest': 'Start as guest', 'login.continue': 'Continue', 'login.playnow': 'Start playing',
-    'login.google': 'With Google', 'login.apple': 'With Apple', 'login.email.placeholder': 'e-mail', 'login.email.send': 'Send link', 'login.email.sent': 'Sign-in link sent to your e-mail',
+    'login.google': 'With Google', 'login.apple': 'With Apple', 'login.email.placeholder': 'e-mail', 'login.email.send': 'Send code',
     'login.switch': 'Switch account', 'login.account': 'Account', 'login.cloud.off': 'Save stays on this device; account linking arrives with cloud.',
     'login.cloud.user': 'Save is in the cloud; continue from any device.', 'login.cloud.guest': 'Link an account to move the save to the cloud; as a guest it stays on this device.',
     'login.switch.confirm': 'Sign out of this account? The save stays in the cloud; you can sign in with another account.',
@@ -126,4 +126,5 @@ export const en = {
     'missions.daily.desc': 'Daily missions reward a boost (at most 2 a day). A boost takes 4 hours off a construction, training or scout timer. On day 7 of the streak the login reward adds a boost.', 'missions.weekly.desc': 'Weekly missions refresh on Monday; rewards go to the Career treasury.',
     'mis.d.login': 'Open the game', 'mis.d.train': 'Start a training session', 'mis.d.analysis': 'Check the opponent analysis (enter the match room)', 'mis.d.market': 'Haggle or buy in the transfer pool', 'mis.d.match': 'Play a Career match',
     'mis.w.win2': 'Win by 2 goals', 'mis.w.clean': 'Keep a clean sheet', 'mis.w.awaywin': 'Win away', 'mis.w.train3': 'Start 3 training sessions', 'mis.w.youth2': 'Give under-19 players 2 starts', 'mis.w.sale': 'Sell a player', 'mis.w.scout': 'Send a scout',
+    'login.email.sent': 'Sign-in code sent to your e-mail', 'login.code.hint': 'Enter the 6-digit code sent to {e}', 'login.code.placeholder': 'code', 'login.code.go': 'Sign in', 'login.code.other': 'another e-mail', 'login.code.bad': 'The code is invalid or expired',
 };
