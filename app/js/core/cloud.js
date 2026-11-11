@@ -5,16 +5,25 @@ import { replace, store, onSave } from './store.js';
 import { toast } from './ui.js';
 import { t, fmtTime } from './i18n.js';
 export const CLOUD = {
-    sb: null, user: null, state: 'off', pendingEmail: '', lastPush: 0, lastErr: '', _timer: 0, onChange: null,
+    sb: null, user: null, state: 'off', recovery: false, lastPush: 0, lastErr: '', _timer: 0, onChange: null,
     cfg() {
         try {
             const o = JSON.parse(localStorage.getItem('fm.cloud') || 'null');
+            if (o && o.off)
+                return null;
             if (o && o.url && o.anon)
                 return { providers: 'email', ...o };
         }
         catch (e) { }
         return CONFIG.supabaseUrl ? { url: CONFIG.supabaseUrl, anon: CONFIG.supabaseAnon, providers: CONFIG.providers } : null;
     },
+    // bu cihazda kayitli oturum var mi (ag beklemeden): cevrimdisi acilista hesap sahibi dogrudan oyuna girer
+    hasStoredSession() { try {
+        for (let i = 0; i < localStorage.length; i++)
+            if (/^sb-.*-auth-token$/.test(localStorage.key(i) || ''))
+                return true;
+    }
+    catch (e) { } return false; },
     providers() { return (this.cfg() || { providers: '' }).providers || ''; },
     async init() {
         const cfg = this.cfg();
@@ -28,8 +37,14 @@ export const CLOUD = {
             this.sb = mod.createClient(cfg.url, cfg.anon, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
             const { data } = await this.sb.auth.getSession();
             this.user = data?.session?.user ?? null;
-            this.sb.auth.onAuthStateChange((_ev, session) => { const was = !!this.user; this.user = session?.user ?? null; if (!was && this.user)
-                this.afterSignIn(); this.changed(); });
+            this.sb.auth.onAuthStateChange((_ev, session) => { if (_ev === 'PASSWORD_RECOVERY')
+                this.recovery = true; const was = !!this.user; this.user = session?.user ?? null; if (!was && this.user) {
+                this.state = 'loading';
+                this.changed();
+                this.afterSignIn().catch((e) => console.error(e)).finally(() => { this.state = 'ready'; this.changed(); });
+            }
+            else
+                this.changed(); }); // giriste once bulut kaydi cekilir, sonra oyuna alinir (kayitli kulubu olan kurulum ekranini gormesin)
             this.state = 'ready';
             if (this.user)
                 await this.pull();
@@ -52,28 +67,39 @@ export const CLOUD = {
         toast(error.message, 'err');
     else
         toast(t('login.email.sent'), 'ok'); },
-    // e-posta + sifre: ana ekrana eklenen uygulamada da calisir (e-postadaki baglanti tarayicida acilir, oturum uygulamaya gecmez)
+    // ---- e-posta + sifre ----
+    errText(error) { const m = String(error?.message || error || ''); const c = String(error?.code || ''); if (/invalid login|invalid_credentials/i.test(m + c))
+        return t('login.pw.bad'); if (/not confirmed/i.test(m + c))
+        return t('login.notconfirmed'); if (/rate limit|rate_limit/i.test(m + c))
+        return t('login.rate'); if (/expired|invalid.*(otp|token)|otp_expired/i.test(m + c))
+        return t('login.code.bad'); if (/already registered|user_already_exists/i.test(m + c))
+        return t('login.exists'); return m || t('cloud.error'); },
     async signInPassword(email, password) { if (!this.sb)
-        return; const { error } = await this.sb.auth.signInWithPassword({ email, password }); if (error)
-        toast(t('login.pw.bad'), 'err'); },
-    async signUpPassword(email, password) {
+        return t('cloud.error'); const { error } = await this.sb.auth.signInWithPassword({ email, password }); return error ? this.errText(error) : null; },
+    // donus: 'session' (dogrulama kapali, dogrudan girildi) | 'verify' (e-posta dogrulamasi bekleniyor) | 'exists' (bu e-posta kayitli) | { err }
+    async signUp(email, password) {
         if (!this.sb)
-            return;
-        if (password.length < 6) {
-            toast(t('login.pw.short'), 'err');
-            return;
-        }
+            return { err: t('cloud.error') };
         const { data, error } = await this.sb.auth.signUp({ email, password, options: { emailRedirectTo: location.origin + location.pathname } });
         if (error)
-            toast(error.message, 'err');
-        else if (!data?.session)
-            toast(t('login.pw.confirm'), 'ok');
+            return /already registered|user_already_exists/i.test(String(error.message) + String(error.code)) ? 'exists' : { err: this.errText(error) };
+        if (data?.session)
+            return 'session';
+        if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0)
+            return 'exists'; // Supabase kayitli e-posta icin bos kimlik listesi dondurur
+        return 'verify';
     },
+    async verifySignup(email, code) { if (!this.sb)
+        return t('cloud.error'); const { error } = await this.sb.auth.verifyOtp({ email, token: code.replace(/\D/g, ''), type: 'signup' }); return error ? this.errText(error) : null; },
+    async resendSignup(email) { if (!this.sb)
+        return t('cloud.error'); const { error } = await this.sb.auth.resend({ type: 'signup', email, options: { emailRedirectTo: location.origin + location.pathname } }); return error ? this.errText(error) : null; },
+    async resetRequest(email) { if (!this.sb)
+        return t('cloud.error'); const { error } = await this.sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname }); return error ? this.errText(error) : null; },
+    async resetWithCode(email, code, password) { if (!this.sb)
+        return t('cloud.error'); const { error } = await this.sb.auth.verifyOtp({ email, token: code.replace(/\D/g, ''), type: 'recovery' }); if (error)
+        return this.errText(error); const r = await this.sb.auth.updateUser({ password }); return r.error ? this.errText(r.error) : null; },
     async setPassword(password) { if (!this.sb || !this.user)
-        return; if (password.length < 6) {
-        toast(t('login.pw.short'), 'err');
-        return;
-    } const { error } = await this.sb.auth.updateUser({ password }); toast(error ? error.message : t('login.pw.set.ok'), error ? 'err' : 'ok'); },
+        return t('cloud.error'); const { error } = await this.sb.auth.updateUser({ password }); return error ? this.errText(error) : null; },
     async signOut() { if (!this.sb)
         return; await this.sb.auth.signOut(); this.user = null; toast(t('cloud.signedout')); this.changed(); },
     async afterSignIn() { const r = await this.pull(); if (!r)

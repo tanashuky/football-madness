@@ -7900,6 +7900,7 @@ SCREENS.login = () => ({ title: 'Football <span>Madness</span>', noBack: true, h
   <div class="center">
     <div class="logo">Football <span>Madness</span></div>
     <div class="row"><button class="btn prim" id="guest">${APP.db.account ? (CLOUD.user ? 'Oynamaya başla' : 'Devam et') : CLOUD.state === 'off' ? 'Misafir olarak başla' : 'Misafir olarak başla (hesapsız)'}</button></div>
+    <div class="row" style="justify-content:center"><a class="btn" href="app/" style="text-decoration:none">Yeni sürüme geç (hesap oluştur / giriş yap)</a></div>
     ${authButtons()}
     <p class="muted">${CLOUD.state === 'off' ? 'Kayıt bu cihazda tutulur; hesaba bağlama bulut açılınca.' : CLOUD.user ? 'Kayıt bulutta; her cihazdan devam edebilirsin.' : 'Hesap bağlarsan kayıt buluta alınır; misafir devam edersen bu cihazda kalır, sonra bağlayabilirsin.'}</p>
   </div>`, after: () => { $('guest').onclick = () => { if (!APP.db.account) go('setup', {}, false); else go('home', {}, false); }; bindAuth(); } });
@@ -8249,7 +8250,7 @@ function appInit() {
 window.addEventListener('hashchange', () => { if (location.hash !== '#dev') { document.body.classList.add('app'); render(); } });
 appInit();
 </script>
-<div class="dev">demo · sürüm 11.11 15:25 · <a href="#dev" style="color:inherit" onclick="document.body.classList.remove('app')">geliştirici</a></div>
+<div class="dev">demo · sürüm 11.11 15:56 · <a href="#dev" style="color:inherit" onclick="document.body.classList.remove('app')">geliştirici</a></div>
 
 </body>
 </html>

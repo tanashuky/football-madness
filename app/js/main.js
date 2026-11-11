@@ -12,6 +12,7 @@ import './screens/career.js';
 import './screens/team.js';
 import './screens/match.js';
 import { applySettings } from './screens/home.js';
+import { enter, needAuth, openNewPassword } from './screens/auth.js';
 function init() {
     load();
     applySettings();
@@ -43,13 +44,33 @@ function init() {
     addEventListener('online', net);
     addEventListener('offline', net);
     net();
-    CLOUD.onChange = () => { if (R.screen === 'login' || R.screen === 'settings')
-        render(); if (R.screen === 'login' && CLOUD.user && store.db.account)
-        go('home', {}, false); };
+    CLOUD.onChange = () => {
+        if (CLOUD.recovery && CLOUD.user) {
+            CLOUD.recovery = false;
+            openNewPassword();
+        } // sifre sifirlama baglantisiyla gelindi
+        if (R.screen === 'login') {
+            if (CLOUD.user && CLOUD.state === 'ready') {
+                const m = $('modal');
+                if (!m.hidden && m.querySelector('.auth') && !m.querySelector('#aPw2')) {
+                    m.hidden = true;
+                    m.innerHTML = '';
+                }
+                enter();
+            }
+            else
+                render();
+        }
+        else if (R.screen === 'settings')
+            render();
+        else if (CLOUD.state === 'ready' && !CLOUD.user && needAuth() && !sim.isOn())
+            go('login', {}); // oturum dusmus: giris ekranina
+    };
     CLOUD.init();
     if ('serviceWorker' in navigator && location.protocol === 'https:')
         navigator.serviceWorker.register('sw.js').catch((e) => console.warn('sw', e));
-    go(store.db.account ? 'home' : 'login', {}, false);
+    // acilis: bu cihazda kayit ve oturum varsa dogrudan oyuna (cevrimdisi da calisir); yoksa acilis/karsilama ekrani
+    go(store.db.account && (CLOUD.hasStoredSession() || !CLOUD.cfg()) ? 'home' : 'login', {}, false);
     // sayaclar: Kariyer ekrani acikken 20 sn'de bir yenilenir (bir alana yazilirken ya da pencere acikken degil)
     setInterval(() => { if (R.screen !== 'career' || sim.isOn() || !$('modal').hidden)
         return; const ae = document.activeElement; if (ae && (ae.tagName === 'SELECT' || ae.tagName === 'INPUT'))

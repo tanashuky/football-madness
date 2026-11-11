@@ -6,7 +6,7 @@ import { store, save, reset, APP_VERSION } from '../core/store.js';
 import { CLOUD } from '../core/cloud.js';
 import { card, confirmBox, dot, muted, sel, tag, toast } from '../core/ui.js';
 import { clearError, lastError } from '../core/errors.js';
-import { authButtons, bindAuth } from './auth.js';
+import { openLogin, openNewPassword, openSignup } from './auth.js';
 import { rank, seasonDone } from '../model/career.js';
 import { CAP, rollCaps } from '../model/rewards.js';
 import { CONFIG } from '../config.js';
@@ -92,7 +92,8 @@ register('settings', () => {
       ${sel(t('settings.sp'), 'sSP', onoff, b(s.spSlow), 'class="sk" data-k="spSlow"')}
     </div>`)}
     ${card(t('settings.sound'), muted(t('settings.soon.sound')))}
-    ${card(t('settings.account'), html`<p>${store.db.account?.club.name || ''} · <span id="cloudStatus">${CLOUD.statusText()}</span></p>${authButtons()}<div class="row">${CLOUD.user ? html`<button class="btn sm" id="cloudSync">${t('settings.sync')}</button><button class="btn sm ghost" id="cloudOut">${t('settings.signout')}</button>` : ''}<button class="btn sm danger" id="resetAll">${t('settings.reset')}</button></div>`)}
+    ${card(t('settings.account'), html`<p>${store.db.account?.club.name || ''} · <span id="cloudStatus">${CLOUD.statusText()}</span></p>
+      <div class="row">${CLOUD.user ? html`<button class="btn sm" id="cloudSync">${t('settings.sync')}</button><button class="btn sm" id="pwChange">${t('auth.changepw')}</button><button class="btn sm ghost" id="cloudOut">${t('settings.signout')}</button>` : CLOUD.state !== 'off' ? html`<button class="btn sm prim" id="accNew">${t('auth.signup')}</button><button class="btn sm" id="accIn">${t('auth.login')}</button>` : ''}<button class="btn sm danger" id="resetAll">${t('settings.reset')}</button></div>`)}
     ${card(t('settings.about'), html`<p class="muted">${t('settings.version')} ${APP_VERSION}</p><div class="row"><a class="btn sm ghost" href="${CONFIG.demoUrl}">${t('settings.demo')}</a></div>
       <h4>${t('settings.diag')}</h4>${err ? html`<p class="muted">${fmtDate(err.t)} · ${err.build || ''}</p><pre class="errpre">${'[' + err.where + '] ' + err.msg}</pre><div class="row"><button class="btn sm" id="errClr">${t('settings.diag.clear')}</button></div>` : muted(t('settings.diag.none'))}`)}`,
     after: (root) => {
@@ -102,7 +103,7 @@ register('settings', () => {
         (store.db.settings as any)[k] = v; save(); applySettings();
         if (k === 'lang') setLang(v as Lang);
       };
-      bindAuth(root);
+      const pc = $('pwChange'); if (pc) pc.onclick = () => openNewPassword(); const an = $('accNew'); if (an) an.onclick = () => openSignup(); const ai = $('accIn'); if (ai) ai.onclick = () => openLogin();
       const cs = $('cloudSync'); if (cs) cs.onclick = async () => { await CLOUD.push(); toast(t('toast.saved'), 'ok'); };
       const co = $('cloudOut'); if (co) co.onclick = async () => { if (!(await confirmBox(t('login.switch.confirm'), t('login.switch')))) return; await CLOUD.signOut(); go('login', {}, false); };
       $('resetAll')!.onclick = async () => { if (await confirmBox(t('settings.reset.confirm'), t('settings.reset'), true)) { reset(); location.reload(); } };

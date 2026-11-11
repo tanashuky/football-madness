@@ -8,11 +8,13 @@ import type { SaveV1 } from '../model/types.js';
 
 type State = 'off' | 'loading' | 'ready' | 'error';
 export const CLOUD = {
-  sb: null as any, user: null as any, state: 'off' as State, pendingEmail: '', lastPush: 0, lastErr: '', _timer: 0 as any, onChange: null as null | (() => void),
+  sb: null as any, user: null as any, state: 'off' as State, recovery: false, lastPush: 0, lastErr: '', _timer: 0 as any, onChange: null as null | (() => void),
   cfg(): { url: string; anon: string; providers: string } | null {
-    try { const o = JSON.parse(localStorage.getItem('fm.cloud') || 'null'); if (o && o.url && o.anon) return { providers: 'email', ...o }; } catch (e) {}
+    try { const o = JSON.parse(localStorage.getItem('fm.cloud') || 'null'); if (o && o.off) return null; if (o && o.url && o.anon) return { providers: 'email', ...o }; } catch (e) {}
     return CONFIG.supabaseUrl ? { url: CONFIG.supabaseUrl, anon: CONFIG.supabaseAnon, providers: CONFIG.providers } : null;
   },
+  // bu cihazda kayitli oturum var mi (ag beklemeden): cevrimdisi acilista hesap sahibi dogrudan oyuna girer
+  hasStoredSession(): boolean { try { for (let i = 0; i < localStorage.length; i++) if (/^sb-.*-auth-token$/.test(localStorage.key(i) || '')) return true; } catch (e) {} return false; },
   providers(): string { return (this.cfg() || { providers: '' }).providers || ''; },
   async init() {
     const cfg = this.cfg(); if (!cfg) { this.state = 'off'; return; }
@@ -22,7 +24,7 @@ export const CLOUD = {
       this.sb = mod.createClient(cfg.url, cfg.anon, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
       const { data } = await this.sb.auth.getSession();
       this.user = data?.session?.user ?? null;
-      this.sb.auth.onAuthStateChange((_ev: string, session: any) => { const was = !!this.user; this.user = session?.user ?? null; if (!was && this.user) this.afterSignIn(); this.changed(); });
+      this.sb.auth.onAuthStateChange((_ev: string, session: any) => { if (_ev === 'PASSWORD_RECOVERY') this.recovery = true; const was = !!this.user; this.user = session?.user ?? null; if (!was && this.user) { this.state = 'loading'; this.changed(); this.afterSignIn().catch((e: any) => console.error(e)).finally(() => { this.state = 'ready'; this.changed(); }); } else this.changed(); }); // giriste once bulut kaydi cekilir, sonra oyuna alinir (kayitli kulubu olan kurulum ekranini gormesin)
       this.state = 'ready';
       if (this.user) await this.pull();
     } catch (e) { console.error('bulut', e); this.state = 'error'; }
@@ -32,14 +34,23 @@ export const CLOUD = {
   label(): string { if (!this.user) return '-'; const p = this.user.app_metadata?.provider || 'email'; return `${this.user.email || String(this.user.id).slice(0, 8)} · ${p === 'email' ? 'e-posta' : p}`; },
   async signInOAuth(provider: string) { if (!this.sb) return; const { error } = await this.sb.auth.signInWithOAuth({ provider, options: { redirectTo: location.origin + location.pathname } }); if (error) toast(error.message, 'err'); },
   async signInEmail(email: string) { if (!this.sb) return; const { error } = await this.sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname } }); if (error) toast(error.message, 'err'); else toast(t('login.email.sent'), 'ok'); },
-  // e-posta + sifre: ana ekrana eklenen uygulamada da calisir (e-postadaki baglanti tarayicida acilir, oturum uygulamaya gecmez)
-  async signInPassword(email: string, password: string) { if (!this.sb) return; const { error } = await this.sb.auth.signInWithPassword({ email, password }); if (error) toast(t('login.pw.bad'), 'err'); },
-  async signUpPassword(email: string, password: string) {
-    if (!this.sb) return; if (password.length < 6) { toast(t('login.pw.short'), 'err'); return; }
+  // ---- e-posta + sifre ----
+  errText(error: any): string { const m = String(error?.message || error || ''); const c = String(error?.code || ''); if (/invalid login|invalid_credentials/i.test(m + c)) return t('login.pw.bad'); if (/not confirmed/i.test(m + c)) return t('login.notconfirmed'); if (/rate limit|rate_limit/i.test(m + c)) return t('login.rate'); if (/expired|invalid.*(otp|token)|otp_expired/i.test(m + c)) return t('login.code.bad'); if (/already registered|user_already_exists/i.test(m + c)) return t('login.exists'); return m || t('cloud.error'); },
+  async signInPassword(email: string, password: string): Promise<string | null> { if (!this.sb) return t('cloud.error'); const { error } = await this.sb.auth.signInWithPassword({ email, password }); return error ? this.errText(error) : null; },
+  // donus: 'session' (dogrulama kapali, dogrudan girildi) | 'verify' (e-posta dogrulamasi bekleniyor) | 'exists' (bu e-posta kayitli) | { err }
+  async signUp(email: string, password: string): Promise<'session' | 'verify' | 'exists' | { err: string }> {
+    if (!this.sb) return { err: t('cloud.error') };
     const { data, error } = await this.sb.auth.signUp({ email, password, options: { emailRedirectTo: location.origin + location.pathname } });
-    if (error) toast(error.message, 'err'); else if (!data?.session) toast(t('login.pw.confirm'), 'ok');
+    if (error) return /already registered|user_already_exists/i.test(String(error.message) + String(error.code)) ? 'exists' : { err: this.errText(error) };
+    if (data?.session) return 'session';
+    if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) return 'exists'; // Supabase kayitli e-posta icin bos kimlik listesi dondurur
+    return 'verify';
   },
-  async setPassword(password: string) { if (!this.sb || !this.user) return; if (password.length < 6) { toast(t('login.pw.short'), 'err'); return; } const { error } = await this.sb.auth.updateUser({ password }); toast(error ? error.message : t('login.pw.set.ok'), error ? 'err' : 'ok'); },
+  async verifySignup(email: string, code: string): Promise<string | null> { if (!this.sb) return t('cloud.error'); const { error } = await this.sb.auth.verifyOtp({ email, token: code.replace(/\D/g, ''), type: 'signup' }); return error ? this.errText(error) : null; },
+  async resendSignup(email: string): Promise<string | null> { if (!this.sb) return t('cloud.error'); const { error } = await this.sb.auth.resend({ type: 'signup', email, options: { emailRedirectTo: location.origin + location.pathname } }); return error ? this.errText(error) : null; },
+  async resetRequest(email: string): Promise<string | null> { if (!this.sb) return t('cloud.error'); const { error } = await this.sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname }); return error ? this.errText(error) : null; },
+  async resetWithCode(email: string, code: string, password: string): Promise<string | null> { if (!this.sb) return t('cloud.error'); const { error } = await this.sb.auth.verifyOtp({ email, token: code.replace(/\D/g, ''), type: 'recovery' }); if (error) return this.errText(error); const r = await this.sb.auth.updateUser({ password }); return r.error ? this.errText(r.error) : null; },
+  async setPassword(password: string): Promise<string | null> { if (!this.sb || !this.user) return t('cloud.error'); const { error } = await this.sb.auth.updateUser({ password }); return error ? this.errText(error) : null; },
   async signOut() { if (!this.sb) return; await this.sb.auth.signOut(); this.user = null; toast(t('cloud.signedout')); this.changed(); },
   async afterSignIn() { const r = await this.pull(); if (!r) await this.push(); toast(t('cloud.linked', { u: this.label() }), 'ok'); },
   // bulut kaydi yereldekinden yeniyse (ya da yerel hesap yoksa) bulut kazanir
