@@ -38,7 +38,7 @@ function roomTeams(c) {
         return { me: botTeamIn(tplById(c.mine), 3, NAMES_A), opp: botTeamIn(tplById(c.tpl), c.diff, NAMES_B) };
     const k = store.db.career;
     const club = store.db.account.club;
-    return { me: userTeamIn(club, k.roster, k.team), opp: botTeamIn(k.league.teams[c.oppIdx], k.diff, NAMES_B) };
+    return { me: userTeamIn(club, k.roster, k.team, k.metrics, 9), opp: botTeamIn(k.league.teams[c.oppIdx], k.diff, NAMES_B) };
 }
 register('room', (c) => {
     const { me, opp } = roomTeams(c);

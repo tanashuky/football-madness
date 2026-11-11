@@ -30,7 +30,7 @@ register('mm', (c) => {
 function roomTeams(c: RoomCtx): { me: TeamIn; opp: TeamIn } {
   if (c.kind === 'mm') return { me: botTeamIn(tplById(c.mine!), 3, NAMES_A), opp: botTeamIn(tplById(c.tpl!), c.diff, NAMES_B) };
   const k = store.db.career!; const club = store.db.account!.club;
-  return { me: userTeamIn(club, k.roster, k.team), opp: botTeamIn(k.league.teams[c.oppIdx!], k.diff, NAMES_B) };
+  return { me: userTeamIn(club, k.roster, k.team, k.metrics, 9), opp: botTeamIn(k.league.teams[c.oppIdx!], k.diff, NAMES_B) };
 }
 register('room', (c: RoomCtx) => {
   const { me, opp } = roomTeams(c); const s = store.db.settings; const home_ = c.home !== false; const k = store.db.career;

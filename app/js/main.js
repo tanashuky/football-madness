@@ -41,6 +41,10 @@ function init() {
     if ('serviceWorker' in navigator && location.protocol === 'https:')
         navigator.serviceWorker.register('sw.js').catch((e) => console.warn('sw', e));
     go(store.db.account ? 'home' : 'login', {}, false);
+    // sayaclar: Kariyer ekrani acikken 20 sn'de bir yenilenir (bir alana yazilirken ya da pencere acikken degil)
+    setInterval(() => { if (R.screen !== 'career' || sim.isOn() || !$('modal').hidden)
+        return; const ae = document.activeElement; if (ae && (ae.tagName === 'SELECT' || ae.tagName === 'INPUT'))
+        return; const sc = $('aBody').scrollTop; render(); $('aBody').scrollTop = sc; }, 20000);
     window.FM = { store, go, sim, CLOUD };
 }
 init();

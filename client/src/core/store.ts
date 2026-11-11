@@ -44,7 +44,12 @@ export function normalize(db: any): SaveV1 {
 function normalizeCareer(c: any): Career {
   c.fm = Number.isFinite(c.fm) ? c.fm : 0;
   c.ledger = Array.isArray(c.ledger) ? c.ledger : [];
-  c.facilities = { stadium: { level: 1 }, training: { level: 1 }, academy: { level: 1 }, medical: { level: 1 }, ...(c.facilities || {}) };
+  c.facilities = { stadium: { level: 1, ...((c.facilities || {}).stadium || {}) }, academy: { level: 0, ...((c.facilities || {}).academy || {}) } };
+  c.metrics = { U: 55, T: 55, F: 55, M: 70, ...(c.metrics || {}) };
+  c.train = { day: '', count: 0, job: null, last: null, ...(c.train || {}) };
+  c.scout = { job: null, found: null, ...(c.scout || {}) };
+  c.pool = Array.isArray(c.pool) ? c.pool : [];
+  c.nextId = c.nextId || 1; c.lastTick = c.lastTick || 0;
   c.tm = Number.isFinite(c.tm) ? c.tm : 55;
   c.stats = { played: 0, won: 0, drawn: 0, lost: 0, seasons: 1, ...(c.stats || {}) };
   c.trophies = Array.isArray(c.trophies) ? c.trophies : [];

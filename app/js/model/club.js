@@ -101,12 +101,12 @@ export function userShapes(tt) {
     return { def, att };
 }
 // kullanici takimi -> motor girdisi (kimlik -> numara cevirisi burada)
-export function userTeamIn(club, roster, tt) {
+export function userTeamIn(club, roster, tt, m, benchCap = 0) {
     ensureLineup(roster, tt);
     const t = mkSquad({ ...club, formation: tt.formation }, club.gg || 62, NAMES_A);
     const slots = FORM_POS[tt.formation];
     const byId = Object.fromEntries(roster.map((p) => [p.id, p]));
-    const mk = (p, pos) => ({ num: p.num, name: p.name, pos, natPos: p.natPos, gg: p.gg, age: p.age, traits: p.traits, fatigue: p.fatigue, id: p.id });
+    const mk = (p, pos) => ({ num: p.num, name: p.name, pos, natPos: p.natPos, gg: Math.round(p.gg), age: p.age, traits: p.traits, fatigue: Math.round(p.fatigue), id: p.id });
     const lineup = tt.lineup;
     t.players = lineup.map((id, i) => mk(byId[id], slots[i]));
     t.bench = roster.filter((p) => !lineup.includes(p.id)).sort((a, b) => (a.natPos === 'GK' ? -1 : b.natPos === 'GK' ? 1 : 0)).map((p) => mk(p, p.natPos));
@@ -122,10 +122,16 @@ export function userTeamIn(club, roster, tt) {
     t.mainTactic = { ...tt.tactic, doctrine: tt.doctrine };
     t.duties = duties;
     t.rules = (tt.rules || []).map((id) => RULE_TEMPLATES.find((r) => r.id === id)).filter(Boolean);
-    t.U = 60;
-    t.T = 60;
-    t.F = 60;
-    t.M = 70;
+    t.U = m ? m.U : 60;
+    t.T = m ? m.T : 60;
+    t.F = m ? m.F : 60;
+    t.M = m ? m.M : 70;
+    // mac kadrosu: yedek kulubesi sinirli (kaleci + en gucluler)
+    if (benchCap && t.bench && t.bench.length > benchCap) {
+        const gk = t.bench.find((p) => p.pos === 'GK');
+        const rest = t.bench.filter((p) => p !== gk).sort((a, b) => b.gg - a.gg).slice(0, benchCap - (gk ? 1 : 0));
+        t.bench = gk ? [gk, ...rest] : rest;
+    }
     return t;
 }
 export const avgGG = (t) => Math.round(t.players.reduce((a, p) => a + p.gg, 0) / 11);

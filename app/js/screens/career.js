@@ -1,11 +1,12 @@
 // Kariyer: yeni kariyer kurulumu ve dort sekmeli kulup ekrani (Kulup · Takim · Mac · Kadro yenileme)
-import { $, html } from '../core/html.js';
+import { $, html, raw } from '../core/html.js';
 import { t, fmtNum, fmtDate } from '../core/i18n.js';
 import { go, home, register, render } from '../core/router.js';
 import { store, save, takePendingDemoSquad } from '../core/store.js';
 import { card, confirmBox, dot, muted, sel, tag, toast } from '../core/ui.js';
 import { DIFFS } from '../model/templates.js';
 import { closeSeason, form, newCareer, nextFixture, order, rank, seasonDone, skipWeek, weekSeed, STADIUM_CAP } from '../model/career.js';
+import { INTENSITY, ROSTER_MAX, SCOUTS, SESSIONS_PER_DAY, academyUpkeep, building, buy, fmtLeft, haggle, marketValue, scoutCost, sell, sellPrice, sessionsToday, signFound, startScout, startTraining, startUpgrade, tick, tmNeutral, trainMs, upgradeInfo, useBoost } from '../model/manage.js';
 import { DOCTRINES } from '../engine.js';
 import { grantCareer } from '../model/rewards.js';
 const diffOpts = () => DIFFS.map((d) => [d, t('diff.' + d)]);
@@ -31,25 +32,49 @@ export const onCareerTab = (id) => { if (id === 'team')
 else
     go('career', { tab: id }, false); };
 const formTags = (f) => f.length ? html `${f.map((x) => tag(x === 'W' ? t('th.w') : x === 'D' ? t('th.d') : t('th.l'), x === 'W' ? 'g' : x === 'L' ? 'r' : ''))}` : html `<span class="muted">–</span>`;
+const left = (until) => fmtLeft(until - Date.now());
+const boostBtn = (what) => (store.db.rewards.boosts > 0 ? html `<button class="btn sm ghost" data-boost="${what}">⚡ ${t('mng.boost')}</button>` : html ``);
+const ledgerText = (x) => { const [a, b, c2] = x.split(':'); return a === 'build' ? `${t('fac.' + b)} → ${t('fac.level', { n: c2 })}` : a === 'scout' ? `${t('renew.scout')} (${t('scout.' + b)})` : a === 'buy' ? `${t('mng.buy')}: ${b}` : a === 'sell' ? `${t('mng.sell')}: ${b}` : a === 'upkeep' ? t('mng.upkeep') : x; };
 function clubTab(k) {
     const l = k.league;
     const c = store.db.account.club;
     const nxt = nextFixture(l);
+    const bld = building(k);
+    const fac = (f) => {
+        const lv = k.facilities[f].level;
+        const u = upgradeInfo(k, f);
+        const busy = k.facilities[f].busyUntil;
+        return html `<div class="fac"><b>${t('fac.' + f)} <small>${lv ? t('fac.level', { n: lv }) : t('fac.none')}</small></b><span class="muted small">${f === 'stadium' ? t('fac.stadium.info', { cap: fmtNum(STADIUM_CAP[lv]), tm: Math.round(tmNeutral(k)) }) : lv ? t('fac.academy.info', { up: fmtNum(academyUpkeep(k)) }) : t('fac.academy.none')}</span>
+      ${busy ? html `<div class="row"><span class="tag o">🏗 ${t('fac.level', { n: lv + 1 })} · ${left(busy)}</span>${boostBtn('build')}</div>` : u ? html `<div class="row"><button class="btn sm ${bld || k.fm < u.cost ? '' : 'prim'}" data-up="${f}" ${bld || k.fm < u.cost ? raw('disabled') : ''}>${t('fac.upgrade', { n: u.to })} · ${fmtNum(u.cost)} FM · ${fmtLeft(u.ms)}</button></div>` : html `<span class="tag g">${t('fac.max')}</span>`}</div>`;
+    };
     return html `
     ${card(t('club.today'), html `<p>${dot(c.color)} <b>${c.name}</b> · ${t('career.season', { n: l.season })} · ${t('career.played', { w: l.week, total: l.fixtures.length })} · ${t('career.rank', { n: rank(l) })}</p>
       <p>${t('career.form')}: ${formTags(form(l, 0))}</p>
       ${nxt ? html `<p class="muted">${t('career.next')}: ${l.teams[nxt.oppIdx].name} (${nxt.home ? t('career.home') : t('career.away')})</p>` : seasonDone(l) ? muted(t('career.seasonend')) : ''}`)}
-    ${card(t('club.finance'), html `<div class="wallet"><span>${tag(html `${fmtNum(k.fm)} FM`, 'g')}</span><span class="muted">${t('finance.tm', { n: k.tm })}</span></div>
-      ${k.ledger.length ? html `<div class="list compact">${k.ledger.slice(0, 8).map((e) => html `<div class="li"><div><div class="nm">${e.text}</div><div class="sub">${fmtDate(e.t)}</div></div><div class="gg ${e.fm >= 0 ? 'pos' : 'neg'}">${e.fm >= 0 ? '+' : ''}${fmtNum(e.fm)}</div></div>`)}</div>` : muted(t('finance.empty'))}`)}
-    ${card(t('club.facilities'), html `<div class="grid2">${['stadium', 'training', 'academy', 'medical'].map((f) => html `<div class="fac"><b>${t('fac.' + f)}</b><span class="muted">${t('fac.level', { n: k.facilities[f].level })}${f === 'stadium' ? ` · ${fmtNum(STADIUM_CAP[k.facilities.stadium.level])}` : ''}</span></div>`)}</div>${muted(t('fac.soon'))}`)}
+    ${card(t('club.facilities'), html `<div class="grid2">${fac('stadium')}${fac('academy')}</div>${muted(t('fac.rule'))}`)}
+    ${card(t('club.finance'), html `<div class="wallet"><span>${tag(html `${fmtNum(k.fm)} FM`, 'g')}</span><span class="muted">${t('finance.tm', { n: Math.round(k.tm) })}</span></div>
+      ${k.ledger.length ? html `<div class="list compact">${k.ledger.slice(0, 10).map((e) => html `<div class="li"><div><div class="nm">${ledgerText(e.text)}</div><div class="sub">${fmtDate(e.t)}</div></div><div class="gg ${e.fm >= 0 ? 'pos' : 'neg'}">${e.fm >= 0 ? '+' : ''}${fmtNum(e.fm)}</div></div>`)}</div>` : muted(t('finance.empty'))}`)}
     ${card(t('club.history'), html `${k.history.length ? html `<div class="list compact">${k.history.map((h) => html `<div class="li"><div class="nm">${t('career.season', { n: h.season })}</div><div class="sub">${t('career.rank', { n: h.rank })} · ${h.w}-${h.d}-${h.l}</div></div>`)}</div>` : ''}${k.trophies.length ? html `<div class="row wrap">${k.trophies.map((tr) => tag(html `🏆 ${tr.name} · ${t('career.season', { n: tr.season })}`, 'y'))}</div>` : muted(t('profile.empty'))}`)}`;
 }
-function teamTab(k) {
+const TRAIN_KINDS = ['cohesion', 'tactic', 'physical', 'individual', 'rest'];
+function teamTab(k, c) {
     const tt = k.team;
+    const m = k.metrics;
+    const job = k.train.job;
+    const n = sessionsToday(k);
+    const fat = Math.round(k.roster.reduce((a, p) => a + p.fatigue, 0) / k.roster.length);
+    const bar = (lab, v) => html `<div class="meter"><span>${lab}</span><div class="k"><i style="width:${Math.round(v)}%"></i></div><b>${v.toFixed(1)}</b></div>`;
+    const kind = c.tk || 'cohesion';
+    const lv = c.tl ?? 1;
+    const I = INTENSITY[lv];
     return html `
-    ${card(t('team.squad'), html `<p class="muted">${t('team.squad.desc', { n: k.roster.length, f: tt.formation })}</p><div class="row"><button class="btn prim" data-go="squad">${t('team.squad')}</button></div>`)}
-    ${card(t('team.tactics'), html `<p class="muted">${tt.formation} → ${tt.formationAtt || tt.formation} · ${DOCTRINES[tt.doctrine].label}</p><div class="row"><button class="btn prim" data-go="tactics">${t('team.tactics')}</button></div>`)}
-    ${card(t('team.training'), muted(t('sys.soon.desc')))}`;
+    ${card(t('team.metrics'), html `${bar(t('met.U'), m.U)}${bar(t('met.T'), m.T)}${bar(t('met.F'), m.F)}${bar(t('met.M'), m.M)}${bar(t('squad.fatigue'), fat)}${muted(t('met.desc'))}`)}
+    ${card(html `${t('team.training')} <small>${t('train.today', { n, max: SESSIONS_PER_DAY })}</small>`, job ? html `<div class="row"><span class="tag o">${t('train.' + job.kind)}${job.kind === 'rest' ? '' : ' · ' + t('train.lv.' + job.level)} · ${left(job.until)}</span>${boostBtn('train')}</div>${muted(t('train.running'))}`
+        : html `<div class="grid2">${sel(t('train.kind'), 'trKind', TRAIN_KINDS.map((x) => [x, t('train.' + x)]), kind)}${kind === 'rest' ? '' : sel(t('train.level'), 'trLv', [0, 1, 2].map((x) => [x, t('train.lv.' + x)]), lv)}</div>
+        ${kind === 'individual' ? html `<div class="grid2">${[0, 1, 2].map((i) => html `<label class="f">${t('train.player', { n: i + 1 })}<select class="trP"><option value="">–</option>${[...k.roster].sort((a, b) => a.age - b.age).map((p) => html `<option value="${p.id}">${p.num} ${p.name} · ${p.natPos} · ${Math.round(p.gg)} · ${p.age}</option>`)}</select></label>`)}</div>` : ''}
+        <p class="muted small">${t('train.effect.' + kind)} · ${fmtLeft(trainMs(kind, lv))}${kind === 'rest' ? '' : ` · ${t('squad.fatigue')} +${kind === 'cohesion' ? I.fat / 2 : I.fat}`}</p>
+        <div class="row"><button class="btn prim sm" id="trGo" ${n >= SESSIONS_PER_DAY ? raw('disabled') : ''}>${n >= SESSIONS_PER_DAY ? t('train.limit') : t('train.start')}</button></div>${k.train.last ? muted(html `${t('train.last')}: ${t('train.' + k.train.last.kind)} ${k.train.last.text === 'rest' ? '' : k.train.last.text}`) : ''}`)}
+    ${card(t('team.squad'), html `<p class="muted">${t('team.squad.desc', { n: k.roster.length, f: tt.formation })}</p><div class="row"><button class="btn sm" data-go="squad">${t('team.squad')}</button><button class="btn sm" data-go="tactics">${t('team.tactics')}</button></div><p class="muted small">${tt.formation} → ${tt.formationAtt || tt.formation} · ${DOCTRINES[tt.doctrine].label}</p>`)}`;
 }
 function matchTab(k, sub) {
     const l = k.league;
@@ -67,7 +92,19 @@ function matchTab(k, sub) {
     const table = card(t('match.table'), html `<table class="tbl"><tr><th>#</th><th class="l">${t('th.team')}</th><th>${t('th.p')}</th><th>${t('th.w')}</th><th>${t('th.d')}</th><th>${t('th.l')}</th><th>${t('th.ga')}</th><th>${t('th.av')}</th><th>${t('th.pts')}</th></tr>${ord.map((i, r) => { const row = l.table[i]; return html `<tr class="${i === 0 ? 'me' : ''} ${r === 0 ? 'up' : ''}"><td>${r + 1}</td><td class="l">${l.teams[i].name}</td><td>${row.p}</td><td>${row.w}</td><td>${row.d}</td><td>${row.l}</td><td>${row.gf}:${row.ga}</td><td>${row.gf - row.ga}</td><td><b>${row.pts}</b></td></tr>`; })}</table>`);
     return html `${top}<div class="seg sub" id="mSub"><button data-v="fixture" aria-pressed="${sub === 'fixture'}">${t('match.fixture')}</button><button data-v="table" aria-pressed="${sub === 'table'}">${t('match.table')}</button></div>${sub === 'table' ? table : fixture}`;
 }
-function renewTab() { return html `${card(t('renew.scout'), muted(t('renew.scout.desc')))}${card(t('renew.academy'), muted(t('renew.academy.desc')))}`; }
+const plRow = (p, right) => html `<div class="li static"><div class="num">${p.num || '–'}</div><div><div class="nm">${p.name} <small class="muted">${t('pos.' + p.natPos)}</small></div><div class="sub">${t('squad.gg')} ${Math.round(p.gg)} · ${p.age} ${t('squad.age')}${p.traits.map((x) => ' · ' + x).join('')}</div></div>${right}</div>`;
+function renewTab(k) {
+    const sc = k.scout;
+    const full = k.roster.length >= ROSTER_MAX;
+    return html `
+    ${card(html `${t('renew.scout')} <small>${t('mng.roster', { n: k.roster.length, max: ROSTER_MAX })}</small>`, sc.found ? html `${plRow(sc.found, html `<div class="gg">${fmtNum(marketValue(sc.found))}</div>`)}<div class="row"><button class="btn prim sm" id="scSign" ${full ? raw('disabled') : ''}>${t('scout.sign')}</button><button class="btn sm ghost" id="scDrop">${t('scout.drop')}</button></div>`
+        : sc.job ? html `<div class="row"><span class="tag o">${t('scout.' + SCOUTS[sc.job.tier].id)} · ${left(sc.job.until)}</span>${boostBtn('scout')}</div>${muted(t('scout.running'))}`
+            : html `<div class="row">${sel(t('scout.pos'), 'scPos', [['', t('scout.any')], ...['GK', 'CB', 'FB', 'DM', 'CM', 'W', 'ST'].map((x) => [x, t('pos.' + x)])], '')}</div>
+        <div class="row wrap">${SCOUTS.map((s2, i) => html `<button class="btn sm" data-scout="${i}" ${k.fm < scoutCost(i) ? raw('disabled') : ''}>${t('scout.' + s2.id)} · ${t('squad.gg')} ${s2.gg[0]}–${s2.gg[1]} · ${fmtNum(scoutCost(i))} FM</button>`)}</div>${muted(t('scout.desc'))}`)}
+    ${card(html `${t('mng.pool')} <small>${t('mng.pool.sub')}</small>`, k.pool.length ? html `<div class="list compact">${k.pool.map((it) => plRow(it.p, html `<div class="acts"><b class="${it.haggled ? (it.price < marketValue(it.p) ? 'pos' : 'neg') : ''}">${fmtNum(it.price)}</b><button class="btn sm ghost" data-hag="${it.p.id}" ${it.haggled ? raw('disabled') : ''}>${t('mng.haggle')}</button><button class="btn sm" data-buy="${it.p.id}" ${k.fm < it.price || full ? raw('disabled') : ''}>${t('mng.buy')}</button></div>`))}</div>` : muted(t('mng.pool.empty')))}
+    ${card(html `${t('mng.sellTitle')} <small>${t('mng.sell.sub')}</small>`, html `<div class="list compact">${[...k.roster].sort((a, b) => b.gg - a.gg).map((p) => plRow(p, html `<div class="acts"><b>${fmtNum(sellPrice(p))}</b><button class="btn sm ghost danger" data-sell="${p.id}">${t('mng.sell')}</button></div>`))}</div>`)}
+    ${card(t('renew.academy'), muted(k.facilities.academy.level ? t('academy.info', { n: k.facilities.academy.level }) : t('fac.academy.none')))}`;
+}
 register('career', (c) => {
     const k = store.db.career;
     if (!k) {
@@ -76,7 +113,13 @@ register('career', (c) => {
     }
     const tab = c.tab || 'match';
     const sub = c.sub || 'fixture';
-    const body = tab === 'club' ? clubTab(k) : tab === 'team' ? teamTab(k) : tab === 'renew' ? renewTab() : matchTab(k, sub);
+    const done = tick(k);
+    if (done.length) {
+        save();
+        setTimeout(() => { for (const d of done)
+            toast(t('done.' + d.split(':')[0]) + (d.startsWith('fac:') ? ': ' + t('fac.' + d.slice(4)) : ''), 'ok'); }, 50);
+    }
+    const body = tab === 'club' ? clubTab(k) : tab === 'team' ? teamTab(k, c) : tab === 'renew' ? renewTab(k) : matchTab(k, sub);
     return { title: `${t('career.title')} · ${t('career.season', { n: k.league.season })}`, back: false, html: body, tabs: careerTabs(tab), onTab: onCareerTab, after: () => {
             const ms = $('mSub');
             if (ms)
@@ -87,11 +130,60 @@ register('career', (c) => {
                 bye.onclick = () => { skipWeek(k); save(); render(); };
             const ag = $('sAgain');
             if (ag)
-                ag.onclick = () => { const r = rank(k.league); closeSeason(k); if (r === 1) {
+                ag.onclick = () => { const r = rank(k.league); const youths = closeSeason(k); if (youths.length)
+                    setTimeout(() => toast(t('academy.new', { n: youths.length }), 'ok'), 400); if (r === 1) {
                     const pp = grantCareer(store.db.rewards, 'title');
                     if (pp)
                         toast(t('report.reward', { pp }), 'ok');
                 } save(); toast(t('career.season', { n: k.league.season }), 'ok'); render(); };
+            const root = $('aBody');
+            const re = (msg, kind = 'ok') => { save(); if (msg)
+                toast(msg, kind); render(); };
+            const fail = (r) => toast(t('mng.err.' + r), 'err');
+            for (const b of root.querySelectorAll('[data-up]'))
+                b.onclick = () => { const r = startUpgrade(k, b.dataset.up); if (r === 'ok')
+                    re(t('fac.started'));
+                else
+                    fail(r); };
+            for (const b of root.querySelectorAll('[data-boost]'))
+                b.onclick = () => { if (useBoost(k, store.db.rewards, b.dataset.boost))
+                    re(t('mng.boosted')); };
+            const tk = $('trKind'), tl = $('trLv');
+            if (tk)
+                tk.onchange = () => go('career', { ...c, tk: tk.value }, false);
+            if (tl)
+                tl.onchange = () => go('career', { ...c, tl: +tl.value }, false);
+            const tg = $('trGo');
+            if (tg)
+                tg.onclick = () => { const r = startTraining(k, (tk ? tk.value : 'cohesion'), tl ? +tl.value : 0, [...root.querySelectorAll('.trP')].map((x) => x.value)); if (r === 'ok')
+                    re(t('train.started'));
+                else
+                    fail(r); };
+            for (const b of root.querySelectorAll('[data-scout]'))
+                b.onclick = () => { const r = startScout(k, +b.dataset.scout, ($('scPos').value || '')); if (r === 'ok')
+                    re(t('scout.started'));
+                else
+                    fail(r); };
+            const ss = $('scSign');
+            if (ss)
+                ss.onclick = () => { if (signFound(k))
+                    re(t('scout.signed')); };
+            const sd = $('scDrop');
+            if (sd)
+                sd.onclick = () => { k.scout.found = null; re(); };
+            for (const b of root.querySelectorAll('[data-hag]'))
+                b.onclick = () => { const r = haggle(k, b.dataset.hag); re(r === 'down' ? t('mng.haggle.ok') : t('mng.haggle.no'), r === 'down' ? 'ok' : 'err'); };
+            for (const b of root.querySelectorAll('[data-buy]'))
+                b.onclick = () => { const r = buy(k, b.dataset.buy); if (r === 'ok')
+                    re(t('mng.bought'));
+                else
+                    fail(r); };
+            for (const b of root.querySelectorAll('[data-sell]'))
+                b.onclick = async () => { const p = k.roster.find((x) => x.id === b.dataset.sell); if (!p || !(await confirmBox(t('mng.sell.confirm', { name: p.name, fm: fmtNum(sellPrice(p)) }), t('mng.sell'), true)))
+                    return; const r = sell(k, p.id); if (r === 'ok')
+                    re(t('mng.sold'));
+                else
+                    fail(r); };
             const del = $('sDel');
             if (del)
                 del.onclick = async () => { if (await confirmBox(t('career.endleague.confirm'), t('career.endleague'), true)) {

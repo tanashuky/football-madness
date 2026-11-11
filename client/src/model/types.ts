@@ -28,11 +28,16 @@ export interface Career {
   roster: RosterPlayer[]; team: TeamSetup; league: League;
   fm: number; // Kariyer cuzdani (FM, tasinmaz)
   ledger: { t: number; text: string; fm: number }[]; // son hareketler (en cok 40)
-  facilities: { stadium: Facility; training: Facility; academy: Facility; medical: Facility };
+  facilities: { stadium: Facility; academy: Facility };
   tm: number; // taraftar morali (doluluk)
   stats: { played: number; won: number; drawn: number; lost: number; seasons: number };
   trophies: { season: number; kind: 'league' | 'cup'; name: string }[];
   history: { season: number; rank: number; w: number; d: number; l: number }[];
+  metrics: { U: number; T: number; F: number; M: number }; // takim uyumu, taktik ve fiziksel kapasite, moral
+  train: { day: string; count: number; job: null | { kind: string; level: number; players: string[]; until: number }; last: null | { kind: string; text: string; t: number } };
+  scout: { job: null | { tier: number; pos: string; until: number }; found: RosterPlayer | null };
+  pool: { p: RosterPlayer; price: number; haggled: boolean }[]; // transfer havuzu (sezon basi yenilenir)
+  nextId: number; lastTick: number;
 }
 export interface MatchModeState { elo: number; played: number; last: string | null }
 export interface RewardEntry { t: number; src: 'career' | 'online'; kind: string; pp: number; boost?: number }
