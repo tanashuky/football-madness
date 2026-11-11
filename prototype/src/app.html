@@ -267,10 +267,13 @@ function botTeamIn(tpl, diff, names) {
   const t = mkSquad({ name: tpl.name, short: tpl.short, color: tpl.color, color2: tpl.color2, formation: tpl.formation }, tpl.gg, names || NAMES_B);
   t.tactic = { ...DOCTRINES[tpl.doctrine].tactic, doctrine: tpl.doctrine };
   t.mainTactic = { ...t.tactic };
-  const lv = AI_LEVELS[diff];
-  if (lv && lv.ai) t.ai = lv.ai;
-  t.rules = botRules(diff - 1); t.think = diff - 1;
-  t.U = 55 + diff * 2; t.T = 50 + diff * 4; t.F = 55 + diff * 2; t.M = 70;
+  // 11 Kasim: her kademe bir alt kademenin parametrelerini alir (oyun zor geldi); Amator icin yeni, daha yumusak taban.
+  // Ek olarak rakip GG kademeye gore kayar (Amator -4 ... Efsane +4): dusuk kademede rakip hem daha yavas karar verir hem daha zayif.
+  const DIFF_AI = { 1: { noiseMult: 4, readAcc: 0.2, react: 0.85, timing: 0.3 }, 2: AI_LEVELS[1].ai, 3: AI_LEVELS[2].ai, 4: AI_LEVELS[3].ai, 5: AI_LEVELS[4].ai };
+  t.ai = DIFF_AI[diff] || DIFF_AI[2];
+  const ggOff = (diff - 3) * 2; for (const p of [...t.players, ...t.bench]) p.gg = Math.max(30, Math.min(99, p.gg + ggOff));
+  t.rules = botRules(Math.max(0, diff - 2)); t.think = Math.max(0, diff - 2);
+  t.U = 53 + diff * 2; t.T = 46 + diff * 4; t.F = 53 + diff * 2; t.M = 70;
   return t;
 }
 
