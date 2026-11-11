@@ -6,9 +6,10 @@ import { store, save, takePendingDemoSquad } from '../core/store.js';
 import { card, confirmBox, dot, muted, sel, tag, toast } from '../core/ui.js';
 import { DIFFS } from '../model/templates.js';
 import { closeSeason, form, newCareer, nextFixture, order, rank, seasonDone, skipWeek, weekSeed, STADIUM_CAP } from '../model/career.js';
-import { INTENSITY, ROSTER_MAX, SCOUTS, SESSIONS_PER_DAY, academyUpkeep, STAFF, building, buy, fmtLeft, occupancy, setStaff, staffWage, staffWages, ts, haggle, marketValue, scoutCost, sell, sellPrice, sessionsToday, signFound, startScout, startTraining, startUpgrade, tick, tmNeutral, trainMs, upgradeInfo, useBoost } from '../model/manage.js';
+import { INTENSITY, ROSTER_MAX, SCOUTS, SESSIONS_PER_DAY, academyUpkeep, STAFF, building, buy, coachWages, fmtLeft, overpaid, playerWages, occupancy, setStaff, staffWage, staffWages, ts, haggle, marketValue, scoutCost, sell, sellPrice, sessionsToday, signFound, startScout, startTraining, startUpgrade, tick, tmNeutral, trainMs, upgradeInfo, useBoost } from '../model/manage.js';
 import { DOCTRINES } from '../engine.js';
 import { ROUNDS, cupDue } from '../model/cup.js';
+import { track } from '../model/missions.js';
 import { grantCareer } from '../model/rewards.js';
 const diffOpts = () => DIFFS.map((d) => [d, t('diff.' + d)]);
 register('careerNew', () => ({ title: t('career.new.title'), html: html `
@@ -35,7 +36,7 @@ else
 const formTags = (f) => f.length ? html `${f.map((x) => tag(x === 'W' ? t('th.w') : x === 'D' ? t('th.d') : t('th.l'), x === 'W' ? 'g' : x === 'L' ? 'r' : ''))}` : html `<span class="muted">–</span>`;
 const left = (until) => fmtLeft(until - Date.now());
 const boostBtn = (what) => (store.db.rewards.boosts > 0 ? html `<button class="btn sm ghost" data-boost="${what}">⚡ ${t('mng.boost')}</button>` : html ``);
-const ledgerText = (x) => { const [a, b, c2] = x.split(':'); return a === 'build' ? `${t('fac.' + b)} → ${t('fac.level', { n: c2 })}` : a === 'scout' ? `${t('renew.scout')} (${t('scout.' + b)})` : a === 'buy' ? `${t('mng.buy')}: ${b}` : a === 'sell' ? `${t('mng.sell')}: ${b}` : a === 'upkeep' ? t('mng.upkeep') : a === 'wages' ? t('staff.wages') : a === 'staff' ? `${t('staff.' + b)} → ${t('fac.level', { n: c2 })}` : a === 'sponsor' ? t('fin.sponsor') : a === 'prize' ? `${t('fin.prize')} (${t('career.rank', { n: b })})` : a === 'cup' ? `${t('cup.title.short')} · ${b === 'entry' ? t('cup.entry') : t('cup.r.' + Math.max(0, ROUNDS.indexOf(b))) + ' ' + (c2 || '')}` : /^\d+\.\d+ [HA] /.test(x) ? x.replace(' H ', ` ${t('career.home')} `).replace(' A ', ` ${t('career.away')} `) : x; };
+const ledgerText = (x) => { const [a, b, c2] = x.split(':'); return a === 'build' ? `${t('fac.' + b)} → ${t('fac.level', { n: c2 })}` : a === 'scout' ? `${t('renew.scout')} (${t('scout.' + b)})` : a === 'buy' ? `${t('mng.buy')}: ${b}` : a === 'sell' ? `${t('mng.sell')}: ${b}` : a === 'upkeep' ? t('mng.upkeep') : a === 'wages' ? t('staff.wages') : a === 'pwages' ? t('wage.players') : a === 'coach' ? t('coach.title') : a === 'mission' ? t('missions.title') : a === 'staff' ? `${t('staff.' + b)} → ${t('fac.level', { n: c2 })}` : a === 'sponsor' ? t('fin.sponsor') : a === 'prize' ? `${t('fin.prize')} (${t('career.rank', { n: b })})` : a === 'cup' ? `${t('cup.title.short')} · ${b === 'entry' ? t('cup.entry') : t('cup.r.' + Math.max(0, ROUNDS.indexOf(b))) + ' ' + (c2 || '')}` : /^\d+\.\d+ [HA] /.test(x) ? x.replace(' H ', ` ${t('career.home')} `).replace(' A ', ` ${t('career.away')} `) : x; };
 function clubTab(k) {
     const l = k.league;
     const c = store.db.account.club;
@@ -54,7 +55,7 @@ function clubTab(k) {
       ${nxt ? html `<p class="muted">${t('career.next')}: ${l.teams[nxt.oppIdx].name} (${nxt.home ? t('career.home') : t('career.away')})</p>` : seasonDone(l) ? muted(t('career.seasonend')) : ''}`)}
     ${card(t('club.facilities'), html `<div class="grid2">${fac('stadium')}${fac('academy')}</div>${muted(t('fac.rule'))}`)}
     ${card(html `${t('club.staff')} <small>${t('staff.sub', { w: fmtNum(staffWages(k)), ts: ts(k) })}</small>`, html `${STAFF.map((sk) => html `<div class="row staff"><span class="who"><b>${t('staff.' + sk)}</b><br><span class="muted small">${t('staff.fx.' + sk)}</span></span><select class="stf" data-k="${sk}">${[0, 1, 2, 3, 4, 5].map((lv) => html `<option value="${lv}" ${lv === k.staff[sk] ? raw('selected') : ''}>${lv ? `${t('fac.level', { n: lv })} · ${fmtNum(staffWage(lv))} FM` : t('fac.none')}</option>`)}</select></div>`)}${muted(t('staff.rule'))}`)}
-    ${card(t('club.finance'), html `<div class="wallet"><span>${tag(html `${fmtNum(k.fm)} FM`, 'g')}</span><span class="muted">${t('finance.tm', { n: Math.round(k.tm) })} · ${t('fin.occ', { n: Math.round(occupancy(k) * 100) })}</span></div>
+    ${card(t('club.finance'), html `<div class="wallet"><span>${tag(html `${fmtNum(k.fm)} FM`, 'g')}</span><span class="muted">${t('finance.tm', { n: Math.round(k.tm) })} · ${t('fin.occ', { n: Math.round(occupancy(k) * 100) })}</span></div><p class="muted small">${t('fin.weekly', { p: fmtNum(playerWages(k)), s: fmtNum(staffWages(k)), c: fmtNum(coachWages(k)), a: fmtNum(academyUpkeep(k)) })}</p>
       ${k.ledger.length ? html `<div class="list compact">${k.ledger.slice(0, 10).map((e) => html `<div class="li"><div><div class="nm">${ledgerText(e.text)}</div><div class="sub">${fmtDate(e.t)}</div></div><div class="gg ${e.fm >= 0 ? 'pos' : 'neg'}">${e.fm >= 0 ? '+' : ''}${fmtNum(e.fm)}</div></div>`)}</div>` : muted(t('finance.empty'))}`)}
     ${card(t('club.history'), html `${k.history.length ? html `<div class="list compact">${k.history.map((h) => html `<div class="li"><div class="nm">${t('career.season', { n: h.season })}</div><div class="sub">${t('career.rank', { n: h.rank })} · ${h.w}-${h.d}-${h.l}</div></div>`)}</div>` : ''}${k.trophies.length ? html `<div class="row wrap">${k.trophies.map((tr) => tag(html `🏆 ${tr.name} · ${t('career.season', { n: tr.season })}`, 'y'))}</div>` : muted(t('profile.empty'))}`)}`;
 }
@@ -99,7 +100,7 @@ function matchTab(k, sub) {
     const table = card(t('match.table'), html `<table class="tbl"><tr><th>#</th><th class="l">${t('th.team')}</th><th>${t('th.p')}</th><th>${t('th.w')}</th><th>${t('th.d')}</th><th>${t('th.l')}</th><th>${t('th.ga')}</th><th>${t('th.av')}</th><th>${t('th.pts')}</th></tr>${ord.map((i, r) => { const row = l.table[i]; return html `<tr class="${i === 0 ? 'me' : ''} ${r === 0 ? 'up' : ''}"><td>${r + 1}</td><td class="l">${l.teams[i].name}</td><td>${row.p}</td><td>${row.w}</td><td>${row.d}</td><td>${row.l}</td><td>${row.gf}:${row.ga}</td><td>${row.gf - row.ga}</td><td><b>${row.pts}</b></td></tr>`; })}</table>`);
     return html `${top}${cupCard}<div class="seg sub" id="mSub"><button data-v="fixture" aria-pressed="${sub === 'fixture'}">${t('match.fixture')}</button><button data-v="table" aria-pressed="${sub === 'table'}">${t('match.table')}</button></div>${sub === 'table' ? table : fixture}`;
 }
-const plRow = (p, right) => html `<div class="li static"><div class="num">${p.num || '–'}</div><div><div class="nm">${p.name} <small class="muted">${t('pos.' + p.natPos)}</small></div><div class="sub">${t('squad.gg')} ${Math.round(p.gg)} · ${p.age} ${t('squad.age')}${p.traits.map((x) => ' · ' + x).join('')}</div></div>${right}</div>`;
+const plRow = (p, right) => html `<div class="li static"><div class="num">${p.num || '–'}</div><div><div class="nm">${p.name} <small class="muted">${t('pos.' + p.natPos)}</small></div><div class="sub">${t('squad.gg')} ${Math.round(p.gg)} · ${p.age} ${t('squad.age')} · ${t('wage.per', { n: p.wage || 0 })}${p.traits.map((x) => ' · ' + x).join('')}${overpaid(p) ? html ` ${tag(t('wage.over'), 'o')}` : ''}</div></div>${right}</div>`;
 function renewTab(k) {
     const sc = k.scout;
     const full = k.roster.length >= ROSTER_MAX;
@@ -172,11 +173,13 @@ register('career', (c) => {
             const tg = $('trGo');
             if (tg)
                 tg.onclick = () => { const r = startTraining(k, (tk ? tk.value : 'cohesion'), tl ? +tl.value : 0, [...root.querySelectorAll('.trP')].map((x) => x.value)); if (r === 'ok')
+                    track(store.db, { t: 'train' }); if (r === 'ok')
                     re(t('train.started'));
                 else
                     fail(r); };
             for (const b of root.querySelectorAll('[data-scout]'))
                 b.onclick = () => { const r = startScout(k, +b.dataset.scout, ($('scPos').value || '')); if (r === 'ok')
+                    track(store.db, { t: 'scout' }); if (r === 'ok')
                     re(t('scout.started'));
                 else
                     fail(r); };
@@ -188,15 +191,17 @@ register('career', (c) => {
             if (sd)
                 sd.onclick = () => { k.scout.found = null; re(); };
             for (const b of root.querySelectorAll('[data-hag]'))
-                b.onclick = () => { const r = haggle(k, b.dataset.hag); re(r === 'down' ? t('mng.haggle.ok') : t('mng.haggle.no'), r === 'down' ? 'ok' : 'err'); };
+                b.onclick = () => { const r = haggle(k, b.dataset.hag); track(store.db, { t: 'market' }); re(r === 'down' ? t('mng.haggle.ok') : t('mng.haggle.no'), r === 'down' ? 'ok' : 'err'); };
             for (const b of root.querySelectorAll('[data-buy]'))
                 b.onclick = () => { const r = buy(k, b.dataset.buy); if (r === 'ok')
+                    track(store.db, { t: 'market' }); if (r === 'ok')
                     re(t('mng.bought'));
                 else
                     fail(r); };
             for (const b of root.querySelectorAll('[data-sell]'))
                 b.onclick = async () => { const p = k.roster.find((x) => x.id === b.dataset.sell); if (!p || !(await confirmBox(t('mng.sell.confirm', { name: p.name, fm: fmtNum(sellPrice(p)) }), t('mng.sell'), true)))
                     return; const r = sell(k, p.id); if (r === 'ok')
+                    track(store.db, { t: 'sale' }); if (r === 'ok')
                     re(t('mng.sold'));
                 else
                     fail(r); };

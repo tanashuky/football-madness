@@ -130,4 +130,12 @@ export const en: Record<string, string> = {
   'cup.star': 'Stars Cup', 'cup.cont': 'Continental Cup', 'cup.title.short': 'Cup', 'cup.r.0': 'Quarter-final', 'cup.r.1': 'Semi-final', 'cup.r.2': 'Final', 'cup.entry': 'entry', 'cup.knockout': 'Single-match knockout: extra time and penalties if level', 'cup.pens': 'pens',
   'cup.title': 'Champions', 'cup.through': 'through', 'cup.out': 'eliminated', 'cup.now': 'play now', 'cup.later': 'later in the league calendar', 'cup.entered': '{cup} draw made', 'cup.first': 'The season cannot close before the cup final is played.',
   'inj.matches': 'out {n} matches', 'inj.cant': 'An injured player cannot start', 'scout.free': 'free ({n} left)', 'mng.news': 'Transfer news', 'news.buy': '{club} signed {name} (OVR {gg})', 'news.sell': '{club} listed {name} (OVR {gg})',
+  // --- wages, coach, bans, missions ---
+  'wage.per': '{n} FM/week', 'wage.over': 'overpaid', 'wage.players': 'Player wages', 'fin.weekly': 'Weekly costs: players {p} · staff {s} · coaches {c} · academy {a} FM',
+  'coach.title': 'Personal coach', 'coach.1': 'Bronze', 'coach.2': 'Silver', 'coach.3': 'Gold', 'coach.info': 'individual training gain this season {a}/{b} OVR',
+  'ban.matches': 'banned {n} matches', 'ban.cup': 'banned {n} cup matches', 'report.absent': 'Injured and suspended',
+  'missions.daily': 'Daily missions', 'missions.weekly': 'Weekly missions', 'missions.claim': 'Claim', 'missions.done': 'completed', 'missions.todo': 'pending', 'missions.streak': 'login streak {n}/7', 'missions.ready': '{n} rewards ready', 'missions.none': 'Daily and weekly missions', 'missions.capped': 'Today\'s boost limit is reached',
+  'missions.daily.desc': 'Daily missions reward a boost (at most 2 a day). A boost takes 4 hours off a construction, training or scout timer. On day 7 of the streak the login reward adds a boost.', 'missions.weekly.desc': 'Weekly missions refresh on Monday; rewards go to the Career treasury.',
+  'mis.d.login': 'Open the game', 'mis.d.train': 'Start a training session', 'mis.d.analysis': 'Check the opponent analysis (enter the match room)', 'mis.d.market': 'Haggle or buy in the transfer pool', 'mis.d.match': 'Play a Career match',
+  'mis.w.win2': 'Win by 2 goals', 'mis.w.clean': 'Keep a clean sheet', 'mis.w.awaywin': 'Win away', 'mis.w.train3': 'Start 3 training sessions', 'mis.w.youth2': 'Give under-19 players 2 starts', 'mis.w.sale': 'Sell a player', 'mis.w.scout': 'Send a scout',
 };

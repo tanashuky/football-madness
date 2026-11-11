@@ -8,7 +8,7 @@ export const store = { db: fresh() };
 const listeners = new Set();
 export function onSave(f) { listeners.add(f); return () => listeners.delete(f); }
 export function fresh() {
-    return { v: 1, updatedAt: 0, account: null, settings: { ...DEF_SETTINGS, sound: { ...DEF_SETTINGS.sound } }, career: null, mm: { elo: 1000, played: 0, last: null }, rewards: EMPTY_REWARDS(), online: null };
+    return { v: 1, updatedAt: 0, account: null, settings: { ...DEF_SETTINGS, sound: { ...DEF_SETTINGS.sound } }, career: null, mm: { elo: 1000, played: 0, last: null }, rewards: EMPTY_REWARDS(), missions: { day: '', daily: [], week: '', weekly: [], streak: 0 }, online: null };
 }
 export function load() {
     let db = null;
@@ -52,6 +52,7 @@ export function normalize(db) {
     out.rewards = { ...f.rewards, ...(db.rewards || {}) };
     if (!Array.isArray(out.rewards.entries))
         out.rewards.entries = [];
+    out.missions = { ...f.missions, ...(db.missions || {}) };
     if (out.career)
         out.career = normalizeCareer(out.career);
     out.online = null;

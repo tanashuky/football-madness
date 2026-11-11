@@ -11,7 +11,7 @@ const listeners = new Set<(db: SaveV1) => void>();
 export function onSave(f: (db: SaveV1) => void) { listeners.add(f); return () => listeners.delete(f); }
 
 export function fresh(): SaveV1 {
-  return { v: 1, updatedAt: 0, account: null, settings: { ...DEF_SETTINGS, sound: { ...DEF_SETTINGS.sound } }, career: null, mm: { elo: 1000, played: 0, last: null }, rewards: EMPTY_REWARDS(), online: null };
+  return { v: 1, updatedAt: 0, account: null, settings: { ...DEF_SETTINGS, sound: { ...DEF_SETTINGS.sound } }, career: null, mm: { elo: 1000, played: 0, last: null }, rewards: EMPTY_REWARDS(), missions: { day: '', daily: [], week: '', weekly: [], streak: 0 }, online: null };
 }
 export function load(): SaveV1 {
   let db: SaveV1 | null = null;
@@ -37,6 +37,7 @@ export function normalize(db: any): SaveV1 {
   out.mm = { ...f.mm, ...(db.mm || {}) };
   out.rewards = { ...f.rewards, ...(db.rewards || {}) };
   if (!Array.isArray(out.rewards.entries)) out.rewards.entries = [];
+  out.missions = { ...f.missions, ...(db.missions || {}) };
   if (out.career) out.career = normalizeCareer(out.career);
   out.online = null;
   return out;

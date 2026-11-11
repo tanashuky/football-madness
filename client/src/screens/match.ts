@@ -9,6 +9,8 @@ import { getLang } from '../core/i18n.js';
 import { TEMPLATES, DIFFS, botTeamIn, tplById } from '../model/templates.js';
 import { avgGG, userTeamIn } from '../model/club.js';
 import { form } from '../model/career.js';
+import { matchLineup, unavailable } from '../model/manage.js';
+import { track } from '../model/missions.js';
 import type { Report } from '../model/report.js';
 import { careerTabs, onCareerTab } from './career.js';
 import { loadReplay, startMatchFlow, verifyLast, watchLastReplay, type RoomCtx } from './play.js';
@@ -30,11 +32,12 @@ register('mm', (c) => {
 function roomTeams(c: RoomCtx): { me: TeamIn; opp: TeamIn } {
   if (c.kind === 'mm') return { me: botTeamIn(tplById(c.mine!), 3, NAMES_A), opp: botTeamIn(tplById(c.tpl!), c.diff, NAMES_B) };
   const k = store.db.career!; const club = store.db.account!.club;
-  if (c.cup && k.cup) return { me: userTeamIn(club, k.roster, k.team, k.metrics, 9), opp: botTeamIn(k.cup.opps[k.cup.round], k.diff, NAMES_B) };
-  return { me: userTeamIn(club, k.roster, k.team, k.metrics, 9), opp: botTeamIn(k.league.teams[c.oppIdx!], k.diff, NAMES_B) };
+  const tt = { ...k.team, lineup: matchLineup(k, !!c.cup) }; const out = (p: any) => unavailable(p, !!c.cup);
+  if (c.cup && k.cup) return { me: userTeamIn(club, k.roster, tt, k.metrics, 9, out), opp: botTeamIn(k.cup.opps[k.cup.round], k.diff, NAMES_B) };
+  return { me: userTeamIn(club, k.roster, tt, k.metrics, 9, out), opp: botTeamIn(k.league.teams[c.oppIdx!], k.diff, NAMES_B) };
 }
 register('room', (c: RoomCtx) => {
-  const { me, opp } = roomTeams(c); const s = store.db.settings; const home_ = c.home !== false; const k = store.db.career;
+  const { me, opp } = roomTeams(c); const s = store.db.settings; if (c.kind === 'career') track(store.db, { t: 'analysis' }); const home_ = c.home !== false; const k = store.db.career;
   if (c.kind === 'mm') { delete me.ai; me.rules = []; me.think = 0; me.U = 60; me.T = 60; me.F = 60; me.M = 70; }
   const tac = me.tactic;
   return { title: t('room.title'), tabs: c.kind === 'career' ? careerTabs('match') : undefined, onTab: onCareerTab, html: html`
@@ -63,7 +66,7 @@ register('report', (c: { rep: Report; c: RoomCtx }) => {
       ${card(t('report.events'), r.events.length ? html`${r.events.map((e) => html`<div class="ev"><div class="t">${e.t}'</div><div>${e.type === 'half' ? tag(t('match.half')) : html`${tag(r.teams[e.side].short, e.type === 'goal' ? 'y' : e.type === 'red' ? 'r' : e.type === 'yellow' ? 'o' : '')} ${evText(e)}${e.who ? ' · ' + e.who : ''}`}</div></div>`)}` : muted('–'))}
       ${card(html`${t('report.players')} <small>${r.teams[r.side].short}</small>`, html`${r.players.map((p) => html`<div class="prow"><span><b>${p.num}</b> ${p.name} <span class="muted">${t('pos.' + p.pos)}</span>${p.goals ? ' ⚽'.repeat(p.goals) : ''}${p.yellow ? ' 🟨' : ''}${p.red ? ' 🟥' : ''}${p.injured ? ' ✚' : ''}${p.subbed ? ' ↩' : ''}</span><span class="muted">xG ${p.xg.toFixed(2)} · ${t('squad.fatigue')} ${100 - p.k}</span></div>`)}`)}
       ${card(t('report.tacticlog'), html`${r.tactics.length ? r.tactics.map((e) => html`<div class="ev"><div class="t">${e.t}'</div><div>${tacText(e.text)}</div></div>`) : muted(t('report.noTactic'))}<p class="muted">${r.ruleCounts.length ? r.ruleCounts.map(([kk, v]) => `${kk} ×${v}`).join(', ') + ' · ' : ''}${t('report.rot', { a: r.rotations.count, b: r.rotations.oppCount })}</p>`)}
-      ${r.injuries && r.injuries.length ? card(t('ev.injury'), html`${r.injuries.map((x) => html`<p>✚ ${x.name}: ${t('inj.matches', { n: x.n })}</p>`)}`) : ''}
+      ${(r.injuries && r.injuries.length) || (r.bans && r.bans.length) ? card(t('report.absent'), html`${(r.injuries || []).map((x) => html`<p>✚ ${x.name}: ${t('inj.matches', { n: x.n })}</p>`)}${(r.bans || []).map((x) => html`<p>🟥 ${x.name}: ${t('ban.matches', { n: x.n })}</p>`)}`) : ''}
       ${card(t('report.verify'), html`<p class="muted" id="rVerify">${rep && !r.instant ? '…' : t('report.verify.none')}</p>`)}
     </div>`, foot: html`${rep && !r.instant ? html`<button class="btn" id="rReplay">${t('report.replay')}</button>` : ''}${r.kind === 'mm' ? html`<button class="btn prim" data-go="mm" data-ctx='${JSON.stringify({ mine: c.c.mine, diff: c.c.diff, minutes: c.c.minutes })}'>${t('report.again')}</button><button class="btn" id="rHome">${t('nav.home')}</button>` : html`<button class="btn prim" data-go="career" data-push="0" data-ctx='{"tab":"match"}'>${t('report.backleague')}</button>`}`,
     after: () => {

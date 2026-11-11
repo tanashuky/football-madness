@@ -62,6 +62,34 @@ export function injure(c: Career, p: RosterPlayer): number {
   if (c.staff.physio >= 3) n = Math.max(1, Math.round(n * 0.7));
   p.inj = n; fixLineup(c); return n;
 }
+// ---------- futbolcu maasi (oneri): haftalik, GG ile ustel artar; imzada belirlenir, sezon sonunda GG'ye gore yukselir, GG dusse de dusmez ----------
+// GG 55: 7 · 62: 15 · 70: 35 · 78: 81 · 85: 169 FM/hafta. 18 kisilik baslangic kadrosu ~290 FM/hafta (haftalik gelirin ~%15'i).
+export const wageFor = (gg: number) => Math.max(3, Math.round(15 * Math.exp((gg - 62) / 9.5)));
+export const signWage = (p: { gg: number; age: number }) => Math.round(wageFor(p.gg) * (p.age >= 30 ? 1.3 : 1)); // 30 yas ustu imzada %30 fazla ister
+export function ensureWages(c: Career) { for (const p of c.roster) if (!p.wage) p.wage = wageFor(p.gg); }
+export const COACH_WAGE = [0, 300, 600, 1000];
+export const coachWage = (lv: number) => cost(COACH_WAGE[lv] || 0);
+export const playerWages = (c: Career) => c.roster.reduce((a, p) => a + (p.wage || 0), 0);
+export const coachWages = (c: Career) => c.roster.reduce((a, p) => a + coachWage(p.coach || 0), 0);
+export const trainCap = (p: RosterPlayer) => [7, 8, 9, 10][p.coach || 0]; // sezonluk bireysel GG tavani (antrenorsuz 7: oneri)
+// maasi GG'sinin hak ettiginden yuksek futbolcu daha ucuza satilir (en fazla yari fiyat)
+export const overpaid = (p: RosterPlayer) => (p.wage || 0) > wageFor(p.gg) * 1.15;
+// ---------- cezalar: ikinci saridan kirmizi 1 mac, direkt kirmizi 2 mac; ligde 5, kupada 3 sarida 1 mac; lig ve kupa ayri ----------
+export const unavailable = (p: RosterPlayer, cup: boolean) => !!p.inj || (cup ? !!p.suspCup : !!p.susp);
+export function applyCards(c: Career, cup: boolean, played: { num: number; yellow: number; red: number }[]): { name: string; n: number }[] {
+  const S = cup ? 'suspCup' : 'susp', Y = cup ? 'yelCup' : 'yel'; const out: { name: string; n: number }[] = [];
+  for (const p of c.roster) if (p[S]) { p[S]!--; if (!p[S]) delete p[S]; } // bu maci cezali gecirenler
+  for (const q of played) { const p = c.roster.find((x) => x.num === q.num); if (!p) continue; let n = 0;
+    if (q.red) n = q.yellow >= 2 ? 1 : 2; else if (q.yellow) { p[Y] = (p[Y] || 0) + q.yellow; if (p[Y]! >= (cup ? 3 : 5)) { p[Y]! -= cup ? 3 : 5; n = 1; } }
+    if (n) { p[S] = (p[S] || 0) + n; out.push({ name: p.name, n }); } }
+  return out;
+}
+// mac dizilisi: sakat/cezali futbolcular gecici olarak saglam yedekle degisir (kayitli dizilis bozulmaz)
+export function matchLineup(c: Career, cup: boolean): string[] | undefined {
+  const lu = c.team.lineup ? [...c.team.lineup] : undefined; if (!lu) return lu; const by = Object.fromEntries(c.roster.map((p) => [p.id, p]));
+  lu.forEach((id, i) => { const p = by[id]; if (!p || !unavailable(p, cup)) return; const free = c.roster.filter((q) => !unavailable(q, cup) && !lu.includes(q.id)); const pick = free.filter((q) => q.natPos === p.natPos).sort((a, b) => b.gg - a.gg)[0] || free.filter((q) => (p.natPos === 'GK') === (q.natPos === 'GK')).sort((a, b) => b.gg - a.gg)[0]; if (pick) lu[i] = pick.id; });
+  return lu;
+}
 // sakat futbolcu ilk 11'de kalamaz: ayni mevkiden (yoksa en guclu) saglam yedekle degisir
 export function fixLineup(c: Career) {
   const lu = c.team.lineup; if (!lu) return; const by = Object.fromEntries(c.roster.map((p) => [p.id, p]));
@@ -91,7 +119,7 @@ function finishTraining(c: Career) {
   else if (j.kind === 'cohesion') { const g = I.gain * 0.7 * gainMult(m.U); m.U = clamp(m.U + g, 0, 100); addFat(I.fat / 2); text = `U +${g.toFixed(1)}`; }
   else if (j.kind === 'tactic') { const g = I.gain * kT * gainMult(m.T); m.T = clamp(m.T + g, 0, 100); if (j.level > 0) m.F = clamp(m.F - 0.5, 0, 100); addFat(I.fat); text = `T +${g.toFixed(1)}`; }
   else if (j.kind === 'physical') { const g = I.gain * kF * gainMult(m.F); m.F = clamp(m.F + g, 0, 100); if (j.level > 0) m.T = clamp(m.T - 0.3, 0, 100); addFat(I.fat); text = `F +${g.toFixed(1)}`; }
-  else { const g = [0.2, 0.4, 0.7][j.level]; for (const p of c.roster) if (j.players.includes(p.id)) p.gg = Math.min(99, Math.round((p.gg + g * gainMult(p.gg)) * 100) / 100); addFat(I.fat, j.players); addFat(I.fat / 3); text = `GG +${g}`; }
+  else { const g = [0.2, 0.4, 0.7][j.level]; for (const p of c.roster) if (j.players.includes(p.id)) { const add = Math.max(0, Math.min(g * (1 + 0.25 * (p.coach || 0)), trainCap(p) - (p.tg || 0))); p.tg = (p.tg || 0) + add; p.gg = Math.min(99, Math.round((p.gg + add) * 100) / 100); } addFat(I.fat, j.players); addFat(I.fat / 3); text = `GG +${g}`; }
   if (j.kind !== 'rest' && j.level === 2) {
     m.M = clamp(m.M - 1, 0, 100);
     // agir antrenman: yorgunlugu 80'i gecen bir futbolcu icin %5 sakatlik riski (fizyoterapist 5: %3)
@@ -108,7 +136,8 @@ export function freeNumber(roster: RosterPlayer[]): number { for (let n = 2; n <
 function mkPlayer(c: Career, gg: [number, number], age: [number, number], traitP: number, forceTrait = false, pos?: Pos): RosterPlayer {
   const natPos = pos || POSS[rint(0, POSS.length - 1)];
   const traits: string[] = []; if (forceTrait || Math.random() < traitP) traits.push(natPos === 'GK' ? 'Refleks' : TRAITS[rint(0, TRAITS.length - 1)]); if (traits.length && Math.random() < 0.1 && natPos !== 'GK') { const t2 = TRAITS[rint(0, TRAITS.length - 1)]; if (!traits.includes(t2)) traits.push(t2); }
-  return { id: 'n' + c.nextId++, num: 0, name: SURNAMES[rint(0, SURNAMES.length - 1)], natPos, gg: rint(gg[0], gg[1]), age: rint(age[0], age[1]), traits, fatigue: 10 };
+  const p: RosterPlayer = { id: 'n' + c.nextId++, num: 0, name: SURNAMES[rint(0, SURNAMES.length - 1)], natPos, gg: rint(gg[0], gg[1]), age: rint(age[0], age[1]), traits, fatigue: 10 };
+  p.wage = signWage(p); return p;
 }
 // piyasa degeri: 1000 x e^((GG-50)/10) x yas katsayisi x 1,15^ozellik (dokumandaki ornek tabloyla ayni)
 export function marketValue(p: { gg: number; age: number; traits: string[] }): number {
@@ -138,7 +167,7 @@ export function buy(c: Career, id: string): 'ok' | 'fm' | 'full' | 'no' {
   if (c.roster.length >= ROSTER_MAX) return 'full'; if (c.fm < it.price) return 'fm';
   addLedger(c, `buy:${it.p.name}`, -it.price); it.p.num = freeNumber(c.roster); c.roster.push(it.p); c.pool.splice(i, 1); return 'ok';
 }
-export const sellPrice = (p: RosterPlayer) => Math.round((marketValue(p) * 0.9) / 10) * 10; // bot kulupler PD'nin %90'ini oder
+export const sellPrice = (p: RosterPlayer) => Math.round((marketValue(p) * 0.9 * (overpaid(p) ? clamp(wageFor(p.gg) / (p.wage || 1), 0.5, 1) : 1)) / 10) * 10; // bot kulupler PD'nin %90'ini oder
 export function sell(c: Career, id: string): 'ok' | 'min' | 'gk' | 'no' {
   const i = c.roster.findIndex((p) => p.id === id); if (i < 0) return 'no'; const p = c.roster[i];
   if (c.roster.length <= ROSTER_MIN) return 'min'; if (p.natPos === 'GK' && c.roster.filter((q) => q.natPos === 'GK').length <= 2) return 'gk';
@@ -149,7 +178,7 @@ export function sell(c: Career, id: string): 'ok' | 'min' | 'gk' | 'no' {
 
 // ---------- zaman: biten isler, pasif toparlanma ----------
 export function tick(c: Career, now = Date.now()): string[] {
-  const done: string[] = [];
+  const done: string[] = []; ensureWages(c);
   if (!c.pool.length && c.nextId === 1) refreshPool(c);
   for (const f of ['stadium', 'academy'] as FacKey[]) { const b = c.facilities[f]; if (b.busyUntil && now >= b.busyUntil) { b.level++; delete b.busyUntil; done.push('fac:' + f); } }
   if (c.train.job && now >= c.train.job.until) { finishTraining(c); done.push('train'); }
@@ -175,6 +204,8 @@ export function afterWeek(c: Career, lineup: string[], played = true, weekly = t
   if (!weekly) return; // kupa maci: yalniz yorgunluk ve sakatlik sayaci
   const up = academyUpkeep(c); if (up) addLedger(c, 'upkeep:academy', -up);
   const w = staffWages(c); if (w) addLedger(c, 'wages', -w);
+  const pw = playerWages(c); if (pw) addLedger(c, 'pwages', -pw);
+  const cw = coachWages(c); if (cw) addLedger(c, 'coach', -cw);
   c.tm = clamp(c.tm + (tmNeutral(c) - c.tm) * 0.1, 0, 100);
   // moral 70'in altindaysa notre doner: haftada farkin %15'i (+%3 x psikolojik destek seviyesi)
   if (c.metrics.M < 70) c.metrics.M = clamp(c.metrics.M + (70 - c.metrics.M) * (0.15 + 0.03 * c.staff.psych), 0, 100);
@@ -189,7 +220,7 @@ function botTransfers(c: Career) {
 }
 // sezon sonu: yas +1, gelisim/gerileme, altyapi gencleri, havuz yenilenir
 export function seasonTurn(c: Career): RosterPlayer[] {
-  for (const p of c.roster) { p.age++; const d = p.age <= 21 ? rnd(1, 2.5) : p.age <= 24 ? rnd(0.5, 1.5) : p.age <= 29 ? rnd(-0.3, 0.6) : p.age <= 32 ? rnd(-1.5, 0) : rnd(-3, -1); p.gg = clamp(Math.round((p.gg + d) * 100) / 100, 30, 99); }
+  for (const p of c.roster) { p.age++; const d = p.age <= 21 ? rnd(1, 2.5) : p.age <= 24 ? rnd(0.5, 1.5) : p.age <= 29 ? rnd(-0.3, 0.6) : p.age <= 32 ? rnd(-1.5, 0) : rnd(-3, -1); p.gg = clamp(Math.round((p.gg + d) * 100) / 100, 30, 99); p.wage = Math.max(p.wage || 0, wageFor(p.gg)); p.tg = 0; delete p.yel; delete p.yelCup; }
   const youths: RosterPlayer[] = []; const a = ACADEMY[c.facilities.academy.level];
   if (a) for (let i = 0; i < a.youth && c.roster.length < ROSTER_MAX; i++) { const y = mkPlayer(c, [a.gg[0], a.gg[1]], [16, 17], 0.2); y.num = freeNumber(c.roster); c.roster.push(y); youths.push(y); }
   refreshPool(c);

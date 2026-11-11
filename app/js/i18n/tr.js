@@ -118,4 +118,12 @@ export const tr = {
     'cup.star': 'Yıldızlar Kupası', 'cup.cont': 'Kıta Kupası', 'cup.title.short': 'Kupa', 'cup.r.0': 'Çeyrek final', 'cup.r.1': 'Yarı final', 'cup.r.2': 'Final', 'cup.entry': 'katılım', 'cup.knockout': 'Tek maç eleme: eşitlikte uzatma ve penaltılar', 'cup.pens': 'pen.',
     'cup.title': 'Şampiyon', 'cup.through': 'tur atlandı', 'cup.out': 'elendi', 'cup.now': 'şimdi oynanır', 'cup.later': 'lig takvimi ilerleyince', 'cup.entered': '{cup} kurası çekildi', 'cup.first': 'Kupa finali oynanmadan sezon kapanmaz.',
     'inj.matches': '{n} maç yok', 'inj.cant': 'Sakat futbolcu ilk 11\'e giremez', 'scout.free': 'ücretsiz ({n} hak)', 'mng.news': 'Transfer haberleri', 'news.buy': '{club}, {name} (GG {gg}) transferini bitirdi', 'news.sell': '{club}, {name} (GG {gg}) futbolcusunu havuza koydu',
+    // --- maas, antrenor, ceza, gorevler ---
+    'wage.per': '{n} FM/hafta', 'wage.over': 'maaşı yüksek', 'wage.players': 'Futbolcu maaşları', 'fin.weekly': 'Haftalık gider: futbolcu {p} · ekipler {s} · antrenör {c} · altyapı {a} FM',
+    'coach.title': 'Kişisel antrenör', 'coach.1': 'Bronz', 'coach.2': 'Gümüş', 'coach.3': 'Altın', 'coach.info': 'bu sezon bireysel antrenman kazancı {a}/{b} GG',
+    'ban.matches': '{n} maç cezalı', 'ban.cup': 'kupada {n} maç cezalı', 'report.absent': 'Sakat ve cezalılar',
+    'missions.daily': 'Günlük görevler', 'missions.weekly': 'Haftalık görevler', 'missions.claim': 'Al', 'missions.done': 'tamamlandı', 'missions.todo': 'bekliyor', 'missions.streak': 'giriş serisi {n}/7', 'missions.ready': '{n} ödül hazır', 'missions.none': 'Günlük ve haftalık görevler', 'missions.capped': 'Bugünkü güçlendirme sınırı doldu',
+    'missions.daily.desc': 'Günlük görev ödülü güçlendirmedir (günde en fazla 2). Güçlendirme inşaat, antrenman ya da scout süresinden 4 saat düşer. Serinin 7. gününde giriş ödülüne bir güçlendirme eklenir.', 'missions.weekly.desc': 'Haftalık görevler pazartesi yenilenir; ödül Kariyer kasasına yazılır.',
+    'mis.d.login': 'Oyunu aç', 'mis.d.train': 'Bir antrenman seansı başlat', 'mis.d.analysis': 'Rakip analizini incele (maç odasına gir)', 'mis.d.market': 'Transfer havuzunda pazarlık yap ya da futbolcu al', 'mis.d.match': 'Bir Kariyer maçı oyna',
+    'mis.w.win2': '2 farkla kazan', 'mis.w.clean': 'Gol yemeden bitir', 'mis.w.awaywin': 'Deplasmanda galibiyet al', 'mis.w.train3': '3 antrenman seansı başlat', 'mis.w.youth2': '19 yaş altı futbolculara 2 maç forma ver', 'mis.w.sale': 'Bir futbolcu sat', 'mis.w.scout': 'Bir scout gönder',
 };

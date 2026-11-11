@@ -7,6 +7,7 @@ import { store, save } from '../core/store.js';
 import { card, muted, seg, tag, toast } from '../core/ui.js';
 import { reslot, setShirtNumber, swapPlayers, userShapes, userTeamIn, type AppPlayer } from '../model/club.js';
 import { careerTabs, onCareerTab } from './career.js';
+import { coachWage, overpaid, trainCap } from '../model/manage.js';
 
 const posName = (p: string) => t('pos.' + p);
 register('squad', (c) => {
@@ -14,19 +15,22 @@ register('squad', (c) => {
   const club = store.db.account!.club; const tt = k.team; const team = userTeamIn(club, k.roster, tt);
   const sel: string | null = c.sel ?? null;
   const injOf = (id: string) => k.roster.find((p) => p.id === id)?.inj || 0;
+  const rp = (id: string) => k.roster.find((p) => p.id === id)!;
   const all = [...team.players.map((p, i) => ({ ...(p as AppPlayer), xi: true, slot: i })), ...(team.bench as AppPlayer[]).map((p) => ({ ...p, xi: false, slot: -1 }))];
   const p = sel !== null ? all.find((q) => q.id === sel) : null;
-  const row = (q: typeof all[number]) => html`<button class="li ${q.id === sel ? 'sel' : ''}" data-go="squad" data-push="0" data-ctx='${JSON.stringify(c.swap ? { ...c, target: q.id } : { sel: q.id })}'><div class="num">${q.num}</div><div><div class="nm">${q.name}</div><div class="sub">${q.xi ? posName(q.pos) : posName(q.natPos) + ' · ' + t('squad.bench')} · ${q.age} ${t('squad.age')}${(q.traits || []).map((tr) => ` · ${tr}`).join('')}${injOf(q.id) ? html` ${tag('✚ ' + t('inj.matches', { n: injOf(q.id) }), 'r')}` : ''}${q.xi && q.natPos !== q.pos ? html` ${tag(posName(q.natPos), 'o')}` : ''}</div></div><div class="gg">${q.gg}</div></button>`;
+  const row = (q: typeof all[number]) => html`<button class="li ${q.id === sel ? 'sel' : ''}" data-go="squad" data-push="0" data-ctx='${JSON.stringify(c.swap ? { ...c, target: q.id } : { sel: q.id })}'><div class="num">${q.num}</div><div><div class="nm">${q.name}</div><div class="sub">${q.xi ? posName(q.pos) : posName(q.natPos) + ' · ' + t('squad.bench')} · ${q.age} ${t('squad.age')}${(q.traits || []).map((tr) => ` · ${tr}`).join('')}${injOf(q.id) ? html` ${tag('✚ ' + t('inj.matches', { n: injOf(q.id) }), 'r')}` : ''}${rp(q.id).susp ? html` ${tag('🟥 ' + t('ban.matches', { n: rp(q.id).susp! }), 'r')}` : ''}${rp(q.id).suspCup ? html` ${tag('🟥 ' + t('ban.cup', { n: rp(q.id).suspCup! }), 'r')}` : ''}${q.xi && q.natPos !== q.pos ? html` ${tag(posName(q.natPos), 'o')}` : ''}</div></div><div class="gg">${q.gg}</div></button>`;
   return { title: t('team.squad'), tabs: careerTabs('team'), onTab: onCareerTab, html: html`
     ${muted(c.swap ? t('squad.swap') : t('squad.hint', { f: tt.formation }))}
     <div class="cards two">
       <div class="list"><div class="muted">${t('squad.xi')}</div>${all.filter((q) => q.xi).map(row)}<div class="muted gap">${t('squad.bench')}</div>${all.filter((q) => !q.xi).map(row)}</div>
       <div>${p ? card(html`${p.num} ${p.name} <small>${posName(p.natPos)}${p.xi ? ` · ${posName(p.pos)}` : ' · ' + t('squad.bench')}</small>`, html`
-        <div class="row wrap">${tag(`${t('squad.gg')} ${p.gg}`, 'y')}${tag(`${p.age} ${t('squad.age')}`)}${(p.traits || []).map((tr) => tag(tr, 'g'))}${tag(`${t('squad.fatigue')} ${p.fatigue ?? 20}`)}</div>
+        <div class="row wrap">${tag(`${t('squad.gg')} ${p.gg}`, 'y')}${tag(`${p.age} ${t('squad.age')}`)}${(p.traits || []).map((tr) => tag(tr, 'g'))}${tag(`${t('squad.fatigue')} ${p.fatigue ?? 20}`)}${tag(t('wage.per', { n: rp(p.id).wage || 0 }), overpaid(rp(p.id)) ? 'o' : '')}${rp(p.id).yel ? tag(`🟨 ${rp(p.id).yel}/5`) : ''}${rp(p.id).yelCup ? tag(`🟨 ${t('cup.title.short')} ${rp(p.id).yelCup}/3`) : ''}</div>
+        <div class="row"><label class="f inline">${t('coach.title')} <select id="sqCoach">${[0, 1, 2, 3].map((lv) => html`<option value="${lv}" ${lv === (rp(p.id).coach || 0) ? raw('selected') : ''}>${lv ? `${t('coach.' + lv)} · ${coachWage(lv)} FM` : t('fac.none')}</option>`)}</select></label><span class="muted small">${t('coach.info', { a: (rp(p.id).tg || 0).toFixed(1), b: trainCap(rp(p.id)) })}</span></div>
         <div class="row">${c.swap ? html`<span class="muted">${t('squad.swap')}</span><button class="btn sm ghost" data-go="squad" data-push="0" data-ctx='${JSON.stringify({ sel: p.id })}'>${t('btn.cancel')}</button>` : html`<button class="btn sm" data-go="squad" data-push="0" data-ctx='${JSON.stringify({ sel: p.id, swap: p.id })}'>${t('squad.swapBtn')}</button><label class="f inline">${t('squad.number')} <input type="number" id="sqNum" min="1" max="99" value="${p.num}"><button class="btn sm" id="sqNumOk">${t('squad.number.set')}</button></label></div>
         <div class="row"><button class="btn sm ghost" id="sqReset">${t('squad.reset')}</button></div>`}`) : card(t('squad.card'), muted(t('squad.pick')))}</div></div>`,
     after: () => {
       if (c.swap && c.target && c.target !== c.swap) { const lu = tt.lineup!; const bringIn = lu.includes(c.swap) && !lu.includes(c.target) ? c.target : lu.includes(c.target) && !lu.includes(c.swap) ? c.swap : null; if (bringIn && injOf(bringIn)) { toast(t('inj.cant'), 'err'); go('squad', { sel: c.swap }, false); return; } swapPlayers(tt, c.swap, c.target); save(); toast(t('squad.updated'), 'ok'); go('squad', { sel: c.target }, false); return; }
+      const cs = $('sqCoach') as HTMLSelectElement | null; if (cs) cs.onchange = () => { rp(sel!).coach = +cs.value; save(); toast(t('toast.saved'), 'ok'); go('squad', { sel }, false); };
       const r = $('sqReset'); if (r) r.onclick = () => { delete tt.lineup; save(); go('squad', {}, false); };
       const nb = $('sqNumOk'); if (nb) nb.onclick = () => { const res = setShirtNumber(k.roster, sel!, +($('sqNum') as HTMLInputElement).value); if (res.err === 'range') toast(t('squad.number.err.range'), 'err'); else if (res.err === 'taken') toast(t('squad.number.err.taken', { n: res.taken!.num, name: res.taken!.name }), 'err'); else { save(); toast(t('toast.saved'), 'ok'); go('squad', { sel }, false); } };
     } };

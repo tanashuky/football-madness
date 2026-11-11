@@ -7,7 +7,7 @@ export interface Report {
   stats: [string, string | number, string | number][]; potm: [string, string]; events: ReportEvent[]; result: 'win' | 'draw' | 'loss';
   tactics: { t: number; text: string }[]; ruleCounts: [string, number][]; rotations: { count: number; oppCount: number };
   players: { num: number; name: string; pos: Pos; xg: number; goals: number; k: number; yellow: number; red: number; injured: boolean; subbed: boolean }[];
-  instant: boolean; shootout: [number, number] | null; cup?: { round: number; win: boolean; title: boolean; kind: string }; injuries?: { name: string; n: number }[]; elo?: number; rank?: number; fm?: number; pp?: number; minutes: number; seed: number;
+  instant: boolean; shootout: [number, number] | null; cup?: { round: number; win: boolean; title: boolean; kind: string }; injuries?: { name: string; n: number }[]; bans?: { name: string; n: number }[]; elo?: number; rank?: number; fm?: number; pp?: number; minutes: number; seed: number;
 }
 export function buildReport(st: MatchState, side: 0 | 1, kind: 'mm' | 'career', instant: boolean, minutes: number): Report {
   const opp = (1 - side) as 0 | 1, S = st.stats[side], O = st.stats[opp];

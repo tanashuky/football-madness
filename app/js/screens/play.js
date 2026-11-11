@@ -8,7 +8,8 @@ import * as sim from '../match/sim.js';
 import { buildReport, mmElo } from '../model/report.js';
 import { applyMyResult } from '../model/career.js';
 import { applyCupResult } from '../model/cup.js';
-import { afterWeek, fixLineup, injure } from '../model/manage.js';
+import { afterWeek, applyCards, fixLineup, injure } from '../model/manage.js';
+import { track } from '../model/missions.js';
 import { grantCareer } from '../model/rewards.js';
 const REPLAY_KEY = 'fm.lastReplay';
 export function saveReplay(st) { try {
@@ -120,6 +121,12 @@ function afterMatch(c, rep) {
         const k = db.career;
         // mac ici sakatliklar: sure belirlenir, sakat futbolcu ilk 11'den cikar (bu macin haftasi sayilmaz: once hafta islenir, sonra sakatlik yazilir)
         const hurt = rep.players.filter((p) => p.injured).map((p) => k.roster.find((q) => q.num === p.num)).filter((p) => !!p && !p.inj);
+        rep.bans = applyCards(k, !!c.cup, rep.players);
+        {
+            const home = c.home !== false;
+            const gf = home ? rep.goals[0] : rep.goals[1], ga = home ? rep.goals[1] : rep.goals[0];
+            track(db, { t: 'match', gf, ga, home, youth: rep.players.filter((p) => !p.subbed || true).slice(0, 11).filter((p) => { const q = k.roster.find((x) => x.num === p.num); return q && q.age <= 19; }).length });
+        }
         if (c.cup && k.cup) {
             const r = applyCupResult(k, rep.goals, c.home !== false, rep.shootout);
             rep.cup = { round: k.cup.log[k.cup.log.length - 1].round, win: r.win, title: r.title, kind: k.cup.kind };

@@ -10,11 +10,13 @@ import { authButtons, bindAuth } from './auth.js';
 import { rank, seasonDone } from '../model/career.js';
 import { CAP, rollCaps } from '../model/rewards.js';
 import { CONFIG } from '../config.js';
+import { claimDaily, claimWeekly, claimable, roll } from '../model/missions.js';
 register('home', () => {
     const db = store.db;
     const c = db.account.club;
     const k = db.career;
     rollCaps(db.rewards);
+    roll(db);
     return { title: raw(`<i class="crest" style="background:${c.color};border-color:${c.color2}"></i>` + c.name), back: false, html: html `
   <div class="wallet"><span>${tag(html `${fmtNum(db.rewards.pp)} ${t('home.pp')}`, 'y')}</span><span>${tag(html `${db.rewards.boosts} ${t('home.boosts')}`)}</span>${k ? html `<span>${tag(html `${fmtNum(k.fm)} FM`, 'g')}</span>` : ''}</div>
   <div class="cards modes">
@@ -28,7 +30,7 @@ register('home', () => {
   </div>
   <div class="cards small">
     <button class="card link" data-go="rewards"><h3>${t('home.rewards')}</h3><p class="muted">${fmtNum(db.rewards.pp)} ${t('home.pp')} · ${db.rewards.boosts} ${t('home.boosts')}</p></button>
-    <button class="card link" data-go="missions"><h3>${t('home.missions')}</h3><p class="muted">${t('sys.soon')}</p></button>
+    <button class="card link" data-go="missions"><h3>${t('home.missions')}</h3><p class="muted">${claimable(db) ? t('missions.ready', { n: claimable(db) }) : t('missions.none')}</p></button>
     <button class="card link" data-go="profile"><h3>${t('profile.title')}</h3><p class="muted">${t('profile.mm', { p: db.mm.played, elo: db.mm.elo })}</p></button>
     <button class="card link" data-go="premium"><h3>${t('home.premium')}</h3><p class="muted">${t('home.premium.desc')}</p></button>
   </div>`, after: () => { const b = $('careerNew'); if (b)
@@ -36,7 +38,23 @@ register('home', () => {
                 go('careerNew'); }; } };
 });
 register('premium', () => ({ title: t('home.premium'), html: html `${card(t('home.premium'), html `<p>${t('home.premium.desc')}</p>${muted(t('premium.soon'))}`)}` }));
-register('missions', () => ({ title: t('missions.title'), html: html `${card(t('missions.title'), muted(t('missions.soon')))}` }));
+register('missions', () => {
+    const db = store.db;
+    roll(db);
+    const m = db.missions;
+    const row = (title, sub, done, claimed, attr, reward) => html `<div class="li static"><div><div class="nm">${title}</div><div class="sub">${sub}</div></div><div class="acts"><span class="muted small">${reward}</span>${claimed ? tag('✓', 'g') : html `<button class="btn sm ${done ? 'prim' : ''}" ${raw(attr)} ${done ? '' : raw('disabled')}>${t('missions.claim')}</button>`}</div></div>`;
+    return { title: t('missions.title'), html: html `
+    ${card(html `${t('missions.daily')} <small>${t('missions.streak', { n: m.streak })}</small>`, html `<div class="list compact">${m.daily.map((d, i) => row(t('mis.d.' + d.id), d.done ? t('missions.done') : t('missions.todo'), d.done, d.claimed, `data-cd="${i}"`, d.id === 'login' ? (m.streak === 7 ? '50 FM + ⚡' : '50 FM') : '⚡ 1'))}</div>${muted(t('missions.daily.desc'))}`)}
+    ${card(t('missions.weekly'), html `<div class="list compact">${m.weekly.map((w, i) => row(t('mis.w.' + w.id), `${w.prog}/${w.goal}`, w.prog >= w.goal, w.claimed, `data-cw="${i}"`, '375 FM'))}</div>${muted(t('missions.weekly.desc'))}`)}`,
+        after: (root) => {
+            const show = (r) => { if (!r)
+                return; save(); toast(r.fm || r.boost ? `${r.fm ? '+' + r.fm + ' FM ' : ''}${r.boost ? '+' + r.boost + ' ⚡' : ''}` : t('missions.capped'), r.fm || r.boost ? 'ok' : ''); render(); };
+            for (const b of root.querySelectorAll('[data-cd]'))
+                b.onclick = () => show(claimDaily(db, +b.dataset.cd));
+            for (const b of root.querySelectorAll('[data-cw]'))
+                b.onclick = () => show(claimWeekly(db, +b.dataset.cw));
+        } };
+});
 register('profile', () => {
     const db = store.db;
     const c = db.account.club;

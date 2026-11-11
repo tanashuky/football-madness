@@ -64,7 +64,7 @@ export function userShapes(tt: TeamSetup): { def: Shape; att: Shape } {
   return { def, att };
 }
 // kullanici takimi -> motor girdisi (kimlik -> numara cevirisi burada)
-export function userTeamIn(club: Club, roster: RosterPlayer[], tt: TeamSetup, m?: { U: number; T: number; F: number; M: number }, benchCap = 0): TeamIn {
+export function userTeamIn(club: Club, roster: RosterPlayer[], tt: TeamSetup, m?: { U: number; T: number; F: number; M: number }, benchCap = 0, out?: (p: RosterPlayer) => boolean): TeamIn {
   ensureLineup(roster, tt);
   const t = mkSquad({ ...club, formation: tt.formation }, club.gg || 62, NAMES_A);
   const slots = FORM_POS[tt.formation];
@@ -72,7 +72,7 @@ export function userTeamIn(club: Club, roster: RosterPlayer[], tt: TeamSetup, m?
   const mk = (p: RosterPlayer, pos: Pos): AppPlayer => ({ num: p.num, name: p.name, pos, natPos: p.natPos, gg: Math.round(p.gg), age: p.age, traits: p.traits, fatigue: Math.round(p.fatigue), id: p.id });
   const lineup = tt.lineup!;
   t.players = lineup.map((id, i) => mk(byId[id], slots[i]));
-  t.bench = roster.filter((p) => !lineup.includes(p.id) && !(benchCap && p.inj)).sort((a, b) => (a.natPos === 'GK' ? -1 : b.natPos === 'GK' ? 1 : 0)).map((p) => mk(p, p.natPos));
+  t.bench = roster.filter((p) => !lineup.includes(p.id) && !(out && out(p))).sort((a, b) => (a.natPos === 'GK' ? -1 : b.natPos === 'GK' ? 1 : 0)).map((p) => mk(p, p.natPos));
   const duties: Record<number, any> = {}; for (const [id, d] of Object.entries(tt.duties || {})) { const p = byId[id]; if (p) duties[p.num] = d; }
   const sh = userShapes(tt);
   const rotations = (tt.rotations || []).map((c) => c.filter((id) => lineup.includes(id) && byId[id]).map((id) => byId[id].num)).filter((c) => c.length >= 2);

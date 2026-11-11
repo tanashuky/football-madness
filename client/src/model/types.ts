@@ -10,6 +10,10 @@ export interface Club {
 export interface RosterPlayer {
   id: string; num: number; name: string; natPos: Pos; gg: number; age: number; traits: string[]; fatigue: number;
   inj?: number; // sakatlik: kac mac oynayamaz
+  wage?: number; // haftalik maas (FM); sezon sonunda GG'ye gore artar, asla dusmez
+  coach?: number; // kisisel antrenor: 0 yok, 1 bronz, 2 gumus, 3 altin
+  tg?: number; // bu sezon bireysel antrenmandan kazanilan GG (tavan icin)
+  susp?: number; suspCup?: number; yel?: number; yelCup?: number; // ceza (mac) ve biriken sarilar, lig ve kupa ayri
 }
 // Takimin taktik kurulumu (kadro ekrani + taktik tahtasi): kimlikler futbolcu id'sidir, motor numarayla calisir (userTeamIn cevirir)
 export interface TeamSetup {
@@ -62,8 +66,10 @@ export interface SaveV1 {
   career: Career | null;
   mm: MatchModeState;
   rewards: Rewards;
+  missions: Missions;
   online: null; // Surum 2
 }
+export interface Missions { day: string; daily: { id: string; done: boolean; claimed: boolean }[]; week: string; weekly: { id: string; prog: number; goal: number; claimed: boolean }[]; streak: number }
 export const DEF_SETTINGS: Settings = {
   lang: 'tr', keys: 'arrows', assistP: 0, assistS: 1, autoSwitch: true, ball: 1.4, names: 'auto', cam: 'full', mode: 'team', minutes: 10, layer: false, left: false,
   colorblind: false, textScale: 1, reduceMotion: false, contrast: false, vibration: true, spSlow: false, sound: { stadium: 70, game: 80, ui: 60 },
