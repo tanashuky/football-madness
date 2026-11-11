@@ -50,17 +50,30 @@ export const CLOUD = {
     async signInEmail(email) { if (!this.sb)
         return; const { error } = await this.sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname } }); if (error)
         toast(error.message, 'err');
-    else {
-        this.pendingEmail = email;
-        toast(t('login.email.sent'), 'ok');
-        this.changed();
-    } },
-    // e-postadaki kodla giris: ana ekrana eklenen uygulamada baglanti tarayicida acildigi icin oturum uygulamaya gecmez; kod uygulamanin icinde yazilir
-    async verifyCode(code) { if (!this.sb || !this.pendingEmail)
-        return; const { error } = await this.sb.auth.verifyOtp({ email: this.pendingEmail, token: code.replace(/\D/g, ''), type: 'email' }); if (error)
-        toast(t('login.code.bad') + ' (' + error.message + ')', 'err');
     else
-        this.pendingEmail = ''; },
+        toast(t('login.email.sent'), 'ok'); },
+    // e-posta + sifre: ana ekrana eklenen uygulamada da calisir (e-postadaki baglanti tarayicida acilir, oturum uygulamaya gecmez)
+    async signInPassword(email, password) { if (!this.sb)
+        return; const { error } = await this.sb.auth.signInWithPassword({ email, password }); if (error)
+        toast(t('login.pw.bad'), 'err'); },
+    async signUpPassword(email, password) {
+        if (!this.sb)
+            return;
+        if (password.length < 6) {
+            toast(t('login.pw.short'), 'err');
+            return;
+        }
+        const { data, error } = await this.sb.auth.signUp({ email, password, options: { emailRedirectTo: location.origin + location.pathname } });
+        if (error)
+            toast(error.message, 'err');
+        else if (!data?.session)
+            toast(t('login.pw.confirm'), 'ok');
+    },
+    async setPassword(password) { if (!this.sb || !this.user)
+        return; if (password.length < 6) {
+        toast(t('login.pw.short'), 'err');
+        return;
+    } const { error } = await this.sb.auth.updateUser({ password }); toast(error ? error.message : t('login.pw.set.ok'), error ? 'err' : 'ok'); },
     async signOut() { if (!this.sb)
         return; await this.sb.auth.signOut(); this.user = null; toast(t('cloud.signedout')); this.changed(); },
     async afterSignIn() { const r = await this.pull(); if (!r)

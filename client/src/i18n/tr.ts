@@ -7,7 +7,7 @@ export const tr: Record<string, string> = {
   'sys.offline': 'Bağlantı yok · Kariyer oynanabilir', 'sys.online': 'Bağlı', 'sys.soon': 'Yakında', 'sys.soon.desc': 'Bu bölüm bir sonraki sürümde açılacak.',
 
   'login.title': 'Hoş geldin', 'login.guest': 'Misafir olarak başla', 'login.continue': 'Devam et', 'login.playnow': 'Oynamaya başla',
-  'login.google': 'Google ile', 'login.apple': 'Apple ile', 'login.email.placeholder': 'e-posta', 'login.email.send': 'Kod gönder', 
+  'login.google': 'Google ile', 'login.apple': 'Apple ile', 'login.email.placeholder': 'e-posta', 'login.email.send': 'Şifresiz: e-postama giriş bağlantısı gönder', 
   'login.switch': 'Hesap değiştir', 'login.account': 'Hesap', 'login.cloud.off': 'Kayıt bu cihazda tutulur; hesaba bağlama bulut açılınca.',
   'login.cloud.user': 'Kayıt bulutta; her cihazdan devam edebilirsin.', 'login.cloud.guest': 'Hesap bağlarsan kayıt buluta alınır; misafir devam edersen bu cihazda kalır.',
   'login.switch.confirm': 'Bu hesaptan çıkılsın mı? Kayıt bulutta kalır; başka hesapla girebilirsin.',
@@ -138,5 +138,6 @@ export const tr: Record<string, string> = {
   'missions.daily.desc': 'Günlük görev ödülü güçlendirmedir (günde en fazla 2). Güçlendirme inşaat, antrenman ya da scout süresinden 4 saat düşer. Serinin 7. gününde giriş ödülüne bir güçlendirme eklenir.', 'missions.weekly.desc': 'Haftalık görevler pazartesi yenilenir; ödül Kariyer kasasına yazılır.',
   'mis.d.login': 'Oyunu aç', 'mis.d.train': 'Bir antrenman seansı başlat', 'mis.d.analysis': 'Rakip analizini incele (maç odasına gir)', 'mis.d.market': 'Transfer havuzunda pazarlık yap ya da futbolcu al', 'mis.d.match': 'Bir Kariyer maçı oyna',
   'mis.w.win2': '2 farkla kazan', 'mis.w.clean': 'Gol yemeden bitir', 'mis.w.awaywin': 'Deplasmanda galibiyet al', 'mis.w.train3': '3 antrenman seansı başlat', 'mis.w.youth2': '19 yaş altı futbolculara 2 maç forma ver', 'mis.w.sale': 'Bir futbolcu sat', 'mis.w.scout': 'Bir scout gönder',
-  'login.email.sent': 'Giriş kodu e-postana gönderildi', 'login.code.hint': '{e} adresine gelen 6 haneli kodu yaz', 'login.code.placeholder': 'kod', 'login.code.go': 'Giriş yap', 'login.code.other': 'başka e-posta', 'login.code.bad': 'Kod geçersiz ya da süresi doldu',
+  'login.email.sent': 'Giriş bağlantısı e-postana gönderildi (bağlantı tarayıcıda açılır)', 'login.code.hint': '{e} adresine gelen 6 haneli kodu yaz', 'login.code.placeholder': 'kod', 'login.code.go': 'Giriş yap', 'login.code.other': 'başka e-posta', 'login.code.bad': 'Kod geçersiz ya da süresi doldu',
+  'login.pw.placeholder': 'şifre', 'login.pw.go': 'Giriş yap', 'login.pw.new': 'Hesap oluştur', 'login.pw.bad': 'E-posta ya da şifre hatalı', 'login.pw.short': 'Şifre en az 6 karakter olmalı', 'login.pw.confirm': 'Onay e-postası gönderildi: bağlantıya bir kez dokun, sonra buraya dönüp şifrenle giriş yap', 'login.pw.set': 'Şifre belirle', 'login.pw.set.placeholder': 'yeni şifre', 'login.pw.set.ok': 'Şifre kaydedildi; artık her cihazda e-posta ve şifreyle girebilirsin',
 };

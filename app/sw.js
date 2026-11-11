@@ -1,6 +1,6 @@
 // Football Madness uygulamasi - cevrimdisi destek (Kariyer cihazda oynanir). Sayfa ve js icin once ag, yoksa onbellek;
 // stil, ikon ve manifest icin once onbellek. CACHE adi yayin numarasiyla degisir (build.sh yazar): eski onbellek silinir.
-const CACHE = 'fm-app-37e66cb353';
+const CACHE = 'fm-app-2667c79df6';
 const SHELL = ['./', './index.html', './style.css', './manifest.webmanifest', './js/main.js', '../icons/icon-192.png', '../icons/icon-512.png'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL).catch(() => null)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE && k.startsWith('fm-app-')).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });

@@ -8,18 +8,21 @@ import { confirmBox, toast } from '../core/ui.js';
 
 export function authButtons() {
   if (CLOUD.state === 'off') return html``;
-  if (CLOUD.user) return html`<p class="muted center">${t('login.account')}: ${CLOUD.label()} · <a href="#" id="switchAcc">${t('login.switch')}</a></p>`;
+  if (CLOUD.user) return html`<p class="muted center">${t('login.account')}: ${CLOUD.label()} · <a href="#" id="switchAcc">${t('login.switch')}</a></p><div class="row center"><input id="pwSetIn" type="password" placeholder="${t('login.pw.set.placeholder')}" autocomplete="new-password"><button class="btn sm" id="pwSet">${t('login.pw.set')}</button></div>`;
   const prov = CLOUD.providers();
   return html`<div class="row center">${prov.includes('google') ? html`<button class="btn" data-oauth="google">${t('login.google')}</button>` : ''}${prov.includes('apple') ? html`<button class="btn" data-oauth="apple">${t('login.apple')}</button>` : ''}</div>
-    ${CLOUD.pendingEmail ? html`<p class="muted small center">${t('login.code.hint', { e: CLOUD.pendingEmail })}</p><div class="row center"><input id="codeIn" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="${t('login.code.placeholder')}"><button class="btn prim" id="codeGo">${t('login.code.go')}</button><a href="#" id="codeBack" class="small">${t('login.code.other')}</a></div>`
-    : html`<div class="row center"><input id="emailIn" type="email" placeholder="${t('login.email.placeholder')}" autocomplete="email"><button class="btn" id="emailGo">${t('login.email.send')}</button></div>`}`;
+    <div class="col center authform"><input id="emailIn" type="email" placeholder="${t('login.email.placeholder')}" autocomplete="email"><input id="pwIn" type="password" placeholder="${t('login.pw.placeholder')}" autocomplete="current-password">
+      <div class="row center"><button class="btn prim" id="pwGo">${t('login.pw.go')}</button><button class="btn" id="pwNew">${t('login.pw.new')}</button></div>
+      <a href="#" id="emailGo" class="small">${t('login.email.send')}</a></div>`;
 }
 export function bindAuth(root: HTMLElement) {
   const sw = root.querySelector<HTMLElement>('#switchAcc'); if (sw) sw.onclick = async (e) => { e.preventDefault(); if (!(await confirmBox(t('login.switch.confirm'), t('login.switch')))) return; await CLOUD.signOut(); go('login', {}, false); };
   for (const b of root.querySelectorAll<HTMLElement>('[data-oauth]')) b.onclick = () => CLOUD.signInOAuth(b.dataset.oauth!);
-  const cg = root.querySelector<HTMLElement>('#codeGo'); if (cg) cg.onclick = () => { const v = (root.querySelector('#codeIn') as HTMLInputElement).value.trim(); if (v.length >= 6) CLOUD.verifyCode(v); };
-  const cb = root.querySelector<HTMLElement>('#codeBack'); if (cb) cb.onclick = (e) => { e.preventDefault(); CLOUD.pendingEmail = ''; CLOUD.changed(); };
-  const eg = root.querySelector<HTMLElement>('#emailGo'); if (eg) eg.onclick = () => { const v = (root.querySelector('#emailIn') as HTMLInputElement).value.trim(); if (v) CLOUD.signInEmail(v); };
+  const val = (id: string) => ((root.querySelector('#' + id) as HTMLInputElement | null)?.value || '').trim();
+  const pg = root.querySelector<HTMLElement>('#pwGo'); if (pg) pg.onclick = () => { if (val('emailIn') && val('pwIn')) CLOUD.signInPassword(val('emailIn'), val('pwIn')); };
+  const pn = root.querySelector<HTMLElement>('#pwNew'); if (pn) pn.onclick = () => { if (val('emailIn') && val('pwIn')) CLOUD.signUpPassword(val('emailIn'), val('pwIn')); };
+  const eg = root.querySelector<HTMLElement>('#emailGo'); if (eg) eg.onclick = (e) => { e.preventDefault(); if (val('emailIn')) CLOUD.signInEmail(val('emailIn')); };
+  const sp = root.querySelector<HTMLElement>('#pwSet'); if (sp) sp.onclick = () => CLOUD.setPassword(val('pwSetIn'));
 }
 register('login', () => ({ bare: true, back: false, html: html`
   <div class="center login">

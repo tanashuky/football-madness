@@ -29,25 +29,3 @@ jobs:
         run: |
           supabase link --project-ref "$PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
           supabase db push --yes
-      # Giris e-postasi: baglanti yerine (ek olarak) 6 haneli kod. Ana ekrana eklenen uygulama Safari'den ayri depolama kullanir;
-      # baglanti Safari'de acildigi icin oturum uygulamaya gecmez, kod ise uygulamanin icinde yazilir.
-      - name: Giris e-postasi sablonu (kodlu)
-        continue-on-error: true
-        run: |
-          python3 - <<'PY'
-          import json, os, urllib.request
-          html = open('server/supabase/templates/otp.html').read()
-          body = json.dumps({
-            'mailer_subjects_magic_link': 'Football Madness giriş kodun',
-            'mailer_templates_magic_link_content': html,
-            'mailer_subjects_confirmation': 'Football Madness giriş kodun',
-            'mailer_templates_confirmation_content': html,
-          }).encode()
-          req = urllib.request.Request('https://api.supabase.com/v1/projects/%s/config/auth' % os.environ['PROJECT_REF'], data=body, method='PATCH',
-            headers={'Authorization': 'Bearer ' + os.environ['SUPABASE_ACCESS_TOKEN'], 'Content-Type': 'application/json', 'User-Agent': 'fm-deploy'})
-          try:
-            r = urllib.request.urlopen(req); d = json.load(r)
-            print('SABLON OK', r.status, 'otp_length=', d.get('mailer_otp_length'), 'kod var mi:', '{{ .Token }}' in (d.get('mailer_templates_magic_link_content') or ''))
-          except urllib.error.HTTPError as e:
-            print('SABLON HATA', e.code, e.read().decode()[:300]); raise SystemExit(1)
-          PY
