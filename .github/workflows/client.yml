@@ -1,0 +1,30 @@
+# Üretim istemcisi: client/ ya da motor değişince derlenir, app/ dizini depoya yazılır (GitHub Pages /app/ altında yayınlar).
+name: client-build
+on:
+  push:
+    branches: [main]
+    paths: ['client/**', 'prototype/src/engine.ts', '.github/workflows/client.yml']
+  workflow_dispatch:
+concurrency: { group: client-build, cancel-in-progress: true }
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    if: github.actor != 'github-actions[bot]'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: TypeScript derleyicisi
+        run: npm install -g typescript@5
+      - name: Derle
+        run: bash client/build.sh
+      - name: app/ dizinini depoya yaz
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A app
+          if git diff --cached --quiet; then echo "değişiklik yok"; exit 0; fi
+          git commit -m "Üretim istemcisi derlemesi (otomatik)"
+          git push

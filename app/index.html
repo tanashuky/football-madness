@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Football Madness">
+<meta name="theme-color" content="#0e1512">
+<title>Football Madness</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="../icons/icon-192.png">
+<link rel="apple-touch-icon" href="../icons/apple-touch-icon.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <header id="aTop">
+    <button class="ib" id="aBack" aria-label="Geri">‹</button>
+    <div id="aTitle"></div>
+    <div class="right"><span class="net" id="aNet" title="offline"></span><button class="ib" id="aProfile" aria-label="Profil">◉</button><button class="ib" id="aSettings" aria-label="Ayarlar">⚙</button><button class="ib" id="aHome" aria-label="Ana menü">⌂</button></div>
+  </header>
+  <nav id="aTabs" hidden></nav>
+  <main id="aBody"></main>
+  <footer id="aFoot" hidden></footer>
+</div>
+<div id="match" hidden><canvas id="pitch"></canvas><div id="mHud"></div></div>
+<div id="toasts"></div>
+<div id="modal" hidden></div>
+<div id="errBox" hidden><b>Bir hata oluştu / An error occurred</b><pre></pre><div class="row"><button class="btn sm" id="errCopy">Kopyala</button><button class="btn sm" id="errExit">Maçtan çık</button><button class="btn sm ghost" id="errHide">Kapat</button></div></div>
+<noscript>Football Madness için JavaScript gerekir.</noscript>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
