@@ -1,18 +1,19 @@
 // Mac ekrani (Total simulation): motor adim adim kosar, tuval cizer; kullanici kaydirici (zihniyet), talimat ve degisiklik verir.
 // Team play (joystick, vurus jesti) bu surumde demoda kalir; sonraki adimda buraya tasinir. Tekrar izleme de bu ekrandan (watchReplay).
-import { P, applyCmd, ballMoving, createMatch, pendingSubs, replayOf, setControl, setMentality, setTactic, step, userSub } from '../engine.js';
+import { P, applyCmd, autoSubsFor, ballMoving, controlledPlayer, createMatch, pendingSubs, replayOf, setControl, setMentality, setTactic, step, suggestedSub, userSub } from '../engine.js';
 import { $, html, raw } from '../core/html.js';
 import { t, opts as iopts } from '../core/i18n.js';
 import { confirmBox, toast } from '../core/ui.js';
 import { reportError } from '../core/errors.js';
-const SIM_DT = 0.1, SPEED = 1.3; // fizik adimi ve oynama hizi (mac ~ minutes dakika surer)
+import * as ctl from './controls.js';
+const SIM_DT = 0.1, PLAY_DT = 0.05, SPEED = 1.3; // fizik adimi ve oynama hizi (mac ~ minutes dakika surer)
 const CAMS = { full: { mode: 'full', w: 65 }, length: { mode: 'smart', w: 108 }, near: { mode: 'smart', w: 65 } };
 const PADX = 3.2, PADY = 2.2;
 const M = {
     on: false, st: null, side: 0, user: 1, paused: false, acc: 0, prev: [], last: 0, raf: 0, endAt: 0, ment: 0,
     hooks: null, replay: null,
     names: 'auto', ball: 1.4, reduce: false, evSeen: 0, lastDead: -1, banners: [], trail: [],
-    cam: { mode: 'full', w: 65, cx: 52.5, cy: 34, vx: 0, vy: 0, lx: 0, ly: 0, lt: 0 }, camKey: 'full', lastW: 0, lastH: 0, tacOpen: false,
+    cam: { mode: 'full', w: 65, cx: 52.5, cy: 34, vx: 0, vy: 0, lx: 0, ly: 0, lt: 0 }, camKey: 'full', lastW: 0, lastH: 0, tacOpen: false, team: false, keys: 'arrows', vib: true, decide: null,
     kit: ['#d2433d', '#3b6fd6'], // cizim renkleri (forma catismasinda deplasman ikinci rengine ya da notr renge gecer)
     kitText: ['#fff', '#fff'], // numara rengi (acik formada koyu)
 };
@@ -40,13 +41,13 @@ function hud() {
   <div class="mTop">
     <div class="sc"><span class="tm"><i style="background:${M.kit[0]}"></i>${st.teams[0].short}</span><b id="mScore">0 : 0</b><span class="tm b">${st.teams[1].short}<i style="background:${M.kit[1]}"></i></span></div>
     <div class="clk" id="mClock">0:00</div>
-    <div class="right"><button class="ib" id="mCam" title="${t('room.camera')}">⌖</button><button class="ib" id="mPause">❚❚</button><button class="ib" id="mExit">✕</button></div>
+    <div class="right">${M.team ? html `<button class="btn sm" id="mTac">${t('match.tactic')}</button>` : ''}<button class="ib" id="mCam" title="${t('room.camera')}">⌖</button><button class="ib" id="mPause">❚❚</button><button class="ib" id="mExit">✕</button></div>
   </div>
   <div class="mTicker" id="mTicker"></div>
-  <div class="mBottom">
+  ${M.team ? '' : html `<div class="mBottom">
     ${rep ? html `<span class="tag">${t('report.replay')}</span>` : html `<div class="ment"><button class="ib" id="mentDn">◀</button><span id="mentOut">${ment.label}</span><button class="ib" id="mentUp">▶</button></div><button class="btn sm" id="mTac">${t('match.tactic')}</button>`}
     <div class="seg sm" id="mSpeed"><button data-v="1" aria-pressed="true">1×</button><button data-v="2" aria-pressed="false">2×</button><button data-v="4" aria-pressed="false">4×</button></div>
-  </div>
+  </div>`}
   <div class="mOverlay" id="mPauseBox" hidden><div class="box"><h3>${t('match.pause')}</h3><div class="row"><button class="btn prim" id="mResume">${t('match.resume')}</button><button class="btn ghost" id="mQuit">${t('match.exit')}</button></div></div></div>
   <div class="mOverlay" id="mTacBox" hidden></div>
   <div class="rotate" id="mRotate">${t('match.rotate')}</div>`);
@@ -59,12 +60,15 @@ function tacPanel() {
     const subs = pendingSubs(st, M.side);
     const onPitch = st.players.filter((p) => p.side === M.side && !p.off).sort((a, b) => a.idx - b.idx);
     const bench = st.bench[M.side].filter((b) => b.off && !b.subbed && !subs.some((s) => s.inn === b.num));
-    return String(html `<div class="box wide"><h3>${t('match.tactic')} <small>${t('match.changesLeft', { n: left })}</small></h3>
+    const mo = [-2, -1, 0, 1, 2].map((m) => [String(m), iopts('match.ment.' + m).label]);
+    return String(html `<div class="box wide"><h3>${t('match.tactic')} <small>${t('match.changesLeft', { n: left })} · ${st.stats[0].goals} : ${st.stats[1].goals}</small></h3>
+    ${M.decide !== null ? html `<p class="warnp">${t('match.decide', { n: M.decide })}</p>` : ''}
+    <div class="row"><div class="seg sm" id="tMent">${mo.map(([v, l]) => html `<button data-v="${v}" aria-pressed="${+v === M.ment ? 'true' : 'false'}">${l}</button>`)}</div></div>
     <div class="grid2">${keys.map((k) => { const o = iopts('instr.' + k); return html `<label class="f">${o.label}<select class="tk" data-k="${k}">${o.opts.map((l, i) => html `<option value="${i}" ${i === (tac[k] ?? 1) ? raw('selected') : ''}>${l}</option>`)}</select></label>`; })}</div>
     <h4>${t('ev.sub')} <small>${t('match.subsLeft', { n: st.subsLeft[M.side] })}</small></h4>
     ${subs.length ? html `<p class="muted">${subs.map((s) => `${s.out} ↔ ${s.inn}`).join(', ')} · ${t('match.subPending')}</p>` : ''}
-    <div class="grid2"><label class="f">${t('match.subOut')}<select id="subOut"><option value="">–</option>${onPitch.map((p) => html `<option value="${p.num}">${p.num} ${p.name} · ${Math.round(p.k)}</option>`)}</select></label>
-    <label class="f">${t('match.subIn')}<select id="subIn"><option value="">–</option>${bench.map((p) => html `<option value="${p.num}">${p.num} ${p.name} · ${p.pos}</option>`)}</select></label></div>
+    <div class="grid2"><label class="f">${t('match.subOut')}<select id="subOut"><option value="">–</option>${onPitch.map((p) => html `<option value="${p.num}" ${p.num === M.decide ? raw('selected') : ''}>${p.num} ${p.name} · ${Math.round(p.k)}</option>`)}</select></label>
+    <label class="f">${t('match.subIn')}<select id="subIn"><option value="">–</option>${bench.map((p) => html `<option value="${p.num}" ${M.decide !== null && suggestedSub(st, M.side, M.decide) === p.num ? raw('selected') : ''}>${p.num} ${p.name} · ${p.pos}</option>`)}</select></label></div>
     <div class="row end"><button class="btn ghost" id="tacClose">${t('btn.close')}</button><button class="btn prim" id="tacApply">${t('btn.apply')}</button></div></div>`);
 }
 function bind() {
@@ -82,14 +86,18 @@ function bind() {
     const tb = $('mTac');
     if (tb)
         tb.onclick = () => openTac();
-    $('mSpeed').onclick = (e) => { const b = e.target.closest('button'); if (!b)
-        return; M.user = +b.dataset.v; for (const x of $('mSpeed').children)
-        x.setAttribute('aria-pressed', String(x === b)); };
+    const sp = $('mSpeed');
+    if (sp)
+        sp.onclick = (e) => { const b = e.target.closest('button'); if (!b)
+            return; M.user = +b.dataset.v; for (const x of sp.children)
+            x.setAttribute('aria-pressed', String(x === b)); };
     root.onkeydown = null;
 }
-function openTac() {
-    if (!M.st || M.replay)
+function openTac(decide = null) {
+    if (!M.st || M.replay || M.st.done)
         return;
+    M.decide = decide;
+    ctl.resetInput();
     const box = $('mTacBox');
     box.innerHTML = tacPanel();
     box.hidden = false;
@@ -97,6 +105,9 @@ function openTac() {
     if (!M.paused)
         togglePause(true);
     $('tacClose').onclick = () => closeTac();
+    $('tMent').onclick = (e) => { const b = e.target.closest('button'); if (!b)
+        return; setMent(+b.dataset.v); for (const x of $('tMent').children)
+        x.setAttribute('aria-pressed', String(x === b)); };
     $('tacApply').onclick = () => {
         const st = M.st;
         const patch = {};
@@ -125,21 +136,32 @@ function openTac() {
         closeTac();
     };
 }
-function closeTac() { $('mTacBox').hidden = true; M.tacOpen = false; if (M.paused)
-    togglePause(false); }
+function closeTac() {
+    // sakatlik / kaleci karari: degisiklik secilmediyse sistem en uygun yedegi alir
+    if (M.decide !== null && M.st && !pendingSubs(M.st, M.side).some((q) => q.out === M.decide))
+        autoSubsFor(M.st, M.side);
+    M.decide = null;
+    $('mTacBox').hidden = true;
+    M.tacOpen = false;
+    if (M.paused)
+        togglePause(false);
+}
 function setMent(m) {
     if (!M.st || M.replay)
         return;
     M.ment = Math.max(-2, Math.min(2, m));
     setMentality(M.st, M.side, M.ment);
     const o = iopts('match.ment.' + M.ment);
-    $('mentOut').textContent = o.label;
+    const mo = $('mentOut');
+    if (mo)
+        mo.textContent = o.label;
     banner(o.label.toUpperCase(), 'info', t('match.mentSub'));
 }
 function togglePause(force) {
     if (!M.st || M.st.done)
         return;
     M.paused = force === undefined ? !M.paused : force;
+    ctl.resetInput();
     $('mPause').textContent = M.paused ? '▶' : '❚❚';
     $('mPauseBox').hidden = !M.paused || M.tacOpen;
 }
@@ -179,7 +201,7 @@ export function startMatch(o) {
     cv = $('pitch');
     ctx = cv.getContext('2d');
     P.clockRate = 90 / (o.minutes * SPEED);
-    P.dt = SIM_DT;
+    P.dt = o.mode === 'team' ? PLAY_DT : SIM_DT;
     P.playSpeed = SPEED;
     const st = createMatch(o.teams[0], o.teams[1], o.seed, { knockout: !!o.knockout });
     begin(st, o, null);
@@ -214,7 +236,20 @@ function begin(st, o, replay) {
     M.lastDead = -1;
     M.banners.length = 0;
     M.trail.length = 0;
-    setControl(st, M.side, 'none');
+    M.team = o.mode === 'team' && !replay;
+    M.keys = o.keys ?? 'arrows';
+    M.vib = o.vibration !== false;
+    M.decide = null;
+    if (M.team)
+        setControl(st, M.side, 'team', o.assistP ?? 0, o.assistS ?? 1, { autoSwitch: o.autoSwitch ?? true });
+    else if (!replay)
+        setControl(st, M.side, 'none');
+    document.body.classList.toggle('teamplay', M.team);
+    ctl.install({ cv, st: () => M.st, side: () => M.side, active: () => M.on && M.team && !M.paused && !!M.st && !M.st.done, keys: () => M.keys, vibrate: () => M.vib,
+        onPause: () => togglePause(), onExit: () => { if (M.tacOpen)
+            closeTac();
+        else
+            askExit(); }, onTac: () => (M.tacOpen ? closeTac() : openTac()), onMent: (d) => setMent(M.ment + d), onCam: () => $('mCam').click() });
     M.kit = kitColors(st.teams[0], st.teams[1]);
     M.kitText = [lum(M.kit[0]) > 0.62 ? '#1b1a0c' : '#fff', lum(M.kit[1]) > 0.62 ? '#1b1a0c' : '#fff'];
     document.body.classList.add('match');
@@ -236,7 +271,7 @@ export function exit() {
     const fin = M.st;
     M.st = null;
     M.replay = null;
-    document.body.classList.remove('match', 'portrait');
+    document.body.classList.remove('match', 'portrait', 'teamplay');
     $('match').hidden = true;
     $('mHud').innerHTML = '';
     if (hooks && hooks.onExit)
@@ -267,7 +302,7 @@ function frameBody(now) {
         fit();
     let alpha = 1;
     if (!M.paused && !st.done) {
-        M.acc += dtReal * (1 / st.dt) * SPEED * M.user;
+        M.acc += dtReal * (1 / st.dt) * SPEED * (M.team ? 1 : M.user);
         let guard = 0;
         while (M.acc >= 1 && !st.done && guard++ < 200) {
             M.prev = snapshot(st);
@@ -278,6 +313,8 @@ function frameBody(now) {
                 if (st.stepN >= M.replay.rep.steps)
                     M.replay.done = true;
             }
+            else if (M.team)
+                ctl.feedInput(st, M.side);
             if (M.replay && M.replay.done) {
                 if (!st.done) {
                     st.done = true;
@@ -301,7 +338,7 @@ function frameBody(now) {
         const fin = st;
         M.hooks = null;
         M.on = false;
-        document.body.classList.remove('match', 'portrait');
+        document.body.classList.remove('match', 'portrait', 'teamplay');
         $('match').hidden = true;
         $('mHud').innerHTML = '';
         M.st = null;
@@ -328,6 +365,11 @@ function watchEvents(st) {
         const tm = st.teams[e.side];
         const pl = e.player ? st.players.find((p) => p.side === e.side && p.num === e.player) : null;
         const who = pl ? `#${pl.num} ${pl.name}` : '';
+        if (e.type === 'red' && M.team && e.side === M.side && pl && pl.pos === 'GK') {
+            const n = pl.num;
+            setTimeout(() => { if (M.on && M.st === st)
+                openTac(n); }, 700);
+        }
         if (e.type === 'goal') {
             banner(t('ev.goal') + '!', 'goal', `${tm.short} · ${who}`);
             ticker(`${Math.floor(e.t / 60) + 1}' ${t('ev.goal')} ${tm.short} ${who}`);
@@ -345,12 +387,22 @@ function watchEvents(st) {
         else if (e.type === 'miss' && e.text && /direk/.test(e.text)) {
             banner(t('ev.post').toUpperCase() + '!', 'info', `${tm.short} · ${who}`);
         }
+        else if (e.type === 'injury' && M.team && e.side === M.side && e.player) {
+            banner(t('ev.injury').toUpperCase(), 'red', `${tm.short} · ${who}`);
+            const n = e.player;
+            setTimeout(() => { if (M.on && M.st === st)
+                openTac(n); }, 700);
+        }
         else if (e.type === 'injury')
             ticker(`${Math.floor(e.t / 60) + 1}' ${t('ev.injury')} ${tm.short} ${who}`);
         else if (e.type === 'sub')
             ticker(`${Math.floor(e.t / 60) + 1}' ${t('ev.sub')} ${tm.short} ${e.player2 ?? ''} → ${e.player ?? ''}`);
-        else if (e.type === 'half')
+        else if (e.type === 'half') {
             banner(t('match.half').toUpperCase(), 'info');
+            if (M.team)
+                setTimeout(() => { if (M.on && M.st === st)
+                    openTac(); }, 900);
+        }
         else if (e.type === 'end')
             banner(t('match.end').toUpperCase(), 'info');
         else if (e.type === 'rule' && e.side === M.side && e.text)
@@ -358,6 +410,8 @@ function watchEvents(st) {
     }
     if (st.deadStart !== M.lastDead && isDead(st) && st.deadReason && st.deadReason !== 'GOL' && st.deadReason !== 'Penaltı')
         banner(st.deadReason.toUpperCase(), 'info');
+    if (st.deadStart !== M.lastDead && M.team)
+        ctl.onDead();
     M.lastDead = st.deadStart;
 }
 // ---------- cizim (demo sayfasindan tasindi; saha, oyuncular, efektler, top, pankartlar) ----------
@@ -468,7 +522,8 @@ function draw(st, alpha, now) {
         }
     }
     const cur = snapshot(st);
-    const pos = (i) => { const pr = M.prev[i] ?? cur[i]; return [pr[0] + (cur[i][0] - pr[0]) * alpha, pr[1] + (cur[i][1] - pr[1]) * alpha, (pr[2] ?? 0) + ((cur[i][2] ?? 0) - (pr[2] ?? 0)) * alpha]; };
+    const cpi = M.team ? st.players.indexOf(controlledPlayer(st, M.side)) : -1;
+    const pos = (i) => { const pr = M.prev[i] ?? cur[i]; const a = i === cpi ? 1 + alpha * 0.5 : alpha; return [pr[0] + (cur[i][0] - pr[0]) * a, pr[1] + (cur[i][1] - pr[1]) * a, (pr[2] ?? 0) + ((cur[i][2] ?? 0) - (pr[2] ?? 0)) * alpha]; };
     const r = Math.max(6, s * 1.0);
     const order = st.players.map((_p, i) => i).sort((a, b) => st.players[b].side - st.players[a].side);
     const dprN = Wc / cv.clientWidth;
@@ -499,7 +554,7 @@ function draw(st, alpha, now) {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(String(p.num), X(x), Y(y) + r * 0.05);
-        const showName = M.names === 'off' ? false : M.names === 'mine' ? p.side === M.side && r >= 9 : (C.mode === 'smart' ? r >= 9 : r >= 11);
+        const showName = M.names === 'off' ? false : M.names === 'mine' ? (M.team ? i === cpi : p.side === M.side && r >= 9) : (C.mode === 'smart' ? r >= 9 : r >= 11);
         if (showName) {
             const fs = Math.max(11 * dprN, Math.round(r * 0.68));
             ctx.font = `500 ${Math.round(fs)}px ${css('--font-body')}`;
@@ -635,6 +690,8 @@ function draw(st, alpha, now) {
     ctx.strokeStyle = '#111';
     ctx.stroke();
     drawBanners(st, now, Wc, Hc, s);
+    if (M.team && !st.done)
+        ctl.drawControls(ctx, st, M.side, s, X, Y, pos, Wc, Hc, css('--flood'), css('--font-body'), M.kit[M.side], C.mode === 'smart');
 }
 function drawBanners(st, now, Wc, Hc, s) {
     for (const b of M.banners) {

@@ -105,7 +105,10 @@ pre.errpre { white-space: pre-wrap; word-break: break-word; font-size: 11px; bac
 @keyframes up { from { transform: translateY(10px); opacity: 0; } }
 #modal { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 60; padding: 16px; }
 #modal .box, .mOverlay .box { background: var(--stand); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; max-width: 440px; width: 100%; box-shadow: 0 10px 40px rgba(0,0,0,.5); }
-.mOverlay .box.wide { max-width: 640px; max-height: 90vh; overflow: auto; }
+.mOverlay .box.wide { max-width: 640px; }
+.mOverlay .box { max-height: 100%; overflow: auto; }
+.mOverlay { padding: calc(8px + var(--sat)) calc(12px + var(--sar)) calc(8px + var(--sab)) calc(12px + var(--sal)); }
+.mOverlay .grid2 { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
 #errBox { position: fixed; left: 12px; right: 12px; bottom: calc(12px + var(--sab)); background: #2a1b1b; border: 1px solid var(--bad); border-radius: 12px; padding: 10px 12px; z-index: 70; font-size: 13px; }
 #errBox pre { white-space: pre-wrap; word-break: break-word; max-height: 120px; overflow: auto; margin: 6px 0; font-size: 11px; }
 /* mac ekrani */
@@ -129,3 +132,6 @@ pre.errpre { white-space: pre-wrap; word-break: break-word; font-size: 11px; bac
 body.portrait .rotate { display: flex; }
 body.match #app { visibility: hidden; }
 @media (max-width: 560px) { .mTop .sc { font-size: 1.05em; padding: 3px 8px; } .mBottom .ment span { min-width: 80px; } .cards.two { grid-template-columns: 1fr; } #aTabs button { font-size: .95em; line-height: 1.1; padding: 0 2px; } }
+/* Team play: alt cubuk yok (joystick ve butonlar tuvalde); ust cubuk kompakt */
+body.teamplay .mTicker { display: none; }
+.warnp { color: var(--warn); font-weight: 600; }

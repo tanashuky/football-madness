@@ -96,4 +96,10 @@ export const tr: Record<string, string> = {
   'match.noChanges': 'Taktik değişikliği hakkı kalmadı', 'match.tacticApplied': 'Talimat değişti · 1 dk uyum', 'match.subFail': 'Değişiklik yapılamadı', 'match.subQueued': 'Değişiklik sıraya alındı', 'match.mentSub': 'taktik · 1 dk uyum', 'match.ruleFired': 'kural tetiklendi',
   'match.startFail': 'Maç başlatılamadı', 'match.abandoned': 'Maç terk edildi: kalan süre simüle edildi',
   'report.potm': 'Maçın oyuncusu', 'report.noTactic': 'Maç içinde taktik değişikliği yapılmadı.', 'report.rot': 'Rotasyon çevirmesi: sen {a} · rakip {b}',
+  // --- Team play ---
+  'ctl.pass': 'Pas', 'ctl.through': 'Ara', 'ctl.shoot': 'Şut', 'ctl.cross': 'Orta', 'ctl.press': 'Baskı', 'ctl.tackle': 'Müdahale', 'ctl.slide': 'Kaydır', 'ctl.switch': 'Değiştir', 'ctl.switchGk': 'Değiştir/Kaleci', 'ctl.attack': 'hücum',
+  'tip.corner': 'Korner: Orta (havadan) · Pas (kısa)', 'tip.fkshot': 'Serbest vuruş: Şut (kavisi çiz) · Orta · Pas', 'tip.fk': 'Serbest vuruş: Orta · Pas · Şut', 'tip.penalty': 'Penaltı: Şut (yönü çiz, basılı tut = güç)', 'tip.throw': 'Taç: Pas · Ara · Orta', 'tip.goalkick': 'Aut: Pas · Orta', 'tip.pass': 'Pas ver',
+  'tip.penaltyDef': 'Penaltı: atlayacağın tarafa joystick ile bas ve tut', 'tip.skip': 'dokun: sevinci atla',
+  'room.mode.team': 'Team play: topu olan oyuncuyu sen yönetirsin. Sol yarı joystick (dış bant sprint), sağ altta dört buton; basılı tut = güç, sürükle = yön ve falso.', 'room.mode.sim': 'Total simulation: maçı izlersin; zihniyet kaydırıcı, talimat ve değişiklik sende.',
+  'match.decide': '{n} numara oyuna devam edemiyor. Yedeği seç; seçmezsen sistem en uygun yedeği alır.',
 };

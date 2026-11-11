@@ -84,4 +84,10 @@ export const en = {
     'match.noChanges': 'No tactic changes left', 'match.tacticApplied': 'Instructions changed · 1 min to settle', 'match.subFail': 'Substitution failed', 'match.subQueued': 'Substitution queued', 'match.mentSub': 'tactics · 1 min to settle', 'match.ruleFired': 'rule triggered',
     'match.startFail': 'Could not start the match', 'match.abandoned': 'Match abandoned: the rest was simulated',
     'report.potm': 'Player of the match', 'report.noTactic': 'No tactic changes during the match.', 'report.rot': 'Rotation turns: you {a} · opponent {b}',
+    // --- Team play ---
+    'ctl.pass': 'Pass', 'ctl.through': 'Through', 'ctl.shoot': 'Shoot', 'ctl.cross': 'Cross', 'ctl.press': 'Press', 'ctl.tackle': 'Tackle', 'ctl.slide': 'Slide', 'ctl.switch': 'Switch', 'ctl.switchGk': 'Switch/Keeper', 'ctl.attack': 'attack',
+    'tip.corner': 'Corner: Cross (in the air) · Pass (short)', 'tip.fkshot': 'Free kick: Shoot (draw the curve) · Cross · Pass', 'tip.fk': 'Free kick: Cross · Pass · Shoot', 'tip.penalty': 'Penalty: Shoot (draw the direction, hold = power)', 'tip.throw': 'Throw-in: Pass · Through · Cross', 'tip.goalkick': 'Goal kick: Pass · Cross', 'tip.pass': 'Pass the ball',
+    'tip.penaltyDef': 'Penalty: hold the joystick towards the side you dive', 'tip.skip': 'tap: skip celebration',
+    'room.mode.team': 'Team play: you control the player on the ball. Left half joystick (outer band sprints), four buttons bottom right; hold = power, drag = direction and curl.', 'room.mode.sim': 'Total simulation: you watch; mentality slider, instructions and substitutions are yours.',
+    'match.decide': 'Number {n} cannot continue. Pick the substitute; otherwise the system brings on the best fit.',
 };

@@ -27,7 +27,7 @@ export function startMatchFlow(c: RoomCtx, me: TeamIn, opp: TeamIn, home: boolea
   if (instant) { P.clockRate = 90 / minutes; P.dt = 0.1; P.playSpeed = 1; const st = simulate(teams[0], teams[1], seed); P.clockRate = 6; clearReplay(); finish(st, true); return; }
   try { validateTeam(teams[0], teams[0].name); validateTeam(teams[1], teams[1].name); } catch (e: any) { console.error(e); toast(t('match.startFail') + ': ' + (e && e.message ? e.message : e), 'err'); return; }
   try {
-    sim.startMatch({ teams, side, minutes, seed, cam: s.cam, names: s.names, ball: s.ball, reduceMotion: s.reduceMotion,
+    sim.startMatch({ teams, side, minutes, seed, mode: s.mode, keys: s.keys, assistP: s.assistP, assistS: s.assistS, autoSwitch: s.autoSwitch, vibration: s.vibration, cam: s.cam, names: s.names, ball: s.ball, reduceMotion: s.reduceMotion,
       onEnd: (st) => { saveReplay(st); finish(st, false); },
       onExit: (st) => { if (st && !st.done) { setControl(st, side, 'none'); let g = 0; while (!st.done && g++ < 40000) step(st); toast(t('match.abandoned')); } if (st) { saveReplay(st); finish(st, false); } else render(); } });
   } catch (e: any) { console.error(e); try { sim.exit(); } catch (e2) {} render(); toast(t('match.startFail') + ': ' + (e && e.message ? e.message : e), 'err'); }
