@@ -11,21 +11,38 @@ export interface View {
 }
 export type Screen = (ctx: any) => View;
 const SCREENS: Record<string, Screen> = {};
-export const R = { screen: '', ctx: {} as any, stack: [] as { s: string; c: any }[], depth: 0, onLeave: null as null | (() => boolean | void) };
+// Gezinme modeli: gecmis yigini yok. Her ekranin mantiksal bir "ust" ekrani vardir (parentOf); Geri her zaman oraya gider.
+// Boylece ayni iki ekran arasinda gidip geldikce yigin buyumez, oynanmis macin odasina geri donulmez, dongu olusmaz.
+// Yan ekranlar (Ayarlar, Profil, Oduller, Gorevler, Premium) nereden acildiysa oraya doner (R.ret).
+export const R = { screen: '', ctx: {} as any, ret: null as null | { s: string; c: any }, guard: null as null | (() => boolean), key: '' };
+const SIDE = new Set(['settings', 'profile', 'rewards', 'missions', 'premium']);
 export function register(name: string, s: Screen) { SCREENS[name] = s; }
-export function go(name: string, ctx: any = {}, push = true) {
+export function parentOf(s: string = R.screen, c: any = R.ctx): { s: string; c: any } | null {
+  if (s === 'login' || s === 'setup' || s === 'home' || !s) return null;
+  if (SIDE.has(s)) return R.ret || { s: 'home', c: {} };
+  if (s === 'squad' || s === 'tactics') return c && c.from ? { s: 'room', c: c.from } : { s: 'career', c: { tab: 'team' } };
+  if (s === 'room') return c.kind === 'mm' ? { s: 'mm', c: { mine: c.mine, diff: c.diff, minutes: c.minutes } } : { s: 'career', c: { tab: 'match' } };
+  if (s === 'mm') return c && c.mine ? { s: 'mm', c: { diff: c.diff, minutes: c.minutes } } : { s: 'home', c: {} };
+  if (s === 'report') return c && c.rep && c.rep.kind === 'career' ? { s: 'career', c: { tab: 'match' } } : { s: 'home', c: {} };
+  return { s: 'home', c: {} }; // career, careerNew
+}
+let armed = false; // tarayici gecmisinde tek nobetci kayit: telefonun geri tusu "ust ekran" olarak calisir
+function arm() { if (armed) return; try { history.pushState({ fm: 1 }, ''); armed = true; } catch (e) {} }
+// push parametresi eski cagrilarla uyum icin duruyor; gezinme modeli onu kullanmaz
+export function go(name: string, ctx: any = {}, _push = true) {
   if (!SCREENS[name]) { console.warn('ekran yok', name); return; }
-  if (R.onLeave) { const stay = R.onLeave(); if (stay === true) return; R.onLeave = null; }
-  if (push && R.screen && R.screen !== name) { R.stack.push({ s: R.screen, c: R.ctx }); try { history.pushState({ d: ++R.depth }, ''); } catch (e) {} }
+  if (SIDE.has(name) && !SIDE.has(R.screen) && R.screen) R.ret = { s: R.screen, c: R.ctx };
+  if (name === R.screen && R.ctx && R.ctx.from && ctx.from === undefined) ctx = { ...ctx, from: R.ctx.from }; // ayni ekranda yeniden cizimde "nereden gelindi" korunur
   R.screen = name; R.ctx = ctx;
+  if (parentOf()) arm();
   render();
 }
-export function back() { if (R.stack.length) history.back(); else go('home', {}, false); }
-export function home() { R.stack.length = 0; go('home', {}, false); }
-// tarayici geri: yigin bos degilse bir onceki ekran
+export function back() { const p = parentOf(); if (p) go(p.s, p.c); }
+export function home() { go('home', {}); }
 window.addEventListener('popstate', () => {
-  if (R.onLeave) { const stay = R.onLeave(); if (stay === true) { try { history.pushState({ d: ++R.depth }, ''); } catch (e) {} return; } R.onLeave = null; }
-  const prev = R.stack.pop(); if (prev) { R.screen = prev.s; R.ctx = prev.c; render(); }
+  armed = false;
+  if (R.guard && R.guard()) { arm(); return; } // mac ya da pencere acik: geri tusu onu kapatir
+  const p = parentOf(); if (p) go(p.s, p.c); // go() ust ekrani olan ekranda nobetciyi yeniler; kok ekranda (ana menu) yenilemez: bir sonraki geri uygulamadan cikar
 });
 onLang(() => render());
 
@@ -38,8 +55,10 @@ export function render() {
   document.body.classList.toggle('bare', !!v.bare);
   if (v.cls) document.body.classList.add(v.cls);
   const title = $('aTitle')!; if (v.title instanceof Raw) title.innerHTML = v.title.s; else title.textContent = v.title || '';
-  const bk = $('aBack') as HTMLButtonElement; bk.hidden = v.back === false || R.stack.length === 0;
-  const body = $('aBody')!; body.innerHTML = String(v.html); body.scrollTop = 0;
+  const bk = $('aBack') as HTMLButtonElement; bk.hidden = !parentOf();
+  // ayni ekran (ve ayni sekme) yeniden cizilirken kaydirma konumu korunur; ekran degisince basa doner
+  const key = R.screen + '|' + (R.ctx && R.ctx.tab || '') + '|' + (R.ctx && R.ctx.level || '') + '|' + (R.screen === 'mm' && R.ctx.mine || '');
+  const body = $('aBody')!; const keep = key === R.key ? body.scrollTop : 0; R.key = key; body.innerHTML = String(v.html); body.scrollTop = keep;
   const foot = $('aFoot')!; if (v.foot) { foot.hidden = false; foot.innerHTML = String(v.foot); } else { foot.hidden = true; foot.innerHTML = ''; }
   const tabs = $('aTabs')!;
   if (v.tabs && v.tabs.length) {

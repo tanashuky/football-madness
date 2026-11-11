@@ -257,6 +257,12 @@ export function exit() {
     P.playSpeed = 1;
 }
 export const isOn = () => M.on;
+// telefonun geri tusu: panel aciksa kapatir, degilse cikis onayi sorar
+export function requestExit() { if (!M.on)
+    return; if (M.tacOpen)
+    closeTac();
+else
+    askExit(); }
 export const replayNow = () => (M.st ? replayOf(M.st) : null);
 function frame(now) {
     if (!M.on)

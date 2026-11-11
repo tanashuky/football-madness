@@ -21,6 +21,15 @@ function init() {
     bindNav($('aBody'));
     bindNav($('aFoot'));
     $('aBack').onclick = () => back();
+    R.guard = () => { const m = $('modal'); if (!m.hidden) {
+        const b = (m.querySelector('#mNo') || m.querySelector('#mOk'));
+        if (b)
+            b.click();
+        return true;
+    } if (sim.isOn()) {
+        sim.requestExit();
+        return true;
+    } return false; };
     $('aHome').onclick = () => { if (store.db.account)
         home();
     else
@@ -45,6 +54,6 @@ function init() {
     setInterval(() => { if (R.screen !== 'career' || sim.isOn() || !$('modal').hidden)
         return; const ae = document.activeElement; if (ae && (ae.tagName === 'SELECT' || ae.tagName === 'INPUT'))
         return; const sc = $('aBody').scrollTop; render(); $('aBody').scrollTop = sc; }, 20000);
-    window.FM = { store, go, sim, CLOUD };
+    window.FM = { store, go, sim, CLOUD, R };
 }
 init();

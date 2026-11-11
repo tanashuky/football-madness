@@ -20,6 +20,7 @@ function init() {
   installErrorBox(() => { if (sim.isOn()) sim.exit(); render(); });
   bindNav($('aBody')!); bindNav($('aFoot')!);
   $('aBack')!.onclick = () => back();
+  R.guard = () => { const m = $('modal')!; if (!m.hidden) { const b = (m.querySelector('#mNo') || m.querySelector('#mOk')) as HTMLElement | null; if (b) b.click(); return true; } if (sim.isOn()) { sim.requestExit(); return true; } return false; };
   $('aHome')!.onclick = () => { if (store.db.account) home(); else go('login', {}, false); };
   $('aSettings')!.onclick = () => { if (R.screen !== 'settings') go('settings'); };
   $('aProfile')!.onclick = () => { if (R.screen !== 'profile') go('profile'); };
@@ -32,6 +33,6 @@ function init() {
   go(store.db.account ? 'home' : 'login', {}, false);
   // sayaclar: Kariyer ekrani acikken 20 sn'de bir yenilenir (bir alana yazilirken ya da pencere acikken degil)
   setInterval(() => { if (R.screen !== 'career' || sim.isOn() || !$('modal')!.hidden) return; const ae = document.activeElement; if (ae && (ae.tagName === 'SELECT' || ae.tagName === 'INPUT')) return; const sc = $('aBody')!.scrollTop; render(); $('aBody')!.scrollTop = sc; }, 20000);
-  (window as any).FM = { store, go, sim, CLOUD };
+  (window as any).FM = { store, go, sim, CLOUD, R };
 }
 init();

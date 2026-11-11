@@ -155,6 +155,8 @@ export function exit() {
   P.clockRate = 6; P.dt = 0.1; P.playSpeed = 1;
 }
 export const isOn = () => M.on;
+// telefonun geri tusu: panel aciksa kapatir, degilse cikis onayi sorar
+export function requestExit() { if (!M.on) return; if (M.tacOpen) closeTac(); else askExit(); }
 export const replayNow = () => (M.st ? replayOf(M.st) : null);
 function frame(now: number) {
   if (!M.on) return;
