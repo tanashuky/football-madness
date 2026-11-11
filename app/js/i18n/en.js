@@ -90,4 +90,10 @@ export const en = {
     'tip.penaltyDef': 'Penalty: hold the joystick towards the side you dive', 'tip.skip': 'tap: skip celebration',
     'room.mode.team': 'Team play: you control the player on the ball. Left half joystick (outer band sprints), four buttons bottom right; hold = power, drag = direction and curl.', 'room.mode.sim': 'Total simulation: you watch; mentality slider, instructions and substitutions are yours.',
     'match.decide': 'Number {n} cannot continue. Pick the substitute; otherwise the system brings on the best fit.',
+    // --- in-match panel ---
+    'panel.tab.approach': 'Approach', 'panel.tab.instr': 'Instructions', 'panel.tab.shape': 'Shape', 'panel.tab.duty': 'Duties', 'panel.tab.subs': 'Subs',
+    'panel.rights': 'Changes left: {n} · each apply costs 1 and takes 1 min to settle. Slider, game mode and substitutions are free.', 'panel.approach': 'Slider defence ↔ attack: shifts line, press and runs on top of your tactics (1 min to settle).',
+    'panel.applyInstr': 'Apply instructions · {n} left', 'panel.applyShape': 'Apply shape · {n} left', 'panel.applyDuty': 'Apply duties and rules · {n} left', 'panel.applied': 'Applied · 1 min to settle', 'panel.undo': 'Undo draft',
+    'panel.shape': 'The defensive shape sets the formation; the attacking shape is where players go in possession. Drag a player. Rotation: the loop swaps places in attack and returns home when the ball is lost.', 'panel.draft': 'The draft has unapplied changes.',
+    'panel.shapeApplied': 'Shape changed', 'panel.dutyApplied': 'Duties changed', 'panel.subs': 'Pick the player coming off, then the substitute; applied at the next dead ball. {n} left · windows {w}', 'panel.startHalf': 'Start second half',
 };

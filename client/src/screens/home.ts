@@ -67,6 +67,8 @@ register('settings', () => {
       ${sel(t('settings.controls'), 'sKeys', [['arrows', t('controls.arrows')], ['wasd', t('controls.wasd')]], s.keys, 'class="sk" data-k="keys"')}
       ${sel(t('settings.assistP'), 'sAP', [[0, t('assist.0')], [1, t('assist.1')], [2, t('assist.2')]], s.assistP, 'class="sk" data-k="assistP"')}
       ${sel(t('settings.assistS'), 'sAS', [[0, t('assist.0')], [1, t('assist.1')], [2, t('assist.2')]], s.assistS, 'class="sk" data-k="assistS"')}
+      ${sel(t('settings.left'), 'sLeft', onoff, b(s.left), 'class="sk" data-k="left"')}
+      ${sel(t('settings.layer'), 'sLayer', onoff, b(s.layer), 'class="sk" data-k="layer"')}
       ${sel(t('settings.names'), 'sNames', [['auto', t('names.auto')], ['mine', t('names.mine')], ['off', t('settings.off')]], s.names, 'class="sk" data-k="names"')}
     </div>`)}
     ${card(t('settings.access'), html`<div class="grid2">
@@ -84,7 +86,7 @@ register('settings', () => {
     after: (root) => {
       for (const el of root.querySelectorAll<HTMLSelectElement>('.sk')) el.onchange = () => {
         const k = el.dataset.k!; let v: any = el.value;
-        if (['reduceMotion', 'contrast', 'colorblind', 'vibration', 'spSlow'].includes(k)) v = v === '1'; else if (!isNaN(+v) && !['keys', 'lang'].includes(k)) v = +v;
+        if (['reduceMotion', 'contrast', 'colorblind', 'vibration', 'spSlow', 'left', 'layer'].includes(k)) v = v === '1'; else if (!isNaN(+v) && !['keys', 'lang'].includes(k)) v = +v;
         (store.db.settings as any)[k] = v; save(); applySettings();
         if (k === 'lang') setLang(v as Lang);
       };

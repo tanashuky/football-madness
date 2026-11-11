@@ -34,7 +34,7 @@ export function inPossession() { const st = H?.st(); if (!st || !H)
 function geom() {
     const cv = H.cv, st = H.st();
     const Wc = cv.clientWidth, Hc = cv.clientHeight, u = Math.max(0.8, Math.min(1.6, Wc / 852));
-    const r = 30 * u, d = 56 * u, cx = Wc - SA.r - 112 * u, cy = Hc - SA.b - 100 * u;
+    const r = 30 * u, d = 56 * u, cx = H.left() ? SA.l + 112 * u : Wc - SA.r - 112 * u, cy = Hc - SA.b - 100 * u;
     const atk = inPossession();
     const btns = [
         { id: 'through', lab: atk ? t('ctl.through') : ownThird(st, H.side()) ? t('ctl.switchGk') : t('ctl.switch'), x: cx, y: cy - d, r, def: 'switch' },
@@ -183,7 +183,7 @@ export function install(host) {
             capture();
             return;
         }
-        if (x < cv.clientWidth * 0.5 && IN.joyId === null) {
+        if ((H.left() ? x > cv.clientWidth * 0.5 : x < cv.clientWidth * 0.5) && IN.joyId === null) {
             IN.joyId = e.pointerId;
             IN.joyBase = [x, y];
             IN.mx = 0;
@@ -540,7 +540,7 @@ export function drawControls(c, st, side, s, X, Y, pos, Wc, Hc, flood, font, kit
         c.fill();
     }
     else if (now - IN.t0 < 8000) {
-        const hx = (SA.l + 100) * u, hy = Hc - (SA.b + 100) * u;
+        const hx = H.left() ? Wc - (SA.r + 100) * u : (SA.l + 100) * u, hy = Hc - (SA.b + 100) * u;
         c.globalAlpha = 0.12;
         c.fillStyle = '#fff';
         c.beginPath();
@@ -657,7 +657,7 @@ export function drawControls(c, st, side, s, X, Y, pos, Wc, Hc, flood, font, kit
     c.font = `600 ${Math.round(11 * u)}px ${font}`;
     c.fillStyle = 'rgba(255,255,255,.7)';
     const right = (st.half % 2 === 1) === (side === 0);
-    c.fillText(right ? t('ctl.attack') + ' →' : '← ' + t('ctl.attack'), Wc / 2, (SA.t + 62) * u);
+    c.fillText(right ? t('ctl.attack') + ' →' : '← ' + t('ctl.attack'), Wc / 2, (SA.t + 84) * u);
     // ekran disindaki takim arkadaslari
     if (smart) {
         const ins = 14 * u;

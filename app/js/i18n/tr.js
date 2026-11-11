@@ -90,4 +90,10 @@ export const tr = {
     'tip.penaltyDef': 'Penaltı: atlayacağın tarafa joystick ile bas ve tut', 'tip.skip': 'dokun: sevinci atla',
     'room.mode.team': 'Team play: topu olan oyuncuyu sen yönetirsin. Sol yarı joystick (dış bant sprint), sağ altta dört buton; basılı tut = güç, sürükle = yön ve falso.', 'room.mode.sim': 'Total simulation: maçı izlersin; zihniyet kaydırıcı, talimat ve değişiklik sende.',
     'match.decide': '{n} numara oyuna devam edemiyor. Yedeği seç; seçmezsen sistem en uygun yedeği alır.',
+    // --- mac ici panel ---
+    'panel.tab.approach': 'Yaklaşım', 'panel.tab.instr': 'Talimatlar', 'panel.tab.shape': 'Şekil', 'panel.tab.duty': 'Görevler', 'panel.tab.subs': 'Değişiklik',
+    'panel.rights': 'Değişiklik hakkı: {n} · her uygulama 1 hak, 1 dk uyum. Kaydırıcı, oyun modu ve oyuncu değişikliği serbest.', 'panel.approach': 'Kaydırıcı savunma ↔ hücum: hat, pres ve koşuları taktiğin üstüne biner (1 dk uyum).',
+    'panel.applyInstr': 'Talimatları uygula · kalan {n} hak', 'panel.applyShape': 'Şekli uygula · kalan {n} hak', 'panel.applyDuty': 'Görev ve kuralları uygula · kalan {n} hak', 'panel.applied': 'Uygulandı · 1 dk uyum', 'panel.undo': 'Taslağı geri al',
+    'panel.shape': 'Savunma şekli formasyonu belirler; hücum şekli topluyken alınan yer. Oyuncuyu sürükle. Rotasyon: hücumda döngü yer değiştirir, top kaybında eve döner.', 'panel.draft': 'Taslakta uygulanmamış değişiklik var.',
+    'panel.shapeApplied': 'Şekil değişti', 'panel.dutyApplied': 'Görevler değişti', 'panel.subs': 'Çıkacak oyuncuyu seç, sonra yedeği; ilk duran topta uygulanır. Kalan {n} · pencere {w}', 'panel.startHalf': 'İkinci yarıya başla',
 };

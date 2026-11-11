@@ -1,11 +1,12 @@
 // Mac ekrani (Total simulation): motor adim adim kosar, tuval cizer; kullanici kaydirici (zihniyet), talimat ve degisiklik verir.
 // Team play (joystick, vurus jesti) bu surumde demoda kalir; sonraki adimda buraya tasinir. Tekrar izleme de bu ekrandan (watchReplay).
-import { P, applyCmd, autoSubsFor, ballMoving, controlledPlayer, createMatch, pendingSubs, replayOf, setControl, setMentality, setTactic, step, suggestedSub, userSub } from '../engine.js';
+import { P, applyCmd, autoSubsFor, ballMoving, controlledPlayer, createMatch, pendingSubs, replayOf, setControl, setMentality, step, fromFrame } from '../engine.js';
 import { $, html, raw } from '../core/html.js';
 import { t, opts as iopts } from '../core/i18n.js';
-import { confirmBox, toast } from '../core/ui.js';
+import { confirmBox } from '../core/ui.js';
 import { reportError } from '../core/errors.js';
 import * as ctl from './controls.js';
+import { renderPanel, resetPanel } from './panel.js';
 const SIM_DT = 0.1, PLAY_DT = 0.05, SPEED = 1.3; // fizik adimi ve oynama hizi (mac ~ minutes dakika surer)
 const CAMS = { full: { mode: 'full', w: 65 }, length: { mode: 'smart', w: 108 }, near: { mode: 'smart', w: 65 } };
 const PADX = 3.2, PADY = 2.2;
@@ -13,7 +14,7 @@ const M = {
     on: false, st: null, side: 0, user: 1, paused: false, acc: 0, prev: [], last: 0, raf: 0, endAt: 0, ment: 0,
     hooks: null, replay: null,
     names: 'auto', ball: 1.4, reduce: false, evSeen: 0, lastDead: -1, banners: [], trail: [],
-    cam: { mode: 'full', w: 65, cx: 52.5, cy: 34, vx: 0, vy: 0, lx: 0, ly: 0, lt: 0 }, camKey: 'full', lastW: 0, lastH: 0, tacOpen: false, team: false, keys: 'arrows', vib: true, decide: null,
+    cam: { mode: 'full', w: 65, cx: 52.5, cy: 34, vx: 0, vy: 0, lx: 0, ly: 0, lt: 0 }, camKey: 'full', lastW: 0, lastH: 0, tacOpen: false, team: false, keys: 'arrows', vib: true, decide: null, layer: false, left: false, assist: [0, 1, true],
     kit: ['#d2433d', '#3b6fd6'], // cizim renkleri (forma catismasinda deplasman ikinci rengine ya da notr renge gecer)
     kitText: ['#fff', '#fff'], // numara rengi (acik formada koyu)
 };
@@ -33,43 +34,28 @@ const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v
 const snapshot = (st) => st.players.map((p) => [p.x, p.y, 0]).concat([[st.ball.x, st.ball.y, st.ballZ]]);
 const isDead = (st) => st.t < st.restartUntil && !ballMoving(st);
 const clockText = (st) => { const m = Math.floor(st.clock / 60), s = Math.floor(st.clock % 60); return `${m}:${String(s).padStart(2, '0')}`; };
-function hud() {
+function bar() {
     const st = M.st;
     const rep = !!M.replay;
     const ment = iopts('match.ment.' + M.ment);
     return String(html `
   <div class="mTop">
-    <div class="sc"><span class="tm"><i style="background:${M.kit[0]}"></i>${st.teams[0].short}</span><b id="mScore">0 : 0</b><span class="tm b">${st.teams[1].short}<i style="background:${M.kit[1]}"></i></span></div>
+    <div class="sc"><span class="tm"><i style="background:${M.kit[0]}"></i>${st.teams[0].short}</span><b id="mScore">${st.stats[0].goals} : ${st.stats[1].goals}</b><span class="tm b">${st.teams[1].short}<i style="background:${M.kit[1]}"></i></span></div>
     <div class="clk" id="mClock">0:00</div>
-    <div class="right">${M.team ? html `<button class="btn sm" id="mTac">${t('match.tactic')}</button>` : ''}<button class="ib" id="mCam" title="${t('room.camera')}">⌖</button><button class="ib" id="mPause">❚❚</button><button class="ib" id="mExit">✕</button></div>
+    <div class="right">${M.team ? html `<button class="btn sm" id="mTac">${t('match.tactic')}</button>` : ''}<button class="ib" id="mLayer" aria-pressed="${M.layer}" title="${t('settings.layer')}">▦</button><button class="ib" id="mCam" title="${t('room.camera')}">⌖</button><button class="ib" id="mPause">${M.paused ? '▶' : '❚❚'}</button><button class="ib" id="mExit">✕</button></div>
   </div>
+  <div class="mStats" id="mStats" ${M.layer ? '' : raw('hidden')}></div>
   <div class="mTicker" id="mTicker"></div>
   ${M.team ? '' : html `<div class="mBottom">
     ${rep ? html `<span class="tag">${t('report.replay')}</span>` : html `<div class="ment"><button class="ib" id="mentDn">◀</button><span id="mentOut">${ment.label}</span><button class="ib" id="mentUp">▶</button></div><button class="btn sm" id="mTac">${t('match.tactic')}</button>`}
     <div class="seg sm" id="mSpeed"><button data-v="1" aria-pressed="true">1×</button><button data-v="2" aria-pressed="false">2×</button><button data-v="4" aria-pressed="false">4×</button></div>
-  </div>`}
+  </div>`}`);
+}
+function hud() {
+    return String(html `<div id="mBar">${raw(bar())}</div>
   <div class="mOverlay" id="mPauseBox" hidden><div class="box"><h3>${t('match.pause')}</h3><div class="row"><button class="btn prim" id="mResume">${t('match.resume')}</button><button class="btn ghost" id="mQuit">${t('match.exit')}</button></div></div></div>
   <div class="mOverlay" id="mTacBox" hidden></div>
   <div class="rotate" id="mRotate">${t('match.rotate')}</div>`);
-}
-function tacPanel() {
-    const st = M.st, tm = st.teams[M.side];
-    const tac = tm.tactic;
-    const left = 3 - st.tacticChanges[M.side];
-    const keys = ['press', 'line', 'tempo', 'style', 'width'];
-    const subs = pendingSubs(st, M.side);
-    const onPitch = st.players.filter((p) => p.side === M.side && !p.off).sort((a, b) => a.idx - b.idx);
-    const bench = st.bench[M.side].filter((b) => b.off && !b.subbed && !subs.some((s) => s.inn === b.num));
-    const mo = [-2, -1, 0, 1, 2].map((m) => [String(m), iopts('match.ment.' + m).label]);
-    return String(html `<div class="box wide"><h3>${t('match.tactic')} <small>${t('match.changesLeft', { n: left })} · ${st.stats[0].goals} : ${st.stats[1].goals}</small></h3>
-    ${M.decide !== null ? html `<p class="warnp">${t('match.decide', { n: M.decide })}</p>` : ''}
-    <div class="row"><div class="seg sm" id="tMent">${mo.map(([v, l]) => html `<button data-v="${v}" aria-pressed="${+v === M.ment ? 'true' : 'false'}">${l}</button>`)}</div></div>
-    <div class="grid2">${keys.map((k) => { const o = iopts('instr.' + k); return html `<label class="f">${o.label}<select class="tk" data-k="${k}">${o.opts.map((l, i) => html `<option value="${i}" ${i === (tac[k] ?? 1) ? raw('selected') : ''}>${l}</option>`)}</select></label>`; })}</div>
-    <h4>${t('ev.sub')} <small>${t('match.subsLeft', { n: st.subsLeft[M.side] })}</small></h4>
-    ${subs.length ? html `<p class="muted">${subs.map((s) => `${s.out} ↔ ${s.inn}`).join(', ')} · ${t('match.subPending')}</p>` : ''}
-    <div class="grid2"><label class="f">${t('match.subOut')}<select id="subOut"><option value="">–</option>${onPitch.map((p) => html `<option value="${p.num}" ${p.num === M.decide ? raw('selected') : ''}>${p.num} ${p.name} · ${Math.round(p.k)}</option>`)}</select></label>
-    <label class="f">${t('match.subIn')}<select id="subIn"><option value="">–</option>${bench.map((p) => html `<option value="${p.num}" ${M.decide !== null && suggestedSub(st, M.side, M.decide) === p.num ? raw('selected') : ''}>${p.num} ${p.name} · ${p.pos}</option>`)}</select></label></div>
-    <div class="row end"><button class="btn ghost" id="tacClose">${t('btn.close')}</button><button class="btn prim" id="tacApply">${t('btn.apply')}</button></div></div>`);
 }
 function bind() {
     const root = $('match');
@@ -78,6 +64,7 @@ function bind() {
     $('mExit').onclick = () => askExit();
     $('mQuit').onclick = () => askExit();
     $('mCam').onclick = () => { const ks = Object.keys(CAMS); applyCam(ks[(ks.indexOf(M.camKey) + 1) % ks.length]); };
+    $('mLayer').onclick = () => { M.layer = !M.layer; $('mLayer').setAttribute('aria-pressed', String(M.layer)); $('mStats').hidden = !M.layer; };
     const dn = $('mentDn'), up = $('mentUp');
     if (dn)
         dn.onclick = () => setMent(M.ment - 1);
@@ -93,48 +80,34 @@ function bind() {
             x.setAttribute('aria-pressed', String(x === b)); };
     root.onkeydown = null;
 }
-function openTac(decide = null) {
+function openTac(decide = null, half = false) {
     if (!M.st || M.replay || M.st.done)
         return;
     M.decide = decide;
     ctl.resetInput();
+    resetPanel(decide);
     const box = $('mTacBox');
-    box.innerHTML = tacPanel();
     box.hidden = false;
     M.tacOpen = true;
     if (!M.paused)
         togglePause(true);
-    $('tacClose').onclick = () => closeTac();
-    $('tMent').onclick = (e) => { const b = e.target.closest('button'); if (!b)
-        return; setMent(+b.dataset.v); for (const x of $('tMent').children)
-        x.setAttribute('aria-pressed', String(x === b)); };
-    $('tacApply').onclick = () => {
-        const st = M.st;
-        const patch = {};
-        let changed = false;
-        for (const s of box.querySelectorAll('.tk')) {
-            const k = s.dataset.k;
-            const v = +s.value;
-            if ((st.teams[M.side].tactic[k] ?? 1) !== v) {
-                patch[k] = v;
-                changed = true;
-            }
-        }
-        if (changed) {
-            if (!setTactic(st, M.side, patch))
-                toast(t('match.noChanges'), 'err');
-            else
-                banner(t('match.tacticApplied').toUpperCase(), 'info');
-        }
-        const out = +(box.querySelector('#subOut').value || 0), inn = +(box.querySelector('#subIn').value || 0);
-        if (out && inn) {
-            if (!userSub(st, M.side, out, inn))
-                toast(t('match.subFail'), 'err');
-            else
-                toast(t('match.subQueued'), 'ok');
-        }
-        closeTac();
-    };
+    renderPanel(box, { st: M.st, side: M.side, ment: M.ment, decide, half, team: M.team, canMode: true, setMent, setMode, banner: (text, sub) => banner(text, 'rule', sub), close: closeTac });
+}
+// oyun modu mac icinde degisir (haktan dusmez): Team play <-> Total simulation
+function setMode(m) {
+    const st = M.st;
+    if (!st || M.replay)
+        return;
+    M.team = m === 'team';
+    if (M.team)
+        setControl(st, M.side, 'team', M.assist[0], M.assist[1], { autoSwitch: M.assist[2] });
+    else
+        setControl(st, M.side, 'none');
+    document.body.classList.toggle('teamplay', M.team);
+    M.user = 1;
+    ctl.resetInput();
+    $('mBar').innerHTML = bar();
+    bind();
 }
 function closeTac() {
     // sakatlik / kaleci karari: degisiklik secilmediyse sistem en uygun yedegi alir
@@ -240,12 +213,15 @@ function begin(st, o, replay) {
     M.keys = o.keys ?? 'arrows';
     M.vib = o.vibration !== false;
     M.decide = null;
+    M.left = !!o.left;
+    M.assist = [o.assistP ?? 0, o.assistS ?? 1, o.autoSwitch ?? true];
+    M.layer = o.layer ?? o.mode !== 'team';
     if (M.team)
         setControl(st, M.side, 'team', o.assistP ?? 0, o.assistS ?? 1, { autoSwitch: o.autoSwitch ?? true });
     else if (!replay)
         setControl(st, M.side, 'none');
     document.body.classList.toggle('teamplay', M.team);
-    ctl.install({ cv, st: () => M.st, side: () => M.side, active: () => M.on && M.team && !M.paused && !!M.st && !M.st.done, keys: () => M.keys, vibrate: () => M.vib,
+    ctl.install({ cv, st: () => M.st, side: () => M.side, active: () => M.on && M.team && !M.paused && !!M.st && !M.st.done, keys: () => M.keys, vibrate: () => M.vib, left: () => M.left,
         onPause: () => togglePause(), onExit: () => { if (M.tacOpen)
             closeTac();
         else
@@ -331,6 +307,10 @@ function frameBody(now) {
             M.endAt = M.endAt || performance.now();
         }
         $('mScore').textContent = `${st.stats[0].goals} : ${st.stats[1].goals}`;
+        if (M.layer) {
+            const a = st.stats[0], b = st.stats[1], pt = a.possTicks + b.possTicks || 1;
+            $('mStats').textContent = `${t('report.poss')} %${Math.round((100 * a.possTicks) / pt)}–%${Math.round((100 * b.possTicks) / pt)} · ${t('report.shots')} ${a.shots}–${b.shots} · xG ${a.xg.toFixed(2)}–${b.xg.toFixed(2)} · ${t('report.corners')} ${a.corners}–${b.corners}`;
+        }
         $('mClock').textContent = clockText(st) + (st.half === 2 ? ' · 2' : st.half > 2 ? ' · ET' : '');
     }
     if (M.endAt && performance.now() - M.endAt > 2200 && M.hooks) {
@@ -399,9 +379,9 @@ function watchEvents(st) {
             ticker(`${Math.floor(e.t / 60) + 1}' ${t('ev.sub')} ${tm.short} ${e.player2 ?? ''} → ${e.player ?? ''}`);
         else if (e.type === 'half') {
             banner(t('match.half').toUpperCase(), 'info');
-            if (M.team)
+            if (!M.replay)
                 setTimeout(() => { if (M.on && M.st === st)
-                    openTac(); }, 900);
+                    openTac(null, true); }, 900);
         }
         else if (e.type === 'end')
             banner(t('match.end').toUpperCase(), 'info');
@@ -524,6 +504,8 @@ function draw(st, alpha, now) {
     const cur = snapshot(st);
     const cpi = M.team ? st.players.indexOf(controlledPlayer(st, M.side)) : -1;
     const pos = (i) => { const pr = M.prev[i] ?? cur[i]; const a = i === cpi ? 1 + alpha * 0.5 : alpha; return [pr[0] + (cur[i][0] - pr[0]) * a, pr[1] + (cur[i][1] - pr[1]) * a, (pr[2] ?? 0) + ((cur[i][2] ?? 0) - (pr[2] ?? 0)) * alpha]; };
+    if (M.layer && !M.replay)
+        drawLayer(st, s, X, Y, pos);
     const r = Math.max(6, s * 1.0);
     const order = st.players.map((_p, i) => i).sort((a, b) => st.players[b].side - st.players[a].side);
     const dprN = Wc / cv.clientWidth;
@@ -690,8 +672,99 @@ function draw(st, alpha, now) {
     ctx.strokeStyle = '#111';
     ctx.stroke();
     drawBanners(st, now, Wc, Hc, s);
+    if (C.mode === 'smart')
+        drawRadar(st, s, ox, oy, Wc, Hc, pos);
     if (M.team && !st.done)
         ctl.drawControls(ctx, st, M.side, s, X, Y, pos, Wc, Hc, css('--flood'), css('--font-body'), M.kit[M.side], C.mode === 'smart');
+}
+// taktik katmani: hat cizgileri (kendi takim belirgin), ev konumlari (kesikli daire), rotasyon oklari
+function drawLayer(st, s, X, Y, pos) {
+    const side = M.side, ph = st.phase[side];
+    ctx.save();
+    for (const sd of [side, 1 - side]) {
+        ctx.strokeStyle = sd === side ? '#ffffff' : 'rgba(255,255,255,.5)';
+        ctx.globalAlpha = sd === side ? 0.5 : 0.22;
+        ctx.lineWidth = Math.max(1, s * 0.16);
+        for (const g of [['CB', 'FB'], ['DM', 'CM'], ['W', 'ST']]) {
+            const pts = st.players.map((p, i) => [p, i]).filter(([p]) => p.side === sd && !p.off && g.includes(p.pos)).map(([, i]) => pos(i)).sort((a, b) => a[1] - b[1]);
+            if (pts.length < 2)
+                continue;
+            ctx.beginPath();
+            pts.forEach(([x, y], k) => (k ? ctx.lineTo(X(x), Y(y)) : ctx.moveTo(X(x), Y(y))));
+            ctx.stroke();
+        }
+    }
+    ctx.globalAlpha = 0.6;
+    ctx.setLineDash([3, 3]);
+    ctx.lineWidth = Math.max(1, s * 0.14);
+    ctx.strokeStyle = M.kit[side];
+    for (const p of st.players) {
+        if (p.side !== side || p.off || p.pos === 'GK')
+            continue;
+        const hm = st.rotHome.get(p) ?? p;
+        const [hx, hy] = fromFrame(side, hm.ax + (hm.ox - hm.ax) * ph, hm.ay + (hm.oy - hm.ay) * ph);
+        ctx.beginPath();
+        ctx.arc(X(hx), Y(hy), Math.max(5, s * 0.8), 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = 0.25;
+        ctx.beginPath();
+        ctx.moveTo(X(hx), Y(hy));
+        ctx.lineTo(X(p.x), Y(p.y));
+        ctx.stroke();
+        ctx.globalAlpha = 0.6;
+    }
+    ctx.setLineDash([]);
+    for (const rt of st.rot[side]) {
+        const n = rt.players.length;
+        ctx.strokeStyle = css('--warn');
+        ctx.fillStyle = css('--warn');
+        ctx.globalAlpha = rt.shift ? 0.9 : 0.35;
+        ctx.lineWidth = Math.max(1.5, s * 0.2);
+        for (let i = 0; i < n; i++) {
+            const a = rt.players[i], b = rt.players[(i + 1) % n];
+            if (a.off || b.off)
+                continue;
+            const ax = X(a.x), ay = Y(a.y), bx = X(b.x), by = Y(b.y), dx = bx - ax, dy = by - ay, dd = Math.hypot(dx, dy) || 1, rr = Math.max(6, s) * 1.3;
+            const ex = bx - (dx / dd) * rr, ey = by - (dy / dd) * rr, hl = Math.max(5, s * 0.7);
+            ctx.beginPath();
+            ctx.moveTo(ax + (dx / dd) * rr, ay + (dy / dd) * rr);
+            ctx.lineTo(ex, ey);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(ex, ey);
+            ctx.lineTo(ex - (dx / dd) * hl - (dy / dd) * hl * 0.5, ey - (dy / dd) * hl + (dx / dd) * hl * 0.5);
+            ctx.lineTo(ex - (dx / dd) * hl + (dy / dd) * hl * 0.5, ey - (dy / dd) * hl - (dx / dd) * hl * 0.5);
+            ctx.closePath();
+            ctx.fill();
+        }
+    }
+    ctx.restore();
+}
+// radar (akilli kamerada): sag ustte, dugmelerin altinda kucuk saha, gorunen alan cercevesi
+function drawRadar(st, s, ox, oy, Wc, Hc, pos) {
+    const u = Math.max(0.8, Math.min(1.6, cv.clientWidth / 852)) * (Wc / cv.clientWidth);
+    const rw = 104 * u, rh = (rw * 68) / 105, rx = Wc - rw - 12 * u, ry = 58 * u;
+    ctx.save();
+    ctx.fillStyle = 'rgba(10,12,16,.55)';
+    ctx.fillRect(rx - 3 * u, ry - 3 * u, rw + 6 * u, rh + 6 * u);
+    ctx.fillStyle = 'rgba(60,120,60,.9)';
+    ctx.fillRect(rx, ry, rw, rh);
+    ctx.strokeStyle = 'rgba(255,255,255,.5)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(rx, ry, rw, rh);
+    ctx.beginPath();
+    ctx.moveTo(rx + rw / 2, ry);
+    ctx.lineTo(rx + rw / 2, ry + rh);
+    ctx.stroke();
+    ctx.strokeStyle = '#fff';
+    ctx.strokeRect(rx + (Math.max(0, ox) / 105) * rw, ry + (Math.max(0, oy) / 68) * rh, (Math.min(105, M.cam.w) / 105) * rw, (Math.min(68, Hc / s) / 68) * rh);
+    st.players.forEach((p, i) => { if (p.off)
+        return; const [x, y] = pos(i); ctx.fillStyle = M.kit[p.side]; ctx.beginPath(); ctx.arc(rx + (x / 105) * rw, ry + (y / 68) * rh, 2.2 * u, 0, Math.PI * 2); ctx.fill(); });
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(rx + (st.ball.x / 105) * rw, ry + (st.ball.y / 68) * rh, 2 * u, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
 }
 function drawBanners(st, now, Wc, Hc, s) {
     for (const b of M.banners) {

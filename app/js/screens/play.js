@@ -60,7 +60,7 @@ export function startMatchFlow(c, me, opp, home, instant) {
         return;
     }
     try {
-        sim.startMatch({ teams, side, minutes, seed, mode: s.mode, keys: s.keys, assistP: s.assistP, assistS: s.assistS, autoSwitch: s.autoSwitch, vibration: s.vibration, cam: s.cam, names: s.names, ball: s.ball, reduceMotion: s.reduceMotion,
+        sim.startMatch({ teams, side, minutes, seed, mode: s.mode, keys: s.keys, assistP: s.assistP, assistS: s.assistS, autoSwitch: s.autoSwitch, vibration: s.vibration, layer: s.layer || s.mode !== 'team', left: s.left, cam: s.cam, names: s.names, ball: s.ball, reduceMotion: s.reduceMotion,
             onEnd: (st) => { saveReplay(st); finish(st, false); },
             onExit: (st) => { if (st && !st.done) {
                 setControl(st, side, 'none');

@@ -7,7 +7,7 @@ type Btn = { id: string; lab: string; x: number; y: number; r: number; def: stri
 type Act = string | { act: string; power: number; ax: number; ay: number; curve: number; tap: boolean };
 export interface Host {
   cv: HTMLCanvasElement; st: () => MatchState | null; side: () => 0 | 1; active: () => boolean; // active: Team play, mac acik, duraklatilmamis
-  keys: () => 'arrows' | 'wasd'; vibrate: () => boolean;
+  keys: () => 'arrows' | 'wasd'; vibrate: () => boolean; left: () => boolean;
   onPause: () => void; onExit: () => void; onTac: () => void; onMent: (d: number) => void; onCam: () => void;
 }
 let H: Host | null = null;
@@ -31,7 +31,7 @@ function ownThird(st: MatchState, side: 0 | 1) { const gx = (st.half % 2 === 0) 
 export function inPossession(): boolean { const st = H?.st(); if (!st || !H) return false; const side = H.side(); return !!((st.owner && st.owner.side === side) || (!st.owner && st.ball.kicker && st.ball.kicker.side === side && (st.ball.kind === 'pass' || st.ball.kind === 'through' || st.ball.kind === 'cross'))); }
 function geom() {
   const cv = H!.cv, st = H!.st()!; const Wc = cv.clientWidth, Hc = cv.clientHeight, u = Math.max(0.8, Math.min(1.6, Wc / 852));
-  const r = 30 * u, d = 56 * u, cx = Wc - SA.r - 112 * u, cy = Hc - SA.b - 100 * u; const atk = inPossession();
+  const r = 30 * u, d = 56 * u, cx = H!.left() ? SA.l + 112 * u : Wc - SA.r - 112 * u, cy = Hc - SA.b - 100 * u; const atk = inPossession();
   const btns: Btn[] = [
     { id: 'through', lab: atk ? t('ctl.through') : ownThird(st, H!.side()) ? t('ctl.switchGk') : t('ctl.switch'), x: cx, y: cy - d, r, def: 'switch' },
     { id: 'shoot', lab: atk ? t('ctl.shoot') : t('ctl.slide'), x: cx + d, y: cy, r, def: 'slide' },
@@ -95,7 +95,7 @@ export function install(host: Host) {
     if (st.celebrate) IN.acts.push('skip');
     const b = hitBtn(x, y);
     if (b) { if (IN.kick) return; IN.ptrBtn.set(e.pointerId, b); pressBtn(b, true, e.pointerId, x, y); capture(); return; }
-    if (x < cv.clientWidth * 0.5 && IN.joyId === null) { IN.joyId = e.pointerId; IN.joyBase = [x, y]; IN.mx = 0; IN.my = 0; IN.joyK = 0; capture(); }
+    if ((H!.left() ? x > cv.clientWidth * 0.5 : x < cv.clientWidth * 0.5) && IN.joyId === null) { IN.joyId = e.pointerId; IN.joyBase = [x, y]; IN.mx = 0; IN.my = 0; IN.joyK = 0; capture(); }
   });
   cv.addEventListener('pointermove', (e) => {
     if (!on()) return; const [x, y] = xy(e);
@@ -194,7 +194,7 @@ export function drawControls(c: CanvasRenderingContext2D, st: MatchState, side: 
     const m = Math.hypot(IN.mx, IN.my) || 1, reach = Math.min(JOY_MAX, IN.joyK) * g.joyR, kx = jx + (IN.mx / m) * reach, ky = jy + (IN.my / m) * reach;
     c.globalAlpha = sprint ? 0.92 : 0.7; c.fillStyle = sprint ? flood : '#fff'; c.beginPath(); c.arc(kx * dpr, ky * dpr, (sprint ? 28 : 22) * u, 0, Math.PI * 2); c.fill();
   } else if (now - IN.t0 < 8000) {
-    const hx = (SA.l + 100) * u, hy = Hc - (SA.b + 100) * u;
+    const hx = H!.left() ? Wc - (SA.r + 100) * u : (SA.l + 100) * u, hy = Hc - (SA.b + 100) * u;
     c.globalAlpha = 0.12; c.fillStyle = '#fff'; c.beginPath(); c.arc(hx, hy, jr, 0, Math.PI * 2); c.fill();
     c.globalAlpha = 0.5; c.font = `600 ${Math.round(11 * u)}px ${font}`; c.fillText('joystick', hx, hy);
   }
@@ -236,7 +236,7 @@ export function drawControls(c: CanvasRenderingContext2D, st: MatchState, side: 
   if (tip) { c.font = `600 ${Math.round(13 * u)}px ${font}`; const tw = c.measureText(tip).width + 24 * u; c.fillStyle = 'rgba(10,12,16,.75)'; c.fillRect(Wc / 2 - tw / 2, Hc - (SA.b + 44) * u, tw, 30 * u); c.fillStyle = '#fff'; c.fillText(tip, Wc / 2, Hc - (SA.b + 29) * u); }
   // hucum yonu
   c.font = `600 ${Math.round(11 * u)}px ${font}`; c.fillStyle = 'rgba(255,255,255,.7)';
-  const right = (st.half % 2 === 1) === (side === 0); c.fillText(right ? t('ctl.attack') + ' →' : '← ' + t('ctl.attack'), Wc / 2, (SA.t + 62) * u);
+  const right = (st.half % 2 === 1) === (side === 0); c.fillText(right ? t('ctl.attack') + ' →' : '← ' + t('ctl.attack'), Wc / 2, (SA.t + 84) * u);
   // ekran disindaki takim arkadaslari
   if (smart) {
     const ins = 14 * u;

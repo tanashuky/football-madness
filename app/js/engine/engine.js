@@ -5789,4 +5789,4 @@ export function makeTeam(name, short, gg, opts = {}, names = NAMES_A, color = '#
         ...opts,
     };
 }
-export { NAMES_A, NAMES_B, FORMATIONS, FORM_POS, FORM_NUM };
+export { NAMES_A, NAMES_B, FORMATIONS, FORM_POS, FORM_NUM, fromFrame };

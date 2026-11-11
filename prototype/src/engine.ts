@@ -4879,4 +4879,4 @@ export function makeTeam(name: string, short: string, gg: number, opts: Partial<
   } as TeamIn;
 }
 
-export { NAMES_A, NAMES_B, FORMATIONS, FORM_POS, FORM_NUM };
+export { NAMES_A, NAMES_B, FORMATIONS, FORM_POS, FORM_NUM, fromFrame };
