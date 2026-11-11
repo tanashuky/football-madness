@@ -109,7 +109,7 @@ export function userTeamIn(club, roster, tt, m, benchCap = 0) {
     const mk = (p, pos) => ({ num: p.num, name: p.name, pos, natPos: p.natPos, gg: Math.round(p.gg), age: p.age, traits: p.traits, fatigue: Math.round(p.fatigue), id: p.id });
     const lineup = tt.lineup;
     t.players = lineup.map((id, i) => mk(byId[id], slots[i]));
-    t.bench = roster.filter((p) => !lineup.includes(p.id)).sort((a, b) => (a.natPos === 'GK' ? -1 : b.natPos === 'GK' ? 1 : 0)).map((p) => mk(p, p.natPos));
+    t.bench = roster.filter((p) => !lineup.includes(p.id) && !(benchCap && p.inj)).sort((a, b) => (a.natPos === 'GK' ? -1 : b.natPos === 'GK' ? 1 : 0)).map((p) => mk(p, p.natPos));
     const duties = {};
     for (const [id, d] of Object.entries(tt.duties || {})) {
         const p = byId[id];

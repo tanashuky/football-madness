@@ -3,7 +3,8 @@
 import { P, NAMES_A, NAMES_B, simulate } from '../engine.js';
 import { newRoster, newTeamSetup } from './club.js';
 import { TEMPLATES, botTeamIn } from './templates.js';
-import { STADIUM_CAP, afterWeek, refreshPool, seasonTurn } from './manage.js';
+import { STADIUM_CAP, afterWeek, fixLineup, occupancy, paySponsor, refreshPool, seasonPrize, seasonTurn } from './manage.js';
+import { newCup } from './cup.js';
 export { STADIUM_CAP };
 export const CAREER_K = { income: 1.25, cost: 0.8, time: 0.6 };
 // gelir: mac primi (galibiyet 500 / beraberlik 200 / maglubiyet 100 FM) ve ic sahada bilet (seyirci x 0,1 FM; seyirci = kapasite x doluluk)
@@ -40,8 +41,10 @@ export function newCareer(club, o, seed) {
         fm: Math.round(2000 * CAREER_K.income), ledger: [], facilities: { stadium: { level: 1 }, academy: { level: 0 } }, tm: 52,
         stats: { played: 0, won: 0, drawn: 0, lost: 0, seasons: 1 }, trophies: [], history: [],
         metrics: { U: 55, T: 55, F: 55, M: 70 }, train: { day: '', count: 0, job: null, last: null }, scout: { job: null, found: null }, pool: [], nextId: 1, lastTick: Date.now(),
+        staff: { tactic: 0, physical: 0, psych: 0, physio: 0, fans: 0 }, scoutFree: 0, news: [], cup: null,
     };
     refreshPool(c);
+    paySponsor(c);
     return c;
 }
 export function order(l) { return l.teams.map((_, i) => i).sort((a, b) => l.table[b].pts - l.table[a].pts || (l.table[b].gf - l.table[b].ga) - (l.table[a].gf - l.table[a].ga) || l.table[b].gf - l.table[a].gf); }
@@ -101,22 +104,23 @@ export function applyMyResult(c, oppIdx, home, goals) {
         c.stats.lost++;
     let fm = (result === 'win' ? 500 : result === 'draw' ? 200 : 100) * CAREER_K.income;
     if (home)
-        fm += STADIUM_CAP[c.facilities.stadium.level] * (c.tm / 100) * 0.1 * CAREER_K.income;
+        fm += STADIUM_CAP[c.facilities.stadium.level] * occupancy(c) * 0.1 * CAREER_K.income;
     fm = Math.round(fm);
     addLedger(c, `${l.season}.${l.week + 1} ${home ? 'H' : 'A'} ${gf}-${ga}`, fm);
     // taraftar morali: ic saha G +3 / B -1 / M -4, deplasman +2 / 0 / -2; moral: G +2 / M -2
-    c.tm = Math.max(0, Math.min(100, c.tm + (home ? (result === 'win' ? 3 : result === 'draw' ? -1 : -4) : result === 'win' ? 2 : result === 'draw' ? 0 : -2)));
+    c.tm = Math.max(0, Math.min(100, c.tm + (home ? (result === 'win' ? 3 : result === 'draw' ? -1 : c.staff.fans >= 3 ? -3 : -4) : result === 'win' ? 2 : result === 'draw' ? 0 : -2)));
     c.metrics.M = Math.max(30, Math.min(95, c.metrics.M + (result === 'win' ? 2 : result === 'loss' ? -2 : 0)));
     afterWeek(c, c.team.lineup || []);
     l.week++;
     return { fm, rank: rank(l), result };
 }
-export function skipWeek(c) { simOthers(c, false); afterWeek(c, []); c.league.week++; }
+export function skipWeek(c) { simOthers(c, false); afterWeek(c, [], false); c.league.week++; }
 // sezon sonu: kupa ve tarihce; ayni lig yeni sezon (fikstur ayni siraya, tablo sifir)
 export function closeSeason(c) {
     const l = c.league;
     const r = rank(l);
     const me = l.table[0];
+    const pz = seasonPrize(c, r, l.teams.length);
     c.history.push({ season: l.season, rank: r, w: me.w, d: me.d, l: me.l });
     if (r === 1)
         c.trophies.push({ season: l.season, kind: 'league', name: 'Kariyer Ligi' });
@@ -125,5 +129,9 @@ export function closeSeason(c) {
     l.results = [];
     l.table = emptyTable(l.teams.length);
     c.stats.seasons = l.season;
-    return seasonTurn(c);
+    const youths = seasonTurn(c);
+    fixLineup(c);
+    paySponsor(c);
+    c.cup = newCup(c, r); // kupa 2. sezondan itibaren, onceki sezon sirasina gore
+    return { youths, prize: pz.fm, scouts: pz.scouts, rank: r };
 }

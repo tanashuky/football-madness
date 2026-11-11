@@ -67,6 +67,10 @@ function normalizeCareer(c) {
     c.pool = Array.isArray(c.pool) ? c.pool : [];
     c.nextId = c.nextId || 1;
     c.lastTick = c.lastTick || 0;
+    c.staff = { tactic: 0, physical: 0, psych: 0, physio: 0, fans: 0, ...(c.staff || {}) };
+    c.scoutFree = c.scoutFree || 0;
+    c.news = Array.isArray(c.news) ? c.news : [];
+    c.cup = c.cup || null;
     c.tm = Number.isFinite(c.tm) ? c.tm : 55;
     c.stats = { played: 0, won: 0, drawn: 0, lost: 0, seasons: 1, ...(c.stats || {}) };
     c.trophies = Array.isArray(c.trophies) ? c.trophies : [];

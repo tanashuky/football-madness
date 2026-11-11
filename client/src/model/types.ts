@@ -9,6 +9,7 @@ export interface Club {
 }
 export interface RosterPlayer {
   id: string; num: number; name: string; natPos: Pos; gg: number; age: number; traits: string[]; fatigue: number;
+  inj?: number; // sakatlik: kac mac oynayamaz
 }
 // Takimin taktik kurulumu (kadro ekrani + taktik tahtasi): kimlikler futbolcu id'sidir, motor numarayla calisir (userTeamIn cevirir)
 export interface TeamSetup {
@@ -38,7 +39,13 @@ export interface Career {
   scout: { job: null | { tier: number; pos: string; until: number }; found: RosterPlayer | null };
   pool: { p: RosterPlayer; price: number; haggled: boolean }[]; // transfer havuzu (sezon basi yenilenir)
   nextId: number; lastTick: number;
+  staff: Record<StaffKey, number>; // ekip seviyeleri 0-5
+  scoutFree: number; // ucretsiz standart scout hakki (sezon sonu odulu)
+  news: string[]; // transfer haberleri (son 6)
+  cup: CupState | null;
 }
+export type StaffKey = 'tactic' | 'physical' | 'psych' | 'physio' | 'fans';
+export interface CupState { kind: 'star' | 'cont'; season: number; round: number; alive: boolean; done: boolean; opps: LeagueTeam[]; home: boolean[]; log: { round: number; opp: string; gf: number; ga: number; pens: [number, number] | null; win: boolean }[] }
 export interface MatchModeState { elo: number; played: number; last: string | null }
 export interface RewardEntry { t: number; src: 'career' | 'online'; kind: string; pp: number; boost?: number }
 export interface Rewards { pp: number; boosts: number; entries: RewardEntry[]; day: { d: string; pp: number; boosts: number }; season: { key: string; pp: number } }

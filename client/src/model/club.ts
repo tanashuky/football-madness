@@ -72,7 +72,7 @@ export function userTeamIn(club: Club, roster: RosterPlayer[], tt: TeamSetup, m?
   const mk = (p: RosterPlayer, pos: Pos): AppPlayer => ({ num: p.num, name: p.name, pos, natPos: p.natPos, gg: Math.round(p.gg), age: p.age, traits: p.traits, fatigue: Math.round(p.fatigue), id: p.id });
   const lineup = tt.lineup!;
   t.players = lineup.map((id, i) => mk(byId[id], slots[i]));
-  t.bench = roster.filter((p) => !lineup.includes(p.id)).sort((a, b) => (a.natPos === 'GK' ? -1 : b.natPos === 'GK' ? 1 : 0)).map((p) => mk(p, p.natPos));
+  t.bench = roster.filter((p) => !lineup.includes(p.id) && !(benchCap && p.inj)).sort((a, b) => (a.natPos === 'GK' ? -1 : b.natPos === 'GK' ? 1 : 0)).map((p) => mk(p, p.natPos));
   const duties: Record<number, any> = {}; for (const [id, d] of Object.entries(tt.duties || {})) { const p = byId[id]; if (p) duties[p.num] = d; }
   const sh = userShapes(tt);
   const rotations = (tt.rotations || []).map((c) => c.filter((id) => lineup.includes(id) && byId[id]).map((id) => byId[id].num)).filter((c) => c.length >= 2);

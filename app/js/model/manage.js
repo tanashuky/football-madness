@@ -41,7 +41,64 @@ export function startUpgrade(c, f, now = Date.now()) {
 }
 export const academyUpkeep = (c) => (c.facilities.academy.level > 0 ? cost(ACADEMY[c.facilities.academy.level].upkeep) : 0);
 // taraftar morali: notr = 50 + 2 x stadyum seviyesi; her hafta farkin %10'u kadar yaklasir
-export const tmNeutral = (c) => 50 + 2 * c.facilities.stadium.level;
+export const tmNeutral = (c) => 50 + 2 * c.facilities.stadium.level + 2 * c.staff.fans;
+// doluluk = min(1; 0,35 + 0,65 x TM/100)
+export const occupancy = (c) => Math.min(1, 0.35 + (0.65 * c.tm) / 100);
+// ---------- ekipler: seviye 0-5, haftalik maas, ise alma ucreti 2 haftalik maas ----------
+export const STAFF = ['tactic', 'physical', 'psych', 'physio', 'fans'];
+const STAFF_WAGE = [0, 200, 400, 700, 1100, 1600];
+export const staffWage = (lv) => cost(STAFF_WAGE[lv] || 0);
+export const staffWages = (c) => STAFF.reduce((a, k) => a + staffWage(c.staff[k]), 0);
+export function setStaff(c, k, lv) {
+    lv = clamp(Math.round(lv), 0, 5);
+    const cur = c.staff[k];
+    if (lv === cur)
+        return 'no';
+    if (lv > cur) {
+        const fee = 2 * staffWage(lv);
+        if (c.fm < fee)
+            return 'fm';
+        addLedger(c, `staff:${k}:${lv}`, -fee);
+    }
+    c.staff[k] = lv;
+    return 'ok';
+}
+// tesislesme: 100 x (0,30 x stadyum/10 + 0,40 x altyapi/5 + 0,30 x ekip ortalamasi/5)
+export const ts = (c) => Math.round(100 * ((0.3 * c.facilities.stadium.level) / 10 + (0.4 * c.facilities.academy.level) / 5 + (0.3 * (STAFF.reduce((a, k) => a + c.staff[k], 0) / 5)) / 5));
+// sponsor (1. kademe 5.000 FM/sezon, + TS/5 yuzde) ve sezon sonu odulu (sampiyon 8.000; 2. %75, 3. %60, ortalar %40 -> %20, son %10)
+export function paySponsor(c) { addLedger(c, 'sponsor', Math.round(5000 * CAREER_K.income * (1 + ts(c) / 500))); }
+export function seasonPrize(c, rank, n) {
+    const pct = rank === 1 ? 100 : rank === 2 ? 75 : rank === 3 ? 60 : rank === n ? 10 : n <= 5 ? 40 : 40 - (20 * (rank - 4)) / Math.max(1, n - 5);
+    const fm = Math.round((8000 * CAREER_K.income * pct) / 100);
+    addLedger(c, `prize:${rank}`, fm);
+    const scouts = rank <= 3 ? 3 : 2;
+    c.scoutFree += scouts;
+    if (rank === 1)
+        c.metrics.M = clamp(c.metrics.M + 8, 0, 100);
+    else if (rank === n)
+        c.metrics.M = clamp(c.metrics.M - 8, 0, 100);
+    return { fm, scouts };
+}
+// sakatlik suresi: %70 hafif (1-3 mac), %25 orta (4-8), %5 agir (9-20); fizyoterapist 3+ sureyi %30 kisaltir
+export function injure(c, p) {
+    const r = Math.random();
+    let n = r < 0.7 ? rint(1, 3) : r < 0.95 ? rint(4, 8) : rint(9, 20);
+    if (c.staff.physio >= 3)
+        n = Math.max(1, Math.round(n * 0.7));
+    p.inj = n;
+    fixLineup(c);
+    return n;
+}
+// sakat futbolcu ilk 11'de kalamaz: ayni mevkiden (yoksa en guclu) saglam yedekle degisir
+export function fixLineup(c) {
+    const lu = c.team.lineup;
+    if (!lu)
+        return;
+    const by = Object.fromEntries(c.roster.map((p) => [p.id, p]));
+    lu.forEach((id, i) => { const p = by[id]; if (!p || !p.inj)
+        return; const free = c.roster.filter((q) => !q.inj && !lu.includes(q.id)); const pick = free.filter((q) => q.natPos === p.natPos).sort((a, b) => b.gg - a.gg)[0] || free.filter((q) => (p.natPos === 'GK') === (q.natPos === 'GK')).sort((a, b) => b.gg - a.gg)[0] || free.sort((a, b) => b.gg - a.gg)[0]; if (pick)
+        lu[i] = pick.id; });
+}
 export const INTENSITY = [{ hours: 2, gain: 1.0, fat: 5 }, { hours: 4, gain: 2.0, fat: 10 }, { hours: 6, gain: 3.5, fat: 18 }];
 export const SESSIONS_PER_DAY = 2;
 // azalan getiri: 40'ta x0,8; 70'te x0,5; 90'da x0,3 (arasi dogrusal)
@@ -75,6 +132,7 @@ function finishTraining(c) {
     c.train.job = null;
     const I = INTENSITY[j.level] || INTENSITY[0];
     const m = c.metrics;
+    const kT = 1 + 0.1 * c.staff.tactic, kF = 1 + 0.1 * c.staff.physical;
     const addFat = (f, only) => { for (const p of c.roster)
         if (!only || only.includes(p.id))
             p.fatigue = clamp(p.fatigue + f, 0, 100); };
@@ -91,7 +149,7 @@ function finishTraining(c) {
         text = `U +${g.toFixed(1)}`;
     }
     else if (j.kind === 'tactic') {
-        const g = I.gain * gainMult(m.T);
+        const g = I.gain * kT * gainMult(m.T);
         m.T = clamp(m.T + g, 0, 100);
         if (j.level > 0)
             m.F = clamp(m.F - 0.5, 0, 100);
@@ -99,7 +157,7 @@ function finishTraining(c) {
         text = `T +${g.toFixed(1)}`;
     }
     else if (j.kind === 'physical') {
-        const g = I.gain * gainMult(m.F);
+        const g = I.gain * kF * gainMult(m.F);
         m.F = clamp(m.F + g, 0, 100);
         if (j.level > 0)
             m.T = clamp(m.T - 0.3, 0, 100);
@@ -115,8 +173,16 @@ function finishTraining(c) {
         addFat(I.fat / 3);
         text = `GG +${g}`;
     }
-    if (j.kind !== 'rest' && j.level === 2)
+    if (j.kind !== 'rest' && j.level === 2) {
         m.M = clamp(m.M - 1, 0, 100);
+        // agir antrenman: yorgunlugu 80'i gecen bir futbolcu icin %5 sakatlik riski (fizyoterapist 5: %3)
+        const tired = c.roster.filter((p) => !p.inj && p.fatigue > 80);
+        if (tired.length && Math.random() < (c.staff.physio >= 5 ? 0.03 : 0.05)) {
+            const p = tired[rint(0, tired.length - 1)];
+            injure(c, p);
+            text += ` · ✚ ${p.name}`;
+        }
+    }
     c.train.last = { kind: j.kind, text, t: j.until };
 }
 // ---------- futbolcu uretimi, piyasa degeri ----------
@@ -151,9 +217,13 @@ export const scoutCost = (i) => cost(SCOUTS[i].cost);
 export function startScout(c, i, pos, now = Date.now()) {
     if (c.scout.job || c.scout.found)
         return 'busy';
-    if (c.fm < scoutCost(i))
-        return 'fm';
-    addLedger(c, `scout:${SCOUTS[i].id}`, -scoutCost(i));
+    if (i === 0 && c.scoutFree > 0)
+        c.scoutFree--;
+    else {
+        if (c.fm < scoutCost(i))
+            return 'fm';
+        addLedger(c, `scout:${SCOUTS[i].id}`, -scoutCost(i));
+    }
     c.scout.job = { tier: i, pos, until: now + dur(SCOUT_HOURS * HOUR) };
     return 'ok';
 }
@@ -228,7 +298,7 @@ export function tick(c, now = Date.now()) {
     // pasif toparlanma: saatte -0,25 yorgunluk
     const h = ((now - (c.lastTick || now)) / HOUR) * scale();
     if (h > 0.05) {
-        const d = 0.25 * Math.min(h, 24 * 14);
+        const d = 0.25 * (1 + 0.1 * c.staff.physio) * Math.min(h, 24 * 14);
         for (const p of c.roster)
             p.fatigue = clamp(p.fatigue - d, 0, 100);
         c.lastTick = now;
@@ -263,14 +333,53 @@ export function useBoost(c, r, what) {
     return true;
 }
 // mac sonrasi: oynayanlara yorgunluk, haftalik altyapi bakimi, taraftar morali notre yaklasir
-export function afterWeek(c, lineup) {
-    // Kariyer kurali (oneri): mac haftasi gecince herkes -8 toparlanir (oynayan net +1); gercek zamanli pasif toparlanma ayrica isler
-    for (const p of c.roster)
-        p.fatigue = clamp(p.fatigue + (lineup.includes(p.id) ? 9 : 0) - 8, 0, 100);
+export function afterWeek(c, lineup, played = true, weekly = true) {
+    // Kariyer kurali (oneri): mac haftasi gecince herkes -8 toparlanir (oynayan net +1; fiziksel ekip 5: mac yorgunlugu -%10)
+    const mf = 9 * (c.staff.physical >= 5 ? 0.9 : 1);
+    for (const p of c.roster) {
+        p.fatigue = clamp(p.fatigue + (lineup.includes(p.id) ? mf : 0) - 8, 0, 100);
+        if (p.inj && played) {
+            p.inj--;
+            if (p.inj <= 0)
+                delete p.inj;
+        }
+    }
+    if (!weekly)
+        return; // kupa maci: yalniz yorgunluk ve sakatlik sayaci
     const up = academyUpkeep(c);
     if (up)
         addLedger(c, 'upkeep:academy', -up);
+    const w = staffWages(c);
+    if (w)
+        addLedger(c, 'wages', -w);
     c.tm = clamp(c.tm + (tmNeutral(c) - c.tm) * 0.1, 0, 100);
+    // moral 70'in altindaysa notre doner: haftada farkin %15'i (+%3 x psikolojik destek seviyesi)
+    if (c.metrics.M < 70)
+        c.metrics.M = clamp(c.metrics.M + (70 - c.metrics.M) * (0.15 + 0.03 * c.staff.psych), 0, 100);
+    botTransfers(c);
+}
+// bot kulupler: haftada en fazla 1 alim 1 satis (havuzdan bir futbolcu gider, yerine yenisi gelir)
+function botTransfers(c) {
+    const bots = c.league.teams.slice(1);
+    if (!bots.length || !c.pool.length)
+        return;
+    if (Math.random() < 0.6) {
+        const i = rint(0, c.pool.length - 1);
+        const it = c.pool[i];
+        const b = bots[rint(0, bots.length - 1)];
+        c.pool.splice(i, 1);
+        if (it.p.gg > b.gg)
+            b.gg = Math.min(90, b.gg + 0.3);
+        c.news.unshift(`buy|${b.short}|${it.p.name}|${Math.round(it.p.gg)}`);
+    }
+    if (Math.random() < 0.6 && c.pool.length < 14) {
+        const b = bots[rint(0, bots.length - 1)];
+        const p = mkPlayer(c, [b.gg - 8, b.gg + 6], [19, 33], 0.35);
+        c.pool.push({ p, price: marketValue(p), haggled: false });
+        c.news.unshift(`sell|${b.short}|${p.name}|${Math.round(p.gg)}`);
+    }
+    if (c.news.length > 6)
+        c.news.length = 6;
 }
 // sezon sonu: yas +1, gelisim/gerileme, altyapi gencleri, havuz yenilenir
 export function seasonTurn(c) {

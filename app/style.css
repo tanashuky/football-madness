@@ -154,3 +154,6 @@ body.teamplay .mTicker { display: none; }
 .li.static { cursor: default; } .li .acts { margin-left: auto; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; } .li .acts b { font-family: var(--font-display); font-size: 1.1em; }
 .fac { gap: 4px; } .fac .row { margin-top: 4px; }
 @media (max-width: 560px) { .li.static { flex-wrap: wrap; } .li.static .acts { width: 100%; justify-content: flex-end; } }
+.row.staff { justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--line); margin: 0; flex-wrap: nowrap; } .row.staff .who { flex: 1; min-width: 0; }
+.row.staff select { background: #0b100e; color: var(--chalk); border: 1px solid var(--line); border-radius: 8px; padding: 7px 8px; max-width: 46%; }
+.card.score b small { font-size: .4em; color: var(--muted); }

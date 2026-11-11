@@ -18,9 +18,10 @@ register('squad', (c) => {
     const tt = k.team;
     const team = userTeamIn(club, k.roster, tt);
     const sel = c.sel ?? null;
+    const injOf = (id) => k.roster.find((p) => p.id === id)?.inj || 0;
     const all = [...team.players.map((p, i) => ({ ...p, xi: true, slot: i })), ...team.bench.map((p) => ({ ...p, xi: false, slot: -1 }))];
     const p = sel !== null ? all.find((q) => q.id === sel) : null;
-    const row = (q) => html `<button class="li ${q.id === sel ? 'sel' : ''}" data-go="squad" data-push="0" data-ctx='${JSON.stringify(c.swap ? { ...c, target: q.id } : { sel: q.id })}'><div class="num">${q.num}</div><div><div class="nm">${q.name}</div><div class="sub">${q.xi ? posName(q.pos) : posName(q.natPos) + ' · ' + t('squad.bench')} · ${q.age} ${t('squad.age')}${(q.traits || []).map((tr) => ` · ${tr}`).join('')}${q.xi && q.natPos !== q.pos ? html ` ${tag(posName(q.natPos), 'o')}` : ''}</div></div><div class="gg">${q.gg}</div></button>`;
+    const row = (q) => html `<button class="li ${q.id === sel ? 'sel' : ''}" data-go="squad" data-push="0" data-ctx='${JSON.stringify(c.swap ? { ...c, target: q.id } : { sel: q.id })}'><div class="num">${q.num}</div><div><div class="nm">${q.name}</div><div class="sub">${q.xi ? posName(q.pos) : posName(q.natPos) + ' · ' + t('squad.bench')} · ${q.age} ${t('squad.age')}${(q.traits || []).map((tr) => ` · ${tr}`).join('')}${injOf(q.id) ? html ` ${tag('✚ ' + t('inj.matches', { n: injOf(q.id) }), 'r')}` : ''}${q.xi && q.natPos !== q.pos ? html ` ${tag(posName(q.natPos), 'o')}` : ''}</div></div><div class="gg">${q.gg}</div></button>`;
     return { title: t('team.squad'), tabs: careerTabs('team'), onTab: onCareerTab, html: html `
     ${muted(c.swap ? t('squad.swap') : t('squad.hint', { f: tt.formation }))}
     <div class="cards two">
@@ -31,6 +32,13 @@ register('squad', (c) => {
         <div class="row"><button class="btn sm ghost" id="sqReset">${t('squad.reset')}</button></div>`}`) : card(t('squad.card'), muted(t('squad.pick')))}</div></div>`,
         after: () => {
             if (c.swap && c.target && c.target !== c.swap) {
+                const lu = tt.lineup;
+                const bringIn = lu.includes(c.swap) && !lu.includes(c.target) ? c.target : lu.includes(c.target) && !lu.includes(c.swap) ? c.swap : null;
+                if (bringIn && injOf(bringIn)) {
+                    toast(t('inj.cant'), 'err');
+                    go('squad', { sel: c.swap }, false);
+                    return;
+                }
                 swapPlayers(tt, c.swap, c.target);
                 save();
                 toast(t('squad.updated'), 'ok');
