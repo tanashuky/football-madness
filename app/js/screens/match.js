@@ -7,7 +7,7 @@ import { store, save } from '../core/store.js';
 import { card, dot, muted, sel, seg, tag } from '../core/ui.js';
 import { getLang } from '../core/i18n.js';
 import { TEMPLATES, DIFFS, botTeamIn, tplById } from '../model/templates.js';
-import { avgGG, userTeamIn } from '../model/club.js';
+import { avgGG, ensureLineup, userTeamIn } from '../model/club.js';
 import { form } from '../model/career.js';
 import { matchLineup, unavailable } from '../model/manage.js';
 import { track } from '../model/missions.js';
@@ -40,6 +40,8 @@ function roomTeams(c) {
         return { me: botTeamIn(tplById(c.mine), 3, NAMES_A), opp: botTeamIn(tplById(c.tpl), c.diff, NAMES_B) };
     const k = store.db.career;
     const club = store.db.account.club;
+    if (ensureLineup(k.roster, k.team))
+        save(); // kayitli dizilis her zaman gecerli olsun (yorgunluk, sakatlik ve ceza buna gore islenir)
     const tt = { ...k.team, lineup: matchLineup(k, !!c.cup) };
     const out = (p) => unavailable(p, !!c.cup);
     if (c.cup && k.cup)
