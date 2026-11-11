@@ -8,7 +8,7 @@ jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Veri tabanına küçük bir istek (anon anahtar, RLS: boş sonuç yeter)
+      - name: Veri tabanına küçük bir istek (anon anahtar; RLS ile boş sonuç yeter)
         run: |
           code=$(curl -s -o /dev/null -w "%{http_code}" \
             -H "apikey: sb_publishable_8m8DORbwGcE-tiWPMfGV2g_tg3k2TEU" \
