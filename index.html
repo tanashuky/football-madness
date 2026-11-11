@@ -8236,6 +8236,8 @@ SCREENS.settings = () => { const s = APP.db.settings; const sel = (id, k, opts) 
 function appInit() {
   dbLoad();
   CLOUD.init();
+  // cevrimdisi: service worker (yalniz https; file:// ve gelistirici ortaminda yok)
+  if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch((e) => console.warn('sw', e));
   if (location.hash === '#dev') return; // gelistirici sayfasi (eski test sayfasi)
   document.body.classList.add('app');
   if (!APP.db.account) go('login', {}, false); else go('home', {}, false);
@@ -8243,7 +8245,7 @@ function appInit() {
 window.addEventListener('hashchange', () => { if (location.hash !== '#dev') { document.body.classList.add('app'); render(); } });
 appInit();
 </script>
-<div class="dev">demo · sürüm 11.11 11:08 · <a href="#dev" style="color:inherit" onclick="document.body.classList.remove('app')">geliştirici</a></div>
+<div class="dev">demo · sürüm 11.11 11:10 · <a href="#dev" style="color:inherit" onclick="document.body.classList.remove('app')">geliştirici</a></div>
 
 </body>
 </html>

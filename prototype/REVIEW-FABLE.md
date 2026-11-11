@@ -199,3 +199,5 @@ Commit sırası: 8ee1406 hız/pencereler → dd51833 şekiller → 7402036 göre
 
 ## 11 Kasım — zorluk kaydırması
 - Geri bildirim: oyun zor. Her kademe bir alt kademenin bot parametrelerini aldı (Yarı pro = eski Amatör …, Efsane = eski Dünya klası); Amatör için yeni taban (hata ×4, okuma %20, tepki 0,85 s, zamanlama 0,3). Bot düşünme derinliği ve kural sayısı `max(0, kademe−2)`; U/T/F bir kademe aşağı; rakip GG kademeye göre −4…+4. Kaba eğri (kullanıcı kadrosu bot olarak, 6 dk, 20 maç): Amatör 12G-3M, Yarı pro 8-1, Pro 9-5, Dünya klası 6-2, Efsane 5-5. İnsan oyuncu için daha dik; betada ölçülecek.
+- Çevrimdışı: `sw.js` (sayfa için önce ağ sonra önbellek; vendor/ikon için önce önbellek), manifest adı "Football Madness"; kayıt yalnız https'te. Metroda/uçakta açılır; Kariyer oynanır, bulut ve sunucu istekleri doğal olarak kapalı.
+- Doküman: Sistem Akışları'na "Kariyer / Online fark tablosu", Metrik'e "Kariyer ekonomisi ve iki ödül tablosu" (çarpanlar ×1,25 gelir / ×0,8 maliyet / ×0,6 süre; PP tavanları günlük 10, sezonluk 250; öneri) ve zorluk hedef bandı.

@@ -651,6 +651,8 @@ SCREENS.settings = () => { const s = APP.db.settings; const sel = (id, k, opts) 
 function appInit() {
   dbLoad();
   CLOUD.init();
+  // cevrimdisi: service worker (yalniz https; file:// ve gelistirici ortaminda yok)
+  if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch((e) => console.warn('sw', e));
   if (location.hash === '#dev') return; // gelistirici sayfasi (eski test sayfasi)
   document.body.classList.add('app');
   if (!APP.db.account) go('login', {}, false); else go('home', {}, false);
