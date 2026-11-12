@@ -10,6 +10,7 @@ export interface Club {
 export interface RosterPlayer {
   id: string; num: number; name: string; natPos: Pos; gg: number; age: number; traits: string[]; fatigue: number;
   inj?: number; // sakatlik: kac mac oynayamaz
+  reg?: boolean; // false: kupa kadrosuna yazilmadi (donem disinda altyapidan alindi)
   wage?: number; // haftalik maas (FM); sezon sonunda GG'ye gore artar, asla dusmez
   coach?: number; // kisisel antrenor: 0 yok, 1 bronz, 2 gumus, 3 altin
   tg?: number; // bu sezon bireysel antrenmandan kazanilan GG (tavan icin)
@@ -41,13 +42,20 @@ export interface Career {
   metrics: { U: number; T: number; F: number; M: number }; // takim uyumu, taktik ve fiziksel kapasite, moral
   train: { day: string; count: number; job: null | { kind: string; level: number; players: string[]; until: number }; last: null | { kind: string; text: string; t: number } };
   scout: { job: null | { tier: number; pos: string; until: number }; found: RosterPlayer | null };
-  pool: { p: RosterPlayer; price: number; haggled: boolean }[]; // transfer havuzu (sezon basi yenilenir)
+  pool: PoolItem[]; // transfer havuzu (dinamik: donem icinde her hafta degisir)
+  tw: TransferWindow; youth: RosterPlayer[]; // altyapida bekleyen gencler
+  ticket: number; gates: Gate[]; // bilet fiyati carpani (0,5-2) ve son ic saha maclari
   nextId: number; lastTick: number;
   staff: Record<StaffKey, number>; // ekip seviyeleri 0-5
   scoutFree: number; // ucretsiz standart scout hakki (sezon sonu odulu)
   news: string[]; // transfer haberleri (son 6)
   cup: CupState | null;
 }
+export interface PoolItem { p: RosterPlayer; price: number; left: number; fresh: boolean; club: string; mine?: boolean }
+export interface Offer { id: string; name: string; amount: number; state: 'pending' | 'accepted' | 'rejected' | 'counter' | 'failed' | 'gone'; counter?: number; week: number }
+export interface Listing { id: string; ask: number; offer: { club: string; amount: number; name: string; gg: number } | null }
+export interface TransferWindow { open: boolean; kind: 'pre' | 'mid'; week: number; weeks: number; closing: boolean; offers: Offer[]; listings: Listing[]; midDone: boolean }
+export interface Gate { season: number; week: number; opp: string; price: number; att: number; cap: number; fm: number }
 export type StaffKey = 'tactic' | 'physical' | 'psych' | 'physio' | 'fans';
 export interface CupState { kind: 'star' | 'cont'; season: number; round: number; alive: boolean; done: boolean; opps: LeagueTeam[]; home: boolean[]; log: { round: number; opp: string; gf: number; ga: number; pens: [number, number] | null; win: boolean }[] }
 export interface MatchModeState { elo: number; played: number; last: string | null }

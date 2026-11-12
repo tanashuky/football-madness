@@ -1,6 +1,6 @@
 // Ana menu, profil, oduller, gorevler, ayarlar (Katman 0)
 import { $, html, raw } from '../core/html.js';
-import { t, fmtNum, fmtDate, setLang } from '../core/i18n.js';
+import { t, fmtNum, fmtDate, money, setLang } from '../core/i18n.js';
 import { go, register, render } from '../core/router.js';
 import { store, save, reset, APP_VERSION } from '../core/store.js';
 import { CLOUD } from '../core/cloud.js';
@@ -18,7 +18,7 @@ register('home', () => {
     rollCaps(db.rewards);
     roll(db);
     return { title: raw(`<i class="crest" style="background:${c.color};border-color:${c.color2}"></i>` + c.name), back: false, html: html `
-  <div class="wallet"><span>${tag(html `${fmtNum(db.rewards.pp)} ${t('home.pp')}`, 'y')}</span><span>${tag(html `${db.rewards.boosts} ${t('home.boosts')}`)}</span>${k ? html `<span>${tag(html `${fmtNum(k.fm)} FM`, 'g')}</span>` : ''}</div>
+  <div class="wallet"><span>${tag(html `${fmtNum(db.rewards.pp)} ${t('home.pp')}`, 'y')}</span><span>${tag(html `${db.rewards.boosts} ${t('home.boosts')}`)}</span>${k ? html `<span>${tag(html `${money(k.fm)}`, 'g')}</span>` : ''}</div>
   <div class="cards modes">
     <section class="card hero mode"><h3>${t('home.career')}</h3><p>${t('home.career.desc')}</p>
       ${k ? html `<p class="muted">${t('career.season', { n: k.league.season })} · ${t('career.played', { w: k.league.week, total: k.league.fixtures.length })} · ${t('career.rank', { n: rank(k.league) })}${seasonDone(k.league) ? ' · ' + t('career.seasonend') : ''}</p>
@@ -44,11 +44,11 @@ register('missions', () => {
     const m = db.missions;
     const row = (title, sub, done, claimed, attr, reward) => html `<div class="li static"><div><div class="nm">${title}</div><div class="sub">${sub}</div></div><div class="acts"><span class="muted small">${reward}</span>${claimed ? tag('✓', 'g') : html `<button class="btn sm ${done ? 'prim' : ''}" ${raw(attr)} ${done ? '' : raw('disabled')}>${t('missions.claim')}</button>`}</div></div>`;
     return { title: t('missions.title'), html: html `
-    ${card(html `${t('missions.daily')} <small>${t('missions.streak', { n: m.streak })}</small>`, html `<div class="list compact">${m.daily.map((d, i) => row(t('mis.d.' + d.id), d.done ? t('missions.done') : t('missions.todo'), d.done, d.claimed, `data-cd="${i}"`, d.id === 'login' ? (m.streak === 7 ? '50 FM + ⚡' : '50 FM') : '⚡ 1'))}</div>${muted(t('missions.daily.desc'))}`)}
-    ${card(t('missions.weekly'), html `<div class="list compact">${m.weekly.map((w, i) => row(t('mis.w.' + w.id), `${w.prog}/${w.goal}`, w.prog >= w.goal, w.claimed, `data-cw="${i}"`, '375 FM'))}</div>${muted(t('missions.weekly.desc'))}`)}`,
+    ${card(html `${t('missions.daily')} <small>${t('missions.streak', { n: m.streak })}</small>`, html `<div class="list compact">${m.daily.map((d, i) => row(t('mis.d.' + d.id), d.done ? t('missions.done') : t('missions.todo'), d.done, d.claimed, `data-cd="${i}"`, d.id === 'login' ? money(63) + (m.streak === 7 ? ' + ⚡' : '') : '⚡ 1'))}</div>${muted(t('missions.daily.desc'))}`)}
+    ${card(t('missions.weekly'), html `<div class="list compact">${m.weekly.map((w, i) => row(t('mis.w.' + w.id), `${w.prog}/${w.goal}`, w.prog >= w.goal, w.claimed, `data-cw="${i}"`, money(375)))}</div>${muted(t('missions.weekly.desc'))}`)}`,
         after: (root) => {
             const show = (r) => { if (!r)
-                return; save(); toast(r.fm || r.boost ? `${r.fm ? '+' + r.fm + ' FM ' : ''}${r.boost ? '+' + r.boost + ' ⚡' : ''}` : t('missions.capped'), r.fm || r.boost ? 'ok' : ''); render(); };
+                return; save(); toast(r.fm || r.boost ? `${r.fm ? '+' + money(r.fm) + ' ' : ''}${r.boost ? '+' + r.boost + ' ⚡' : ''}` : t('missions.capped'), r.fm || r.boost ? 'ok' : ''); render(); };
             for (const b of root.querySelectorAll('[data-cd]'))
                 b.onclick = () => show(claimDaily(db, +b.dataset.cd));
             for (const b of root.querySelectorAll('[data-cw]'))

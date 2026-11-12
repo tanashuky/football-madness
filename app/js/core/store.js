@@ -67,7 +67,11 @@ function normalizeCareer(c) {
     c.metrics = { U: 55, T: 55, F: 55, M: 70, ...(c.metrics || {}) };
     c.train = { day: '', count: 0, job: null, last: null, ...(c.train || {}) };
     c.scout = { job: null, found: null, ...(c.scout || {}) };
-    c.pool = Array.isArray(c.pool) ? c.pool : [];
+    c.pool = (Array.isArray(c.pool) ? c.pool : []).map((it) => ({ left: 3, fresh: false, club: '', ...it }));
+    c.tw = { open: false, kind: 'pre', week: 1, weeks: 4, closing: false, offers: [], listings: [], midDone: true, ...(c.tw || {}) };
+    c.youth = Array.isArray(c.youth) ? c.youth : [];
+    c.ticket = c.ticket || 1;
+    c.gates = Array.isArray(c.gates) ? c.gates : [];
     c.nextId = c.nextId || 1;
     c.lastTick = c.lastTick || 0;
     c.staff = { tactic: 0, physical: 0, psych: 0, physio: 0, fans: 0, ...(c.staff || {}) };

@@ -1,7 +1,7 @@
 // Mac Modu (sablon takimlarla tek mac), mac odasi (tum modlarda ortak) ve mac raporu
 import { DOCTRINES, NAMES_A, NAMES_B, type TeamIn } from '../engine.js';
 import { $, html, raw } from '../core/html.js';
-import { t, fmtNum } from '../core/i18n.js';
+import { t, money } from '../core/i18n.js';
 import { go, home, register, render } from '../core/router.js';
 import { store, save } from '../core/store.js';
 import { card, dot, muted, sel, seg, tag } from '../core/ui.js';
@@ -61,7 +61,7 @@ register('report', (c: { rep: Report; c: RoomCtx }) => {
   const tacText = (x: string) => x === 'duties' ? t('tactics.duties') : x === 'instr' ? t('tactics.mid.desc') : x.startsWith('shape:') ? `${t('tactics.formation')}: ${x.slice(6)}` : x.startsWith('rule:') ? `${t('tactics.rules')}: ${x.slice(5)}` : x.startsWith('slider:') ? `${t('match.ment.0')} ↔ ${x.slice(7)}` : x;
   return { title: t('report.title'), back: false, html: html`
     <section class="card score"><div class="tm">${dot(r.teams[0].color)}<span>${r.teams[0].name}</span></div><b class="big">${r.goals[0]} : ${r.goals[1]}${r.shootout ? html` <small>(${r.shootout[0]}–${r.shootout[1]} ${t('cup.pens')})</small>` : ''}</b><div class="tm b"><span>${r.teams[1].name}</span>${dot(r.teams[1].color)}</div>
-      <p class="muted center">${r.result === 'win' ? t('report.win') : r.result === 'loss' ? t('report.loss') : t('report.draw')}${r.elo !== undefined ? ` · Elo ${r.elo >= 0 ? '+' : ''}${r.elo}` : ''}${r.cup ? ` · ${t('cup.' + r.cup.kind)} ${t('cup.r.' + r.cup.round)}: ${r.cup.title ? t('cup.title') : r.cup.win ? t('cup.through') : t('cup.out')}` : ''}${r.rank ? ` · ${t('report.table', { n: r.rank })}` : ''}${r.fm ? ` · +${fmtNum(r.fm)} FM` : ''}${r.pp ? ` · ${t('report.reward', { pp: r.pp })}` : ''}</p></section>
+      <p class="muted center">${r.result === 'win' ? t('report.win') : r.result === 'loss' ? t('report.loss') : t('report.draw')}${r.elo !== undefined ? ` · Elo ${r.elo >= 0 ? '+' : ''}${r.elo}` : ''}${r.cup ? ` · ${t('cup.' + r.cup.kind)} ${t('cup.r.' + r.cup.round)}: ${r.cup.title ? t('cup.title') : r.cup.win ? t('cup.through') : t('cup.out')}` : ''}${r.rank ? ` · ${t('report.table', { n: r.rank })}` : ''}${r.fm ? ` · +${money(r.fm)}` : ''}${r.pp ? ` · ${t('report.reward', { pp: r.pp })}` : ''}</p></section>
     <div class="cards two">
       ${card(t('report.stats'), html`${r.stats.map(([l, a, b]) => html`<div class="stat"><div class="l">${a}</div><div class="c">${t(l)}</div><div class="r">${b}</div></div>`)}<p class="muted">${t('report.potm')}: ${r.potm[0]} / ${r.potm[1]}</p>`)}
       ${card(t('report.events'), r.events.length ? html`${r.events.map((e) => html`<div class="ev"><div class="t">${e.t}'</div><div>${e.type === 'half' ? tag(t('match.half')) : html`${tag(r.teams[e.side].short, e.type === 'goal' ? 'y' : e.type === 'red' ? 'r' : e.type === 'yellow' ? 'o' : '')} ${evText(e)}${e.who ? ' · ' + e.who : ''}`}</div></div>`)}` : muted('–'))}

@@ -278,3 +278,13 @@ Commit sırası: 8ee1406 hız/pencereler → dd51833 şekiller → 7402036 göre
 - Maç içi panel: "Devam" düğmesi kaydırmanın altında kalıyordu → başlık satırına alındı (yapışkan).
 - Küçük ekranda varsayılan kamera Yakın (tam sahada oyuncu 6 px, numara okunmuyordu). Yalnız yeni kayıtlar için.
 - Takım durumu: "yorgunluk" → "Yorgunluk".
+
+## Transfer dönemi, tablo görünümü, € gösterimi, bilet fiyatı (istemci)
+- **Para gösterimi:** oyun içi değer ×1000 ile € olarak gösterilir (`money()`: €625 K, €2,5 M). Kayıt ve formüller değişmedi; yalnızca gösterim.
+- **Transfer dönemi (Kariyer):** sezon başı 4 hafta, devre arası 2 hafta; "Sonraki hafta" ile ilerler. Hemen al / teklif gönder (cevap sonraki hafta: kabul, karşı teklif, ret). Son haftadaki işlemler için ayrı "kapanış günü": yeni işlem yok, yalnızca bekleyen cevaplar sonuçlanır. Dönem açıkken lig maçı oynanmaz. Dönem dışında havuz gezilir, alım satım yapılmaz. Scout'un bulduğu futbolcu da yalnızca dönemde imzalar.
+- **Havuz:** 50 futbolcu, her hafta değişir (süresi dolan çıkar, botlar alır, yenileri gelir, listede kalanın fiyatı düşer).
+- **Satış:** hemen sat (düşük) ya da fiyat belirleyip listeye koy; bot teklifleri sonraki hafta gelir.
+- **Ekran:** sıralanabilir tablo (başlığa dokun = sırala, tekrar = ters), filtreler (mevki, GG aralığı, yaş, özellikli, bütçeme uyan), futbolcu sayfası, kendi futbolcunla kıyaslama. Kadro (diziliş) ekranı tabloya çevrilmedi; saha üstü diziliş olarak kaldı.
+- **Altyapı:** gençler sezon sonu ve devre arasında çıkar, "Kadroya al" ile her zaman alınır; dönem dışında alınan genç sonraki döneme kadar kupada oynayamaz.
+- **Bilet fiyatı:** Kulüp sekmesinden seçilir (€50–€200). Seyirci = kapasite × min(1, doluluk × (razı olunan/fiyat)^2,5); razı olunan tutar TM, lig sırası ve rakibe göre değişir. Tahmin gösterilmez; yalnızca geçmiş maçların fiyat/seyirci/gelir tablosu. Morale etkisi yok.
+- Test: `fm-proto/transfer.cjs` (uçtan uca), client6/7/8 ve nav güncellendi.

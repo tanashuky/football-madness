@@ -4,7 +4,8 @@ import { P, NAMES_A, NAMES_B, simulate } from '../engine.js';
 import type { Career, Club, League, LeagueTeam, RosterPlayer, TableRow, TeamSetup } from './types.js';
 import { newRoster, newTeamSetup } from './club.js';
 import { TEMPLATES, botTeamIn } from './templates.js';
-import { STADIUM_CAP, afterWeek, fixLineup, occupancy, paySponsor, refreshPool, seasonPrize, seasonTurn } from './manage.js';
+import { STADIUM_CAP, afterWeek, fixLineup, gate, paySponsor, seasonPrize, seasonTurn } from './manage.js';
+import { openWindow } from './transfer.js';
 import { newCup } from './cup.js';
 export { STADIUM_CAP };
 
@@ -33,8 +34,9 @@ export function newCareer(club: Club, o: { size: number; diff: number; minutes: 
     stats: { played: 0, won: 0, drawn: 0, lost: 0, seasons: 1 }, trophies: [], history: [],
     metrics: { U: 55, T: 55, F: 55, M: 70 }, train: { day: '', count: 0, job: null, last: null }, scout: { job: null, found: null }, pool: [], nextId: 1, lastTick: Date.now(),
     staff: { tactic: 0, physical: 0, psych: 0, physio: 0, fans: 0 }, scoutFree: 0, news: [], cup: null,
+    tw: { open: false, kind: 'pre', week: 1, weeks: 4, closing: false, offers: [], listings: [], midDone: false }, youth: [], ticket: 1, gates: [],
   };
-  refreshPool(c); paySponsor(c);
+  openWindow(c, 'pre'); paySponsor(c); // kariyer sezon basi transfer donemiyle baslar
   return c;
 }
 export function order(l: League): number[] { return l.teams.map((_, i) => i).sort((a, b) => l.table[b].pts - l.table[a].pts || (l.table[b].gf - l.table[b].ga) - (l.table[a].gf - l.table[a].ga) || l.table[b].gf - l.table[a].gf); }
@@ -65,7 +67,7 @@ export function applyMyResult(c: Career, oppIdx: number, home: boolean, goals: [
   const result = gf > ga ? 'win' : gf < ga ? 'loss' : 'draw';
   c.stats.played++; if (result === 'win') c.stats.won++; else if (result === 'draw') c.stats.drawn++; else c.stats.lost++;
   let fm = (result === 'win' ? 500 : result === 'draw' ? 200 : 100) * CAREER_K.income;
-  if (home) fm += STADIUM_CAP[c.facilities.stadium.level] * occupancy(c) * 0.1 * CAREER_K.income;
+  if (home) fm += gate(c, oppIdx, rank(l)).fm;
   fm = Math.round(fm);
   addLedger(c, `${l.season}.${l.week + 1} ${home ? 'H' : 'A'} ${gf}-${ga}`, fm);
   // taraftar morali: ic saha G +3 / B -1 / M -4, deplasman +2 / 0 / -2; moral: G +2 / M -2
@@ -73,9 +75,10 @@ export function applyMyResult(c: Career, oppIdx: number, home: boolean, goals: [
   c.metrics.M = Math.max(30, Math.min(95, c.metrics.M + (result === 'win' ? 2 : result === 'loss' ? -2 : 0)));
   afterWeek(c, c.team.lineup || []);
   l.week++;
+  if (!c.tw.midDone && l.week === Math.floor(l.fixtures.length / 2)) openWindow(c, 'mid'); // devre arasi transfer donemi
   return { fm, rank: rank(l), result };
 }
-export function skipWeek(c: Career) { simOthers(c, false); afterWeek(c, [], false); c.league.week++; }
+export function skipWeek(c: Career) { simOthers(c, false); afterWeek(c, [], false); c.league.week++; if (!c.tw.midDone && c.league.week === Math.floor(c.league.fixtures.length / 2)) openWindow(c, 'mid'); }
 // sezon sonu: kupa ve tarihce; ayni lig yeni sezon (fikstur ayni siraya, tablo sifir)
 export function closeSeason(c: Career): { youths: RosterPlayer[]; prize: number; scouts: number; rank: number } {
   const l = c.league; const r = rank(l); const me = l.table[0];
@@ -84,6 +87,7 @@ export function closeSeason(c: Career): { youths: RosterPlayer[]; prize: number;
   if (r === 1) c.trophies.push({ season: l.season, kind: 'league', name: 'Kariyer Ligi' });
   l.season++; l.week = 0; l.results = []; l.table = emptyTable(l.teams.length); c.stats.seasons = l.season;
   const youths = seasonTurn(c); fixLineup(c);
+  c.tw.midDone = false; openWindow(c, 'pre');
   paySponsor(c); c.cup = newCup(c, r); // kupa 2. sezondan itibaren, onceki sezon sirasina gore
   return { youths, prize: pz.fm, scouts: pz.scouts, rank: r };
 }

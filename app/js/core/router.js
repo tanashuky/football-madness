@@ -16,6 +16,8 @@ export function parentOf(s = R.screen, c = R.ctx) {
         return R.ret || { s: 'home', c: {} };
     if (s === 'squad' || s === 'tactics')
         return c && c.from ? { s: 'room', c: c.from } : { s: 'career', c: { tab: 'team' } };
+    if (s === 'player')
+        return { s: 'career', c: { tab: 'renew' } };
     if (s === 'room')
         return c.kind === 'mm' ? { s: 'mm', c: { mine: c.mine, diff: c.diff, minutes: c.minutes } } : { s: 'career', c: { tab: 'match' } };
     if (s === 'mm')

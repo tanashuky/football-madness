@@ -21,6 +21,7 @@ export function parentOf(s: string = R.screen, c: any = R.ctx): { s: string; c: 
   if (s === 'login' || s === 'setup' || s === 'home' || !s) return null;
   if (SIDE.has(s)) return R.ret || { s: 'home', c: {} };
   if (s === 'squad' || s === 'tactics') return c && c.from ? { s: 'room', c: c.from } : { s: 'career', c: { tab: 'team' } };
+  if (s === 'player') return { s: 'career', c: { tab: 'renew' } };
   if (s === 'room') return c.kind === 'mm' ? { s: 'mm', c: { mine: c.mine, diff: c.diff, minutes: c.minutes } } : { s: 'career', c: { tab: 'match' } };
   if (s === 'mm') return c && c.mine ? { s: 'mm', c: { diff: c.diff, minutes: c.minutes } } : { s: 'home', c: {} };
   if (s === 'report') return c && c.rep && c.rep.kind === 'career' ? { s: 'career', c: { tab: 'match' } } : { s: 'home', c: {} };

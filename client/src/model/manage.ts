@@ -75,7 +75,7 @@ export const trainCap = (p: RosterPlayer) => [7, 8, 9, 10][p.coach || 0]; // sez
 // maasi GG'sinin hak ettiginden yuksek futbolcu daha ucuza satilir (en fazla yari fiyat)
 export const overpaid = (p: RosterPlayer) => (p.wage || 0) > wageFor(p.gg) * 1.15;
 // ---------- cezalar: ikinci saridan kirmizi 1 mac, direkt kirmizi 2 mac; ligde 5, kupada 3 sarida 1 mac; lig ve kupa ayri ----------
-export const unavailable = (p: RosterPlayer, cup: boolean) => !!p.inj || (cup ? !!p.suspCup : !!p.susp);
+export const unavailable = (p: RosterPlayer, cup: boolean) => !!p.inj || (cup ? !!p.suspCup || p.reg === false : !!p.susp);
 export function applyCards(c: Career, cup: boolean, played: { num: number; yellow: number; red: number }[]): { name: string; n: number }[] {
   const S = cup ? 'suspCup' : 'susp', Y = cup ? 'yelCup' : 'yel'; const out: { name: string; n: number }[] = [];
   for (const p of c.roster) if (p[S]) { p[S]!--; if (!p[S]) delete p[S]; } // bu maci cezali gecirenler
@@ -133,7 +133,7 @@ const SURNAMES = ['Acar', 'Bulut', 'Çakır', 'Duman', 'Ekinci', 'Fırat', 'Gül
 const TRAITS = ['Hızlı', 'Hava Hakimi', 'Oyun Kurucu', 'Bitirici', 'Duvar', 'Dayanıklı', 'Çalımcı'];
 const POSS: Pos[] = ['GK', 'CB', 'CB', 'FB', 'FB', 'DM', 'CM', 'CM', 'W', 'W', 'ST', 'ST'];
 export function freeNumber(roster: RosterPlayer[]): number { for (let n = 2; n <= 99; n++) if (!roster.some((p) => p.num === n)) return n; return 99; }
-function mkPlayer(c: Career, gg: [number, number], age: [number, number], traitP: number, forceTrait = false, pos?: Pos): RosterPlayer {
+export function mkPlayer(c: Career, gg: [number, number], age: [number, number], traitP: number, forceTrait = false, pos?: Pos): RosterPlayer {
   const natPos = pos || POSS[rint(0, POSS.length - 1)];
   const traits: string[] = []; if (forceTrait || Math.random() < traitP) traits.push(natPos === 'GK' ? 'Refleks' : TRAITS[rint(0, TRAITS.length - 1)]); if (traits.length && Math.random() < 0.1 && natPos !== 'GK') { const t2 = TRAITS[rint(0, TRAITS.length - 1)]; if (!traits.includes(t2)) traits.push(t2); }
   const p: RosterPlayer = { id: 'n' + c.nextId++, num: 0, name: SURNAMES[rint(0, SURNAMES.length - 1)], natPos, gg: rint(gg[0], gg[1]), age: rint(age[0], age[1]), traits, fatigue: 10 };
@@ -156,22 +156,12 @@ export function startScout(c: Career, i: number, pos: Pos | '', now = Date.now()
 }
 export function signFound(c: Career): boolean { const p = c.scout.found; if (!p || c.roster.length >= ROSTER_MAX) return false; p.num = freeNumber(c.roster); c.roster.push(p); c.scout.found = null; return true; }
 
-// ---------- transfer havuzu (acik artirma yok): fiyat = PD; pazarlik bir kez, +-%10 ----------
-export function refreshPool(c: Career) {
-  const base = Math.round(c.roster.reduce((a, p) => a + p.gg, 0) / c.roster.length);
-  c.pool = Array.from({ length: 12 }, () => { const p = mkPlayer(c, [base - 8, base + 8], [18, 33], 0.35); return { p, price: marketValue(p), haggled: false }; });
-}
-export function haggle(c: Career, id: string): 'down' | 'up' | 'no' { const it = c.pool.find((x) => x.p.id === id); if (!it || it.haggled) return 'no'; it.haggled = true; const ok = Math.random() < 0.5; it.price = Math.round((marketValue(it.p) * (ok ? 0.9 : 1.1)) / 10) * 10; return ok ? 'down' : 'up'; }
-export function buy(c: Career, id: string): 'ok' | 'fm' | 'full' | 'no' {
-  const i = c.pool.findIndex((x) => x.p.id === id); if (i < 0) return 'no'; const it = c.pool[i];
-  if (c.roster.length >= ROSTER_MAX) return 'full'; if (c.fm < it.price) return 'fm';
-  addLedger(c, `buy:${it.p.name}`, -it.price); it.p.num = freeNumber(c.roster); c.roster.push(it.p); c.pool.splice(i, 1); return 'ok';
-}
+// ---------- satis (transfer donemi kurallari transfer.ts'de) ----------
 export const sellPrice = (p: RosterPlayer) => Math.round((marketValue(p) * 0.9 * (overpaid(p) ? clamp(wageFor(p.gg) / (p.wage || 1), 0.5, 1) : 1)) / 10) * 10; // bot kulupler PD'nin %90'ini oder
-export function sell(c: Career, id: string): 'ok' | 'min' | 'gk' | 'no' {
+export function sell(c: Career, id: string, price?: number): 'ok' | 'min' | 'gk' | 'no' {
   const i = c.roster.findIndex((p) => p.id === id); if (i < 0) return 'no'; const p = c.roster[i];
   if (c.roster.length <= ROSTER_MIN) return 'min'; if (p.natPos === 'GK' && c.roster.filter((q) => q.natPos === 'GK').length <= 2) return 'gk';
-  addLedger(c, `sell:${p.name}`, sellPrice(p)); c.roster.splice(i, 1);
+  addLedger(c, `sell:${p.name}`, price ?? sellPrice(p)); c.roster.splice(i, 1);
   if (c.team.lineup) c.team.lineup = c.team.lineup.filter((x) => x !== id); if (c.team.duties) delete c.team.duties[id]; if (c.team.rotations) c.team.rotations = c.team.rotations.map((r) => r.filter((x) => x !== id)).filter((r) => r.length >= 2);
   return 'ok';
 }
@@ -179,7 +169,6 @@ export function sell(c: Career, id: string): 'ok' | 'min' | 'gk' | 'no' {
 // ---------- zaman: biten isler, pasif toparlanma ----------
 export function tick(c: Career, now = Date.now()): string[] {
   const done: string[] = []; ensureWages(c);
-  if (!c.pool.length && c.nextId === 1) refreshPool(c);
   for (const f of ['stadium', 'academy'] as FacKey[]) { const b = c.facilities[f]; if (b.busyUntil && now >= b.busyUntil) { b.level++; delete b.busyUntil; done.push('fac:' + f); } }
   if (c.train.job && now >= c.train.job.until) { finishTraining(c); done.push('train'); }
   if (c.scout.job && now >= c.scout.job.until) { const j = c.scout.job; const s = SCOUTS[j.tier]; c.scout.found = mkPlayer(c, s.gg, [17, 30], s.traitP, s.force, (j.pos || undefined) as Pos | undefined); c.scout.job = null; done.push('scout'); }
@@ -209,21 +198,30 @@ export function afterWeek(c: Career, lineup: string[], played = true, weekly = t
   c.tm = clamp(c.tm + (tmNeutral(c) - c.tm) * 0.1, 0, 100);
   // moral 70'in altindaysa notre doner: haftada farkin %15'i (+%3 x psikolojik destek seviyesi)
   if (c.metrics.M < 70) c.metrics.M = clamp(c.metrics.M + (70 - c.metrics.M) * (0.15 + 0.03 * c.staff.psych), 0, 100);
-  botTransfers(c);
-}
-// bot kulupler: haftada en fazla 1 alim 1 satis (havuzdan bir futbolcu gider, yerine yenisi gelir)
-function botTransfers(c: Career) {
-  const bots = c.league.teams.slice(1); if (!bots.length || !c.pool.length) return;
-  if (Math.random() < 0.6) { const i = rint(0, c.pool.length - 1); const it = c.pool[i]; const b = bots[rint(0, bots.length - 1)]; c.pool.splice(i, 1); if (it.p.gg > b.gg) b.gg = Math.min(90, b.gg + 0.3); c.news.unshift(`buy|${b.short}|${it.p.name}|${Math.round(it.p.gg)}`); }
-  if (Math.random() < 0.6 && c.pool.length < 14) { const b = bots[rint(0, bots.length - 1)]; const p = mkPlayer(c, [b.gg - 8, b.gg + 6], [19, 33], 0.35); c.pool.push({ p, price: marketValue(p), haggled: false }); c.news.unshift(`sell|${b.short}|${p.name}|${Math.round(p.gg)}`); }
-  if (c.news.length > 6) c.news.length = 6;
 }
 // sezon sonu: yas +1, gelisim/gerileme, altyapi gencleri, havuz yenilenir
 export function seasonTurn(c: Career): RosterPlayer[] {
   for (const p of c.roster) { p.age++; const d = p.age <= 21 ? rnd(1, 2.5) : p.age <= 24 ? rnd(0.5, 1.5) : p.age <= 29 ? rnd(-0.3, 0.6) : p.age <= 32 ? rnd(-1.5, 0) : rnd(-3, -1); p.gg = clamp(Math.round((p.gg + d) * 100) / 100, 30, 99); p.wage = Math.max(p.wage || 0, wageFor(p.gg)); p.tg = 0; delete p.yel; delete p.yelCup; }
-  const youths: RosterPlayer[] = []; const a = ACADEMY[c.facilities.academy.level];
-  if (a) for (let i = 0; i < a.youth && c.roster.length < ROSTER_MAX; i++) { const y = mkPlayer(c, [a.gg[0], a.gg[1]], [16, 17], 0.2); y.num = freeNumber(c.roster); c.roster.push(y); youths.push(y); }
-  refreshPool(c);
-  return youths;
+  c.youth = []; // alinmayan gencler ayrilir
+  return genYouths(c);
+}
+// altyapi genc cikisi (sezon sonu ve devre arasi): gencler altyapi listesinde bekler, kullanici kadroya alir
+export function genYouths(c: Career): RosterPlayer[] {
+  const a = ACADEMY[c.facilities.academy.level]; const out: RosterPlayer[] = [];
+  if (a) for (let i = 0; i < a.youth; i++) { const y = mkPlayer(c, [a.gg[0], a.gg[1]], [16, 17], 0.2); c.youth.push(y); out.push(y); }
+  return out;
+}
+// ---------- bilet: fiyati kullanici secer. Taraftarin odemeye razi oldugu tutar kulubun o anki durumuna baglidir (taraftar morali, lig sirasi,
+// rakibin gucu, biraz sans); fiyat bunun altindaysa stat dolar, ustune ciktikca seyirci hizla duser. Morale etkisi yok. ----------
+export const TICKET_BASE = 0.1; // FM (gosterimde 100 euro)
+export const TICKET_STEPS = [0.5, 0.6, 0.75, 0.9, 1, 1.15, 1.3, 1.5, 1.75, 2];
+export function gate(c: Career, oppIdx: number, rankNow: number): { att: number; fm: number } {
+  const n = c.league.teams.length, me = c.league.teams[0], opp = c.league.teams[oppIdx];
+  let W = 0.5 + c.tm / 100 + (rankNow <= Math.ceil(n / 3) ? 0.2 : rankNow > n - Math.ceil(n / 3) ? -0.15 : 0) + (opp && opp.gg > me.gg ? 0.15 : 0) + rnd(-0.1, 0.1);
+  W = Math.max(0.3, W);
+  const cap = STADIUM_CAP[c.facilities.stadium.level]; const frac = Math.min(1, occupancy(c) * Math.pow(W / c.ticket, 2.5));
+  const att = Math.round((cap * frac) / 10) * 10; const fm = Math.round(att * TICKET_BASE * c.ticket * CAREER_K.income);
+  c.gates.unshift({ season: c.league.season, week: c.league.week + 1, opp: opp ? opp.short : '', price: c.ticket, att, cap, fm }); if (c.gates.length > 10) c.gates.length = 10;
+  return { att, fm };
 }
 export function fmtLeft(ms: number): string { const s = Math.max(0, Math.ceil(ms / 1000)); const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60); return d ? `${d}g ${h}s` : h ? `${h}s ${m}dk` : m ? `${m}dk` : `${s}sn`; }
