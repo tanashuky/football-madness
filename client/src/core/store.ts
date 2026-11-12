@@ -11,7 +11,9 @@ const listeners = new Set<(db: SaveV1) => void>();
 export function onSave(f: (db: SaveV1) => void) { listeners.add(f); return () => listeners.delete(f); }
 
 export function fresh(): SaveV1 {
-  return { v: 1, updatedAt: 0, account: null, settings: { ...DEF_SETTINGS, sound: { ...DEF_SETTINGS.sound } }, career: null, mm: { elo: 1000, played: 0, last: null }, rewards: EMPTY_REWARDS(), missions: { day: '', daily: [], week: '', weekly: [], streak: 0 }, online: null };
+  // kucuk ekranda varsayilan kamera Yakin (tam sahada oyuncular 6 px kaliyor)
+  const small = typeof innerWidth === 'number' && Math.min(innerWidth, innerHeight) < 600;
+  return { v: 1, updatedAt: 0, account: null, settings: { ...DEF_SETTINGS, cam: small ? 'near' : 'full', sound: { ...DEF_SETTINGS.sound } }, career: null, mm: { elo: 1000, played: 0, last: null }, rewards: EMPTY_REWARDS(), missions: { day: '', daily: [], week: '', weekly: [], streak: 0 }, online: null };
 }
 export function load(): SaveV1 {
   let db: SaveV1 | null = null;

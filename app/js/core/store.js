@@ -8,7 +8,9 @@ export const store = { db: fresh() };
 const listeners = new Set();
 export function onSave(f) { listeners.add(f); return () => listeners.delete(f); }
 export function fresh() {
-    return { v: 1, updatedAt: 0, account: null, settings: { ...DEF_SETTINGS, sound: { ...DEF_SETTINGS.sound } }, career: null, mm: { elo: 1000, played: 0, last: null }, rewards: EMPTY_REWARDS(), missions: { day: '', daily: [], week: '', weekly: [], streak: 0 }, online: null };
+    // kucuk ekranda varsayilan kamera Yakin (tam sahada oyuncular 6 px kaliyor)
+    const small = typeof innerWidth === 'number' && Math.min(innerWidth, innerHeight) < 600;
+    return { v: 1, updatedAt: 0, account: null, settings: { ...DEF_SETTINGS, cam: small ? 'near' : 'full', sound: { ...DEF_SETTINGS.sound } }, career: null, mm: { elo: 1000, played: 0, last: null }, rewards: EMPTY_REWARDS(), missions: { day: '', daily: [], week: '', weekly: [], streak: 0 }, online: null };
 }
 export function load() {
     let db = null;

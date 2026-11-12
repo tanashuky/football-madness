@@ -147,4 +147,5 @@ export const tr: Record<string, string> = {
   'auth.with': '{p} ile giriş yap', 'auth.withEmail': 'E-posta ile giriş yap', 'auth.forgot': 'Şifremi unuttum',
   'auth.reset': 'Şifre sıfırlama', 'auth.reset.desc': 'E-postanı yaz; şifreni yenilemen için bir e-posta gönderelim.', 'auth.reset.send': 'Gönder', 'auth.reset.link': 'E-posta gönderildi. İçindeki bağlantıya dokun; açılan sayfada yeni şifreni belirle, sonra buradan giriş yap.', 'auth.newpw': 'Yeni şifre', 'auth.changepw': 'Şifre değiştir',
   'login.notconfirmed': 'E-posta henüz onaylanmamış', 'login.rate': 'Çok fazla deneme yapıldı. Biraz sonra tekrar dene.', 'login.exists': 'Bu e-posta ile zaten bir hesap var. Giriş yap ya da şifreni sıfırla.',
+  'met.fat': 'Yorgunluk',
 };

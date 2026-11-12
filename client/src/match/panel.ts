@@ -67,10 +67,9 @@ export function renderPanel(box: HTMLElement, h: PanelHost) {
         ${live.map((p) => html`<div class="pl ${S.subOut === p.num ? 'sel' : ''}" data-out="${p.num}"><b>${p.num}</b><span>${p.name} <span class="muted">${p.pos}</span>${pend.some((q) => q.out === p.num) ? html` <span class="neg">↓</span>` : ''}${p.injured ? html` <span class="neg">✚</span>` : ''}</span>${kbar(p.k)}</div>`)}</div>
       <div class="col"><p class="muted small">${t('squad.bench')}</p>${bench.length ? bench.map((b) => html`<div class="pl ${S.subOut !== null && suggestedSub(st, side, S.subOut) === b.num ? 'sel' : ''}" data-in="${b.num}"><b>${b.num}</b><span>${b.name} <span class="muted">${b.pos}</span>${pend.some((q) => q.inn === b.num) ? html` <span class="pos">↑</span>` : ''}</span>${kbar(b.k)}</div>`) : html`<p class="muted small">–</p>`}</div>`;
   }
-  box.innerHTML = String(html`<div class="box panel"><h3>${h.half ? t('match.half') : t('match.tactic')} <small>${tm.short} ${A.goals} : ${O.goals} ${opp.short}</small></h3>
+  box.innerHTML = String(html`<div class="box panel"><div class="phead"><h3>${h.half ? t('match.half') : t('match.tactic')} <small>${tm.short} ${A.goals} : ${O.goals} ${opp.short}</small></h3><button class="btn prim sm" id="tClose">${h.half ? t('panel.startHalf') : t('btn.continue')}</button></div>
     <div class="seg sm tabs" id="tTabs">${TABS.map((id) => html`<button data-v="${id}" aria-pressed="${tab === id}">${t('panel.tab.' + id)}</button>`)}</div>
-    <div class="cols">${body}</div>
-    <div class="row end"><button class="btn prim" id="tClose">${h.half ? t('panel.startHalf') : t('btn.continue')}</button></div></div>`);
+    <div class="cols">${body}</div></div>`);
   const inner = box.querySelector<HTMLElement>('.box')!; inner.scrollTop = keep;
   const q = <T extends HTMLElement = HTMLElement>(s: string) => box.querySelector<T>(s);
   const re = () => renderPanel(box, h);

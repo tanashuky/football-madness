@@ -71,7 +71,7 @@ function teamTab(k, c) {
     const lv = c.tl ?? 1;
     const I = INTENSITY[lv];
     return html `
-    ${card(t('team.metrics'), html `${bar(t('met.U'), m.U)}${bar(t('met.T'), m.T)}${bar(t('met.F'), m.F)}${bar(t('met.M'), m.M)}${bar(t('squad.fatigue'), fat)}${muted(t('met.desc'))}`)}
+    ${card(t('team.metrics'), html `${bar(t('met.U'), m.U)}${bar(t('met.T'), m.T)}${bar(t('met.F'), m.F)}${bar(t('met.M'), m.M)}${bar(t('met.fat'), fat)}${muted(t('met.desc'))}`)}
     ${card(html `${t('team.training')} <small>${t('train.today', { n, max: SESSIONS_PER_DAY })}</small>`, job ? html `<div class="row"><span class="tag o">${t('train.' + job.kind)}${job.kind === 'rest' ? '' : ' · ' + t('train.lv.' + job.level)} · ${left(job.until)}</span>${boostBtn('train')}</div>${muted(t('train.running'))}`
         : html `<div class="grid2">${sel(t('train.kind'), 'trKind', TRAIN_KINDS.map((x) => [x, t('train.' + x)]), kind)}${kind === 'rest' ? '' : sel(t('train.level'), 'trLv', [0, 1, 2].map((x) => [x, t('train.lv.' + x)]), lv)}</div>
         ${kind === 'individual' ? html `<div class="grid2">${[0, 1, 2].map((i) => html `<label class="f">${t('train.player', { n: i + 1 })}<select class="trP"><option value="">–</option>${[...k.roster].sort((a, b) => a.age - b.age).map((p) => html `<option value="${p.id}">${p.num} ${p.name} · ${p.natPos} · ${Math.round(p.gg)} · ${p.age}</option>`)}</select></label>`)}</div>` : ''}

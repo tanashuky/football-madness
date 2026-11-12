@@ -147,4 +147,5 @@ export const en: Record<string, string> = {
   'auth.with': 'Sign in with {p}', 'auth.withEmail': 'Sign in with e-mail', 'auth.forgot': 'Forgot my password',
   'auth.reset': 'Password reset', 'auth.reset.desc': 'Enter your e-mail; we will send you a message to renew your password.', 'auth.reset.send': 'Send', 'auth.reset.link': 'E-mail sent. Tap the link in it; set your new password on the page that opens, then sign in here.', 'auth.newpw': 'New password', 'auth.changepw': 'Change password',
   'login.notconfirmed': 'E-mail not confirmed yet', 'login.rate': 'Too many attempts. Try again a little later.', 'login.exists': 'An account with this e-mail already exists. Sign in or reset your password.',
+  'met.fat': 'Fatigue',
 };

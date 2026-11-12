@@ -20,7 +20,7 @@ h4 { font-size: 1.1em; margin-top: 12px; }
 p { margin: 6px 0; }
 .muted { color: var(--muted); } .small { font-size: .9em; } .center { text-align: center; } .gap { margin-top: 10px; } .pos { color: var(--good); } .neg { color: var(--bad); }
 /* kabuk */
-#app { display: grid; grid-template-rows: auto auto 1fr auto; height: 100%; padding-top: var(--sat); padding-bottom: var(--sab); }
+#app { display: flex; flex-direction: column; height: 100%; padding-top: var(--sat); padding-bottom: var(--sab); }
 #aTop { display: flex; align-items: center; gap: 6px; height: var(--top-h); padding: 0 calc(8px + var(--sar)) 0 calc(8px + var(--sal)); background: var(--stand); border-bottom: 1px solid var(--line); }
 #aTitle { flex: 1; font-family: var(--font-display); font-weight: 700; font-size: 1.35em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 8px; }
 #aTitle span { color: var(--flood); }
@@ -32,7 +32,7 @@ p { margin: 6px 0; }
 #aTabs { display: flex; background: var(--stand); border-bottom: 1px solid var(--line); height: var(--tab-h); padding: 0 var(--sar) 0 var(--sal); }
 #aTabs button { flex: 1; border: 0; background: transparent; color: var(--muted); font-family: var(--font-display); font-weight: 600; font-size: 1.05em; letter-spacing: .02em; border-bottom: 3px solid transparent; cursor: pointer; }
 #aTabs button[aria-selected="true"] { color: var(--chalk); border-bottom-color: var(--flood); }
-#aBody { overflow: auto; padding: 12px calc(12px + var(--sar)) 24px calc(12px + var(--sal)); -webkit-overflow-scrolling: touch; }
+#aBody { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 12px calc(12px + var(--sar)) 24px calc(12px + var(--sal)); -webkit-overflow-scrolling: touch; }
 #aFoot { display: flex; gap: 8px; padding: 10px calc(12px + var(--sar)) 10px calc(12px + var(--sal)); background: var(--stand); border-top: 1px solid var(--line); min-height: var(--foot-h); }
 #aFoot .btn { flex: 1; min-height: 44px; }
 body.bare #aTop, body.bare #aTabs { display: none; }
@@ -167,3 +167,16 @@ body.teamplay .mTicker { display: none; }
 input.code { background: #0b100e; color: var(--chalk); border: 1px solid var(--line); border-radius: 8px; padding: 10px; font-size: 1.5em; letter-spacing: 8px; text-align: center; width: 100%; }
 .spinner { width: 34px; height: 34px; border: 3px solid var(--line); border-top-color: var(--flood); border-radius: 50%; margin: 22px auto 8px; animation: spin 0.9s linear infinite; } @keyframes spin { to { transform: rotate(360deg); } }
 .login .logo { font-size: 3.4em; margin-top: 6vh; }
+/* arayuz denetimi (12 Kasim) */
+#aTop, #aTabs, #aFoot { flex: 0 0 auto; }
+/* yatay telefon: ust cubuk ve sekmeler alcak, kartlar siki (icerige yer kalsin) */
+@media (max-height: 480px) {
+  :root { --top-h: 40px; --tab-h: 34px; --foot-h: 50px; }
+  #aTitle { font-size: 1.15em; } .ib { width: 34px; height: 34px; font-size: 1.1em; }
+  #aBody { padding-top: 8px; padding-bottom: 12px; } .card { padding: 9px 12px; margin-bottom: 8px; }
+  #aFoot { padding-top: 6px; padding-bottom: 6px; } #aFoot .btn { min-height: 38px; }
+  .login { padding-top: 10px; } .login .logo { margin-top: 0; font-size: 2.6em; }
+}
+/* kadro: dar ekranda futbolcu karti listenin ustunde (dokununca asagi kaydirmak gerekmesin) */
+@media (max-width: 640px) { .cards.squadgrid > div:last-child { order: -1; position: sticky; top: -12px; z-index: 3; } .cards.squadgrid > div:last-child .card { box-shadow: 0 8px 18px rgba(0,0,0,.45); } }
+.panel .phead { display: flex; align-items: center; justify-content: space-between; gap: 10px; position: sticky; top: -16px; background: var(--stand); z-index: 4; padding: 4px 0; margin-top: -4px; } .panel .phead h3 { margin: 0; }

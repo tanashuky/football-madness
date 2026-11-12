@@ -270,3 +270,11 @@ Commit sırası: 8ee1406 hız/pencereler → dd51833 şekiller → 7402036 göre
 - Ayarlar › Hesap: Şimdi eşitle · Şifre değiştir · Hesap değiştir / çıkış.
 - Demo (kök sayfa) giriş ekranına "Yeni sürüme geç" bağlantısı eklendi; yeni akış yalnız `app/`'ta.
 - Playwright (auth2.cjs, sahte sunucu): 13 adım ✓ (şifre eşleşmesi, onaysız devam uyarısı, onay sonrası kurulum, kalıcı oturum, kayıtlı e-posta reddi, sağlayıcılar pasif, yanlış şifre, sıfırlama, yeni cihazda bulut kulübü).
+
+## 12 Kasım — arayüz denetimi (telefon boyutu, dikey + yatay, 60 ekran görüntüsü: fm-proto/shots.cjs)
+- **Hata:** sekmesiz ekranlarda (Kulüp kurulumu, Yeni kariyer) alt düğme ekranın yarısını kaplıyordu — kabuk CSS grid'di, sekme çubuğu gizlenince satırlar kayıyordu. Kabuk flex sütuna çevrildi.
+- Yatay telefonda üst çubuk + sekmeler + alt çubuk içeriğe ~230 px bırakıyordu → alçak yükseklikte (≤480 px) kompakt çubuklar ve sıkı kartlar.
+- Kadro (dikey): futbolcu kartı listenin altında kalıyordu (dokununca aşağı kaydırmak gerekiyordu) → kart üstte ve yapışkan.
+- Maç içi panel: "Devam" düğmesi kaydırmanın altında kalıyordu → başlık satırına alındı (yapışkan).
+- Küçük ekranda varsayılan kamera Yakın (tam sahada oyuncu 6 px, numara okunmuyordu). Yalnız yeni kayıtlar için.
+- Takım durumu: "yorgunluk" → "Yorgunluk".
