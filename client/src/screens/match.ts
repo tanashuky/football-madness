@@ -5,9 +5,12 @@ import { t, money } from '../core/i18n.js';
 import { go, home, register, render } from '../core/router.js';
 import { store, save } from '../core/store.js';
 import { card, dot, muted, sel, seg, tag } from '../core/ui.js';
+import { toast } from '../core/ui.js';
 import { getLang } from '../core/i18n.js';
 import { TEMPLATES, DIFFS, botTeamIn, tplById } from '../model/templates.js';
 import { botLeagueTeamIn } from '../model/bots.js';
+import { applyMyResult } from '../model/career.js';
+import { MATCH_MIN } from '../model/manage.js';
 import { avgGG, ensureLineup, userTeamIn } from '../model/club.js';
 import { form } from '../model/career.js';
 import { matchLineup, unavailable } from '../model/manage.js';
@@ -53,6 +56,11 @@ register('room', (c: RoomCtx) => {
       ($('rCam') as HTMLSelectElement).onchange = () => { store.db.settings.cam = ($('rCam') as HTMLSelectElement).value as any; save(); };
       $('rStart')!.onclick = () => startMatchFlow(c, me, opp, home_, false);
       const sb = $('rSim'); if (sb) sb.onclick = () => startMatchFlow(c, me, opp, home_, true);
+      // IFAB Kural 3: sahaya 7 oyuncu cikaramayan takim maca cikamaz -> hukmen 0-3
+      if (c.kind === 'career' && !c.cup && store.db.career && store.db.career.roster.filter((p) => !unavailable(p, false)).length < MATCH_MIN) {
+        const k2 = store.db.career; const rs = $('rStart')!; rs.textContent = t('room.forfeit.btn'); if (sb) sb.hidden = true; toast(t('room.forfeit'), 'err');
+        rs.onclick = () => { applyMyResult(k2, c.oppIdx!, home_, home_ ? [0, 3] : [3, 0]); save(); go('career', { tab: 'match' }); };
+      }
     } };
 });
 

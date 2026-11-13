@@ -12,8 +12,8 @@ const rnd = (a: number, b: number) => a + Math.random() * (b - a);
 // serbest futbolcular: kulubu olmayanlar. Havuzun geri kalani bot kuluplerin kadrolaridir (simule havuz yok).
 function newFree(c: Career): PoolItem {
   const base = Math.round(c.league.teams.reduce((a, t) => a + t.gg, 0) / c.league.teams.length);
-  const star = Math.random() < 0.12; // arada bir yildiz serbest kalir
-  const p = mkPlayer(c, star ? [base + 5, base + 13] : [base - 12, base + 4], [18, 34], star ? 0.8 : 0.3);
+  const star = Math.random() < 0.2; // arada bir yildiz serbest kalir
+  const p = mkPlayer(c, star ? [base + 4, base + 14] : [base - 12, base + 4], [18, 34], star ? 0.8 : 0.3);
   return { p, price: round10(marketValue(p) * rnd(0.85, 1)), left: 0, fresh: false, club: '' };
 }
 export function openWindow(c: Career, kind: 'pre' | 'mid') {
@@ -24,16 +24,16 @@ export function openWindow(c: Career, kind: 'pre' | 'mid') {
   if (kind === 'mid') genYouths(c); // devre arasi genc cikisi
 }
 // pazar: serbestler + bot kadrolari. ask: hemen alinabilecek fiyat (serbest ya da kulubun satis listesinde); yoksa teklif gerekir
-export interface MarketRow { p: RosterPlayer; ti: number; club: string; ask?: number }
+export interface MarketRow { p: RosterPlayer; ti: number; club: string; ask?: number; listed?: boolean }
 const replaceLeft = (c: Career) => c.tw.open && !c.tw.closing && c.tw.weeks - c.tw.week >= 1;
 export function market(c: Career): MarketRow[] {
-  ensureBots(c); const out: MarketRow[] = c.pool.map((it) => ({ p: it.p, ti: -1, club: '', ask: it.price }));
-  c.league.teams.forEach((tm, ti) => { if (tm.me) return; for (const p of tm.roster || []) { const vd = verdict(c, ti, p, true); out.push({ p, ti, club: tm.short, ask: vd.listed && !vd.refuse ? vd.min : undefined }); } });
+  ensureBots(c); const out: MarketRow[] = c.pool.map((it) => ({ p: it.p, ti: -1, club: '', ask: it.price, listed: true }));
+  c.league.teams.forEach((tm, ti) => { if (tm.me) return; for (const p of tm.roster || []) { const vd = verdict(c, ti, p, true); out.push({ p, ti, club: tm.short, ask: vd.refuse ? undefined : vd.ask, listed: vd.listed }); } });
   return out;
 }
 export function findMarket(c: Career, id: string): MarketRow | null {
   const it = c.pool.find((x) => x.p.id === id); if (it) return { p: it.p, ti: -1, club: '', ask: it.price };
-  for (let ti = 0; ti < c.league.teams.length; ti++) { const tm = c.league.teams[ti]; if (tm.me) continue; const p = (tm.roster || []).find((q) => q.id === id); if (p) { const vd = verdict(c, ti, p, true); return { p, ti, club: tm.short, ask: vd.listed && !vd.refuse ? vd.min : undefined }; } }
+  for (let ti = 0; ti < c.league.teams.length; ti++) { const tm = c.league.teams[ti]; if (tm.me) continue; const p = (tm.roster || []).find((q) => q.id === id); if (p) { const vd = verdict(c, ti, p, true); return { p, ti, club: tm.short, ask: vd.refuse ? undefined : vd.ask, listed: vd.listed }; } }
   return null;
 }
 function take(c: Career, m: MarketRow, price: number): boolean {
@@ -76,11 +76,11 @@ function resolve(c: Career) {
     if (o.state === 'counter') { o.state = 'rejected'; o.why = 'low'; continue; } // cevaplanmayan karsi teklif duser
     if (o.state !== 'pending') continue;
     const m = findMarket(c, o.id); if (!m) { o.state = 'gone'; continue; }
-    let min: number;
-    if (m.ti < 0) min = round10(m.ask! * 0.9); // serbest futbolcu: imza parasi
-    else { const vd = verdict(c, m.ti, m.p, canReplace); if (vd.refuse) { o.state = 'rejected'; o.why = vd.refuse; continue; } min = vd.min; }
+    let min: number, ask: number; // alt limit ve istenen fiyat
+    if (m.ti < 0) { ask = m.ask!; min = round10(ask * 0.8); } // serbest futbolcu: imza parasi
+    else { const vd = verdict(c, m.ti, m.p, canReplace); if (vd.refuse) { o.state = 'rejected'; o.why = vd.refuse; continue; } min = vd.min; ask = vd.ask ?? round10(min * 1.3); }
     if (o.amount >= min) { if (c.fm >= o.amount && c.roster.length < ROSTER_MAX && take(c, m, o.amount)) o.state = 'accepted'; else o.state = 'failed'; }
-    else if (o.amount >= min * 0.8) { o.state = 'counter'; o.counter = min; }
+    else if (o.amount >= min * 0.6) { o.state = 'counter'; o.counter = round10((min + ask) / 2); } // alt limitin altinda: kulup arada bir fiyat ister
     else { o.state = 'rejected'; o.why = 'low'; }
   }
   // gecen haftanin bot teklifleri: listedeki futbolcuda istenen fiyat karsilandiysa satis tamamlanir, digerleri duser

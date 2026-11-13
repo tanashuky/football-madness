@@ -61,7 +61,7 @@ export function renewTab(k) {
     let body;
     if (V.sub === 'pool') {
         const all = market(k);
-        const rows = all.filter((m) => (!f.pos || m.p.natPos === f.pos) && (!f.st || (f.st === 'free' ? m.ti < 0 : m.ask !== undefined)) && m.p.gg >= f.ggMin && m.p.gg <= f.ggMax && m.p.age <= f.ageMax && (!f.trait || m.p.traits.length > 0) && (!f.budget || (m.ask ?? marketValue(m.p)) <= k.fm))
+        const rows = all.filter((m) => (!f.pos || m.p.natPos === f.pos) && (!f.st || (f.st === 'free' ? m.ti < 0 : !!m.listed)) && m.p.gg >= f.ggMin && m.p.gg <= f.ggMax && m.p.age <= f.ageMax && (!f.trait || m.p.traits.length > 0) && (!f.budget || (m.ask ?? marketValue(m.p)) <= k.fm))
             .map((m) => { const o = offerOf(k, m.p.id); return { p: m.p, price: m.ask, club: m.club, note: o ? html ` ${tag(t('offer.' + o.state), o.state === 'counter' ? 'y' : '')}` : '' }; });
         const opt = (vals, cur, any, lab) => vals.map((v) => html `<option value="${v}" ${v === cur ? raw('selected') : ''}>${v === any ? t('flt.any') : lab(v)}</option>`);
         body = html `<div class="filters">
@@ -97,7 +97,7 @@ export function renewTab(k) {
         body = card(t('renew.academy'), html `${k.youth.length ? html `<div class="list compact">${k.youth.map((p) => html `<div class="li static"><div class="num">${p.natPos}</div><div><div class="nm">${p.name}</div><div class="sub">${t('squad.gg')} ${Math.round(p.gg)} · ${p.age} ${t('squad.age')}${p.traits.map((x) => ' · ' + x).join('')}</div></div><div class="acts"><button class="btn sm prim" data-promo="${p.id}" ${k.roster.length >= ROSTER_MAX ? raw('disabled') : ''}>${t('youth.promote')}</button></div></div>`)}</div>` : muted(k.facilities.academy.level ? t('youth.none') : t('fac.academy.none'))}${muted(t('youth.rule'))}`);
     }
     return html `${windowBar(k)}<div class="seg sub wrapseg" id="rSub">${subs.map(([v, l]) => html `<button data-v="${v}" aria-pressed="${V.sub === v}">${l}</button>`)}</div>${body}
-    ${V.sub === 'pool' && k.news.length ? card(t('mng.news'), html `${k.news.map((x) => { const [a, b, n, g] = x.split('|'); return html `<p class="muted small">${a === 'buy' ? t('news.buy', { club: b, name: n, gg: g }) : t('news.sell', { club: b, name: n, gg: g })}</p>`; })}`) : ''}`;
+    ${V.sub === 'pool' && k.news.length ? card(t('mng.news'), html `${k.news.map((x) => { const [a, b, n, g] = x.split('|'); return html `<p class="muted small">${t(a === 'buy' ? 'news.buy' : a === 'free' ? 'news.free' : 'news.sell', { club: b, name: n, gg: g })}</p>`; })}`) : ''}`;
 }
 export function bindRenew(root, k, re, fail) {
     bindWindowBar(k);
@@ -177,7 +177,7 @@ register('player', (c) => {
     if (c.src === 'pool' && it)
         actions = card(t('pl.actions'), html `
       ${it.ask !== undefined ? html `<div class="row"><button class="btn prim" id="pBuy" ${!deal || full || k.fm < it.ask ? raw('disabled') : ''}>${t('pl.buynow', { fm: money(it.ask) })}</button></div>` : muted(t('pl.notlisted', { club: it.club }))}
-      <div class="row"><label class="f inline">${t('pl.offer')} ${pct(marketValue(p), [70, 80, 90, 100, 110, 125, 150, 200], 'pOfferPct', it.ask !== undefined ? 90 : 110)}</label><button class="btn" id="pOffer" ${!deal ? raw('disabled') : ''}>${o ? t('pl.offer.update') : t('pl.offer.send')}</button></div>
+      <div class="row"><label class="f inline">${t('pl.offer')} ${pct(marketValue(p), [0, 25, 50, 70, 80, 90, 100, 110, 125, 150, 200], 'pOfferPct', it.ask !== undefined ? Math.max(25, [25, 50, 70, 80, 90, 100, 110, 125].filter((x) => (marketValue(p) * x) / 100 <= it.ask * 0.92).pop() || 25) : 110)}</label><button class="btn" id="pOffer" ${!deal ? raw('disabled') : ''}>${o ? t('pl.offer.update') : t('pl.offer.send')}</button></div>
       ${o ? html `<p class="muted small">${t('pl.offer.state', { fm: money(o.amount), s: t('offer.' + o.state) })}${o.state === 'counter' ? ` ${money(o.counter || 0)}` : ''}${o.state === 'rejected' && o.why ? ' · ' + t('why.' + o.why) : ''}</p>${o.state === 'counter' ? html `<div class="row"><button class="btn prim sm" id="pCounter">${t('offer.accept')} · ${money(o.counter || 0)}</button></div>` : ''}` : ''}
       <p class="muted small">${deal ? t('pl.offer.hint') : k.tw.open ? t('tw.closing.desc') : t('tw.closed.desc')} · ${t('home.wallet', { fm: money(k.fm) })}</p>`);
     else if (c.src === 'squad') {

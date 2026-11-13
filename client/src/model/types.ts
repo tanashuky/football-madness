@@ -22,7 +22,8 @@ export interface TeamSetup {
   lineup?: string[]; // 11 futbolcu id'si, slot sirasinda
   duties: Record<string, Duty>; rules: string[]; shapeDef?: Shape; shapeAtt?: Shape; rotations?: string[][];
 }
-export interface LeagueTeam { name: string; short: string; color: string; color2: string; formation: Formation; doctrine: Doctrine; gg: number; me?: boolean; roster?: RosterPlayer[]; fm?: number; style?: 'seller' | 'balanced' | 'ambitious' }
+export interface LeagueTeam { name: string; short: string; color: string; color2: string; formation: Formation; doctrine: Doctrine; gg: number; me?: boolean; roster?: RosterPlayer[]; fm?: number; style?: 'seller' | 'balanced' | 'ambitious';
+  goal?: 'title' | 'top' | 'mid' | 'stay'; stad?: number; acad?: number; staffLv?: number; ticket?: number; tm?: number; tb?: number; lastAtt?: number }
 export interface TableRow { p: number; w: number; d: number; l: number; gf: number; ga: number; pts: number }
 export interface LeagueResult { week: number; a: number; b: number; ga_: number; gb_: number }
 export interface League {

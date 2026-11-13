@@ -298,3 +298,12 @@ Commit sırası: 8ee1406 hız/pencereler → dd51833 şekiller → 7402036 göre
 - **Sezon dönümü:** botların futbolcuları da yaşlanır, gelişir, emekli olur; eksik mevkiler altyapıdan tamamlanır.
 - Test: `fm-proto/bots.cjs` (karar senaryoları + 3 sezon), `transfer.cjs` güncellendi.
 - Onay bekleyen sayılar: bot kasası (sezon başı 1.500 + sıra primi, devre arası 500), yedeksiz mevki primi (+8 puan sayılır), karşı teklif aralığı (en düşük kabulün %80'i ve üstü).
+
+## Alt/üst limit, bedelsiz bırakma, kadro sınırları, bot ekonomisi (istemci)
+- **Kadro:** geniş kadro en çok 25 (bot ve kullanıcı), maç kadrosu 18 (11 + 7). Satışla 11'in altına inilemez; sahaya 7 oyuncu çıkaramayan takım hükmen 0–3 kaybeder (IFAB Kural 3; şimdilik yalnız lig maçında, kupada değil). Kaleci alt sınırı kaldırıldı.
+- **Bilinen eksik:** 7–10 sağlam oyuncu kaldığında motor eksik kadroyla oynatamıyor; sakat/cezalı oyuncu dizilişte kalıyor.
+- **Alt limit / istenen fiyat (`verdict`)**: istenmeyen oyuncu (yaşlı, maaşı yük, kadro dışı, kasa ekside) alt limit 0, istenen değerin %30–50'si; fazlalık yedek %65 / %90; ilk 11 oyuncusu en az %110, istenen ×1,27; yedeksiz ya da yıldız yalnız teklifle. Teklif alt limitin altındaysa kulüp alt limit ile istenen fiyatın ortasını karşı teklif eder.
+- **Bedelsiz bırakma:** 25 kişi ya da maaş bütçesi aşılırsa ve dönemin son haftasında alıcı bulamayan istenmeyen oyuncu serbest kalır (haberlerde görünür).
+- **Bot ekonomisi (kullanıcıyla aynı formüller):** başlangıç kasası, sponsor, sezon ödülü, maç primi, iç sahada bilet (aynı seyirci formülü); futbolcu ve ekip maaşı, altyapı bakımı. Stadyum, altyapı, ekip seviyesi ve bilet fiyatı kararlarını kendileri verir (bilet: tribün dolduysa bir kademe artır, %70'in altındaysa indir).
+- **Hedef ve karakter:** sezon başında kadro gücüne göre hedef (şampiyonluk / üst sıra / orta sıra / ligde kalma). Karakter her 4 lig haftasında ve dönem açılışlarında gözden geçirilir: hedefin gerisinde → tasarruf (satıcı), beklenmedik başarı → hırslı; kasa bolsa bir kademe iddialı, darsa satıcı. Bütçe transfer / tesis / yedek akçe olarak bölünür; satış gelirinin karaktere göre %40–90'ı aynı dönemde transfere döner.
+- 3 sezonluk denemede kasalar artık birikmiyor (9–26 bin arası), tesisler kademeli yükseliyor, kimse kalıcı ekside kalmıyor.

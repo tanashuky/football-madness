@@ -6,8 +6,8 @@ const rnd = (a, b) => a + Math.random() * (b - a);
 // serbest futbolcular: kulubu olmayanlar. Havuzun geri kalani bot kuluplerin kadrolaridir (simule havuz yok).
 function newFree(c) {
     const base = Math.round(c.league.teams.reduce((a, t) => a + t.gg, 0) / c.league.teams.length);
-    const star = Math.random() < 0.12; // arada bir yildiz serbest kalir
-    const p = mkPlayer(c, star ? [base + 5, base + 13] : [base - 12, base + 4], [18, 34], star ? 0.8 : 0.3);
+    const star = Math.random() < 0.2; // arada bir yildiz serbest kalir
+    const p = mkPlayer(c, star ? [base + 4, base + 14] : [base - 12, base + 4], [18, 34], star ? 0.8 : 0.3);
     return { p, price: round10(marketValue(p) * rnd(0.85, 1)), left: 0, fresh: false, club: '' };
 }
 export function openWindow(c, kind) {
@@ -23,11 +23,11 @@ export function openWindow(c, kind) {
 const replaceLeft = (c) => c.tw.open && !c.tw.closing && c.tw.weeks - c.tw.week >= 1;
 export function market(c) {
     ensureBots(c);
-    const out = c.pool.map((it) => ({ p: it.p, ti: -1, club: '', ask: it.price }));
+    const out = c.pool.map((it) => ({ p: it.p, ti: -1, club: '', ask: it.price, listed: true }));
     c.league.teams.forEach((tm, ti) => { if (tm.me)
         return; for (const p of tm.roster || []) {
         const vd = verdict(c, ti, p, true);
-        out.push({ p, ti, club: tm.short, ask: vd.listed && !vd.refuse ? vd.min : undefined });
+        out.push({ p, ti, club: tm.short, ask: vd.refuse ? undefined : vd.ask, listed: vd.listed });
     } });
     return out;
 }
@@ -42,7 +42,7 @@ export function findMarket(c, id) {
         const p = (tm.roster || []).find((q) => q.id === id);
         if (p) {
             const vd = verdict(c, ti, p, true);
-            return { p, ti, club: tm.short, ask: vd.listed && !vd.refuse ? vd.min : undefined };
+            return { p, ti, club: tm.short, ask: vd.refuse ? undefined : vd.ask, listed: vd.listed };
         }
     }
     return null;
@@ -160,9 +160,11 @@ function resolve(c) {
             o.state = 'gone';
             continue;
         }
-        let min;
-        if (m.ti < 0)
-            min = round10(m.ask * 0.9); // serbest futbolcu: imza parasi
+        let min, ask; // alt limit ve istenen fiyat
+        if (m.ti < 0) {
+            ask = m.ask;
+            min = round10(ask * 0.8);
+        } // serbest futbolcu: imza parasi
         else {
             const vd = verdict(c, m.ti, m.p, canReplace);
             if (vd.refuse) {
@@ -171,6 +173,7 @@ function resolve(c) {
                 continue;
             }
             min = vd.min;
+            ask = vd.ask ?? round10(min * 1.3);
         }
         if (o.amount >= min) {
             if (c.fm >= o.amount && c.roster.length < ROSTER_MAX && take(c, m, o.amount))
@@ -178,10 +181,10 @@ function resolve(c) {
             else
                 o.state = 'failed';
         }
-        else if (o.amount >= min * 0.8) {
+        else if (o.amount >= min * 0.6) {
             o.state = 'counter';
-            o.counter = min;
-        }
+            o.counter = round10((min + ask) / 2);
+        } // alt limitin altinda: kulup arada bir fiyat ister
         else {
             o.state = 'rejected';
             o.why = 'low';

@@ -108,7 +108,7 @@ export const en = {
     'scout.started': 'Scout sent', 'scout.running': 'Report in progress.', 'scout.sign': 'Sign', 'scout.drop': 'Pass', 'scout.signed': 'Player signed',
     'mng.roster': 'squad {n}/{max}', 'mng.pool': 'Transfer pool', 'mng.pool.sub': 'price = market value · refreshed each season', 'mng.pool.empty': 'The pool is empty; it refreshes at season start.', 'mng.haggle': 'Haggle', 'mng.buy': 'Buy', 'mng.sell': 'Sell', 'mng.sellTitle': 'Sales', 'mng.sell.sub': 'clubs pay 90% of market value',
     'mng.haggle.ok': 'Haggling worked: −10%', 'mng.haggle.no': 'The seller raised the price: +10%', 'mng.bought': 'Transfer done', 'mng.sold': 'Player sold', 'mng.sell.confirm': 'Sell {name} for {fm}?', 'mng.upkeep': 'Academy upkeep', 'mng.boost': 'Speed up (−4 h)', 'mng.boosted': 'Time reduced',
-    'mng.err.busy': 'Another job is in progress', 'mng.err.fm': 'Not enough funds', 'mng.err.max': 'Already at top level', 'mng.err.limit': 'At most 2 sessions a day', 'mng.err.pick': 'Pick at least one player', 'mng.err.full': 'Squad is full', 'mng.err.min': 'The squad needs at least 14 players', 'mng.err.gk': 'At least two goalkeepers must remain', 'mng.err.no': 'Action failed',
+    'mng.err.busy': 'Another job is in progress', 'mng.err.fm': 'Not enough funds', 'mng.err.max': 'Already at top level', 'mng.err.limit': 'At most 2 sessions a day', 'mng.err.pick': 'Pick at least one player', 'mng.err.full': 'Squad is full', 'mng.err.min': 'The squad needs at least 11 players', 'mng.err.gk': 'At least two goalkeepers must remain', 'mng.err.no': 'Action failed',
     'done.fac': 'Construction finished', 'done.train': 'Training finished', 'done.scout': 'Scout report arrived',
     // --- staff, cup, injuries, income ---
     'club.staff': 'Staff', 'staff.sub': 'weekly wages {w} · facilities score {ts}', 'staff.rule': 'Hiring or upgrading costs two weeks of wages; wages are paid every match week. Downgrading is free.', 'staff.wages': 'Staff wages',
@@ -156,4 +156,5 @@ export const en = {
     'pool.ask': 'make offer', 'pool.count': '{n} / {all} players', 'flt.st': 'Status', 'flt.sale': 'For sale', 'list.unlisted': 'not listed',
     'pl.notlisted': '{club} has not listed this player; send an offer to sign him.',
     'why.only': 'they have no one else in that position and no time to replace him', 'why.key': 'a key player; they will not let him go this late', 'why.star': 'their in-form star; not for sale', 'why.min': 'their squad is at the minimum', 'why.low': 'offer judged too low',
+    'news.free': '{club} released {name} (OVR {gg}); now a free agent', 'room.forfeit': 'You cannot field 7 players. The match is forfeited 0–3.', 'room.forfeit.btn': 'Accept the forfeit',
 };

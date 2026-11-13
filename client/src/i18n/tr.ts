@@ -120,7 +120,7 @@ export const tr: Record<string, string> = {
   'scout.started': 'Scout yola çıktı', 'scout.running': 'Rapor hazırlanıyor.', 'scout.sign': 'Kadroya kat', 'scout.drop': 'Vazgeç', 'scout.signed': 'Futbolcu kadroya katıldı',
   'mng.roster': 'kadro {n}/{max}', 'mng.pool': 'Transfer havuzu', 'mng.pool.sub': 'fiyat = piyasa değeri · sezon başı yenilenir', 'mng.pool.empty': 'Havuz boş; sezon başında yenilenir.', 'mng.haggle': 'Pazarlık', 'mng.buy': 'Satın al', 'mng.sell': 'Sat', 'mng.sellTitle': 'Satış', 'mng.sell.sub': 'kulüpler piyasa değerinin %90\'ını öder',
   'mng.haggle.ok': 'Pazarlık tuttu: −%10', 'mng.haggle.no': 'Satıcı fiyatı yükseltti: +%10', 'mng.bought': 'Transfer tamam', 'mng.sold': 'Futbolcu satıldı', 'mng.sell.confirm': '{name} {fm} karşılığında satılsın mı?', 'mng.upkeep': 'Altyapı bakımı', 'mng.boost': 'Hızlandır (−4 sa)', 'mng.boosted': 'Süre kısaldı',
-  'mng.err.busy': 'Şu anda süren bir iş var', 'mng.err.fm': 'Bütçe yetmiyor', 'mng.err.max': 'En üst seviyede', 'mng.err.limit': 'Günde en fazla 2 seans', 'mng.err.pick': 'En az bir futbolcu seç', 'mng.err.full': 'Kadro dolu', 'mng.err.min': 'Kadro en az 14 futbolcu olmalı', 'mng.err.gk': 'En az iki kaleci kalmalı', 'mng.err.no': 'İşlem yapılamadı',
+  'mng.err.busy': 'Şu anda süren bir iş var', 'mng.err.fm': 'Bütçe yetmiyor', 'mng.err.max': 'En üst seviyede', 'mng.err.limit': 'Günde en fazla 2 seans', 'mng.err.pick': 'En az bir futbolcu seç', 'mng.err.full': 'Kadro dolu', 'mng.err.min': 'Kadro en az 11 futbolcu olmalı', 'mng.err.gk': 'En az iki kaleci kalmalı', 'mng.err.no': 'İşlem yapılamadı',
   'done.fac': 'İnşaat bitti', 'done.train': 'Antrenman bitti', 'done.scout': 'Scout raporu geldi',
   // --- ekipler, kupa, sakatlik, gelir ---
   'club.staff': 'Ekipler', 'staff.sub': 'haftalık maaş {w} · tesisleşme {ts}', 'staff.rule': 'İşe alma ya da seviye yükseltme ücreti 2 haftalık maaştır; maaş her maç haftasında ödenir. Seviye düşürmek ücretsizdir.', 'staff.wages': 'Ekip maaşları',
@@ -168,4 +168,5 @@ export const tr: Record<string, string> = {
   'pool.ask': 'teklif ver', 'pool.count': '{n} / {all} futbolcu', 'flt.st': 'Durum', 'flt.sale': 'Satılık', 'list.unlisted': 'listede değil',
   'pl.notlisted': '{club} bu futbolcuyu satış listesine koymadı; almak için teklif gönder.',
   'why.only': 'o mevkide başka oyuncuları yok, yerine adam alacak zaman kalmadı', 'why.key': 'takımın kilit oyuncusu, dönemin sonunda bırakmıyorlar', 'why.star': 'takımın yıldızı ve formda; satılık değil', 'why.min': 'kadroları alt sınırda', 'why.low': 'teklif düşük bulundu',
+  'news.free': '{club}, {name} (GG {gg}) ile yollarını ayırdı; futbolcu serbest', 'room.forfeit': 'Sahaya çıkabilecek 7 oyuncun yok. Maç hükmen 0–3 kaybedilir.', 'room.forfeit.btn': 'Hükmen yenilgiyi kabul et',
 };

@@ -6,7 +6,7 @@ import { newRoster, newTeamSetup } from './club.js';
 import { TEMPLATES, botTeamIn } from './templates.js';
 import { STADIUM_CAP, afterWeek, fixLineup, gate, paySponsor, seasonPrize, seasonTurn } from './manage.js';
 import { openWindow } from './transfer.js';
-import { botLeagueTeamIn, botsSeasonTurn } from './bots.js';
+import { botLeagueTeamIn, botsSeasonTurn, botsWeekly } from './bots.js';
 import { newCup } from './cup.js';
 export { STADIUM_CAP };
 
@@ -75,19 +75,20 @@ export function applyMyResult(c: Career, oppIdx: number, home: boolean, goals: [
   c.tm = Math.max(0, Math.min(100, c.tm + (home ? (result === 'win' ? 3 : result === 'draw' ? -1 : c.staff.fans >= 3 ? -3 : -4) : result === 'win' ? 2 : result === 'draw' ? 0 : -2)));
   c.metrics.M = Math.max(30, Math.min(95, c.metrics.M + (result === 'win' ? 2 : result === 'loss' ? -2 : 0)));
   afterWeek(c, c.team.lineup || []);
+  botsWeekly(c);
   l.week++;
   if (!c.tw.midDone && l.week === Math.floor(l.fixtures.length / 2)) openWindow(c, 'mid'); // devre arasi transfer donemi
   return { fm, rank: rank(l), result };
 }
-export function skipWeek(c: Career) { simOthers(c, false); afterWeek(c, [], false); c.league.week++; if (!c.tw.midDone && c.league.week === Math.floor(c.league.fixtures.length / 2)) openWindow(c, 'mid'); }
+export function skipWeek(c: Career) { simOthers(c, false); afterWeek(c, [], false); botsWeekly(c); c.league.week++; if (!c.tw.midDone && c.league.week === Math.floor(c.league.fixtures.length / 2)) openWindow(c, 'mid'); }
 // sezon sonu: kupa ve tarihce; ayni lig yeni sezon (fikstur ayni siraya, tablo sifir)
 export function closeSeason(c: Career): { youths: RosterPlayer[]; prize: number; scouts: number; rank: number } {
-  const l = c.league; const r = rank(l); const me = l.table[0];
+  const l = c.league; const r = rank(l); const me = l.table[0]; const finalOrder = order(l);
   const pz = seasonPrize(c, r, l.teams.length);
   c.history.push({ season: l.season, rank: r, w: me.w, d: me.d, l: me.l });
   if (r === 1) c.trophies.push({ season: l.season, kind: 'league', name: 'Kariyer Ligi' });
   l.season++; l.week = 0; l.results = []; l.table = emptyTable(l.teams.length); c.stats.seasons = l.season;
-  const youths = seasonTurn(c); fixLineup(c); botsSeasonTurn(c);
+  const youths = seasonTurn(c); fixLineup(c); botsSeasonTurn(c, finalOrder);
   c.tw.midDone = false; openWindow(c, 'pre');
   paySponsor(c); c.cup = newCup(c, r); // kupa 2. sezondan itibaren, onceki sezon sirasina gore
   return { youths, prize: pz.fm, scouts: pz.scouts, rank: r };

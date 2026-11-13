@@ -15,8 +15,8 @@ const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
 // ---------- tesisler ----------
 export const STADIUM_CAP = [0, 5000, 10000, 15000, 20000, 25000, 32000, 40000, 46000, 53000, 60000];
-const STADIUM_COST = [0, 0, 4000, 6800, 11600, 19700, 33400, 56800, 96600, 164100, 279000]; // hedef seviyeye gore
-const ACADEMY = [null, { cost: 5000, weeks: 2, upkeep: 150, youth: 1, gg: [35, 45] }, { cost: 10000, weeks: 4, upkeep: 300, youth: 2, gg: [35, 47] }, { cost: 20000, weeks: 6, upkeep: 450, youth: 2, gg: [37, 49] }, { cost: 40000, weeks: 9, upkeep: 600, youth: 3, gg: [38, 50] }, { cost: 80000, weeks: 12, upkeep: 800, youth: 3, gg: [40, 52] }] as const;
+export const STADIUM_COST = [0, 0, 4000, 6800, 11600, 19700, 33400, 56800, 96600, 164100, 279000]; // hedef seviyeye gore
+export const ACADEMY = [null, { cost: 5000, weeks: 2, upkeep: 150, youth: 1, gg: [35, 45] }, { cost: 10000, weeks: 4, upkeep: 300, youth: 2, gg: [35, 47] }, { cost: 20000, weeks: 6, upkeep: 450, youth: 2, gg: [37, 49] }, { cost: 40000, weeks: 9, upkeep: 600, youth: 3, gg: [38, 50] }, { cost: 80000, weeks: 12, upkeep: 800, youth: 3, gg: [40, 52] }] as const;
 export type FacKey = 'stadium' | 'academy';
 export const FAC_MAX: Record<FacKey, number> = { stadium: 10, academy: 5 };
 export function upgradeInfo(c: Career, f: FacKey): { cost: number; ms: number; to: number } | null {
@@ -49,9 +49,9 @@ export function setStaff(c: Career, k: StaffKey, lv: number): 'ok' | 'fm' | 'no'
 export const ts = (c: Career) => Math.round(100 * ((0.3 * c.facilities.stadium.level) / 10 + (0.4 * c.facilities.academy.level) / 5 + (0.3 * (STAFF.reduce((a, k) => a + c.staff[k], 0) / 5)) / 5));
 // sponsor (1. kademe 5.000 FM/sezon, + TS/5 yuzde) ve sezon sonu odulu (sampiyon 8.000; 2. %75, 3. %60, ortalar %40 -> %20, son %10)
 export function paySponsor(c: Career) { addLedger(c, 'sponsor', Math.round(5000 * CAREER_K.income * (1 + ts(c) / 500))); }
+export function prizeFor(rank: number, n: number): number { const pct = rank === 1 ? 100 : rank === 2 ? 75 : rank === 3 ? 60 : rank === n ? 10 : n <= 5 ? 40 : 40 - (20 * (rank - 4)) / Math.max(1, n - 5); return Math.round((8000 * CAREER_K.income * pct) / 100); }
 export function seasonPrize(c: Career, rank: number, n: number): { fm: number; scouts: number } {
-  const pct = rank === 1 ? 100 : rank === 2 ? 75 : rank === 3 ? 60 : rank === n ? 10 : n <= 5 ? 40 : 40 - (20 * (rank - 4)) / Math.max(1, n - 5);
-  const fm = Math.round((8000 * CAREER_K.income * pct) / 100); addLedger(c, `prize:${rank}`, fm);
+  const fm = prizeFor(rank, n); addLedger(c, `prize:${rank}`, fm);
   const scouts = rank <= 3 ? 3 : 2; c.scoutFree += scouts;
   if (rank === 1) c.metrics.M = clamp(c.metrics.M + 8, 0, 100); else if (rank === n) c.metrics.M = clamp(c.metrics.M - 8, 0, 100);
   return { fm, scouts };
@@ -144,7 +144,7 @@ export function marketValue(p: { gg: number; age: number; traits: string[] }): n
   const ageK = p.age <= 21 ? 1.3 : p.age <= 29 ? 1.0 : p.age <= 31 ? 0.7 : p.age <= 33 ? 0.45 : 0.25;
   return Math.round((1000 * Math.exp((p.gg - 50) / 10) * ageK * Math.pow(1.15, p.traits.length)) / 10) * 10;
 }
-export const ROSTER_MIN = 14, ROSTER_MAX = 25;
+export const ROSTER_MIN = 11, ROSTER_MAX = 25, MATCH_MIN = 7; // kadro 11'in altina dusurulemez; 7'den az oyuncuyla maca cikilamaz (IFAB Kural 3)
 
 // ---------- scout ----------
 export const SCOUTS = [{ id: 'std', cost: 3000, gg: [45, 60] as [number, number], traitP: 0.4, force: false }, { id: 'good', cost: 8000, gg: [55, 70] as [number, number], traitP: 0.4, force: false }, { id: 'elite', cost: 20000, gg: [65, 78] as [number, number], traitP: 1, force: true }];
@@ -160,7 +160,7 @@ export function signFound(c: Career): boolean { const p = c.scout.found; if (!p 
 export const sellPrice = (p: RosterPlayer) => Math.round((marketValue(p) * 0.9 * (overpaid(p) ? clamp(wageFor(p.gg) / (p.wage || 1), 0.5, 1) : 1)) / 10) * 10; // bot kulupler PD'nin %90'ini oder
 export function sell(c: Career, id: string, price?: number): 'ok' | 'min' | 'gk' | 'no' {
   const i = c.roster.findIndex((p) => p.id === id); if (i < 0) return 'no'; const p = c.roster[i];
-  if (c.roster.length <= ROSTER_MIN) return 'min'; if (p.natPos === 'GK' && c.roster.filter((q) => q.natPos === 'GK').length <= 2) return 'gk';
+  if (c.roster.length <= ROSTER_MIN) return 'min';
   addLedger(c, `sell:${p.name}`, price ?? sellPrice(p)); c.roster.splice(i, 1);
   if (c.team.lineup) c.team.lineup = c.team.lineup.filter((x) => x !== id); if (c.team.duties) delete c.team.duties[id]; if (c.team.rotations) c.team.rotations = c.team.rotations.map((r) => r.filter((x) => x !== id)).filter((r) => r.length >= 2);
   return 'ok';

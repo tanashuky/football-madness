@@ -5,7 +5,7 @@ import { newRoster, newTeamSetup } from './club.js';
 import { TEMPLATES } from './templates.js';
 import { STADIUM_CAP, afterWeek, fixLineup, gate, paySponsor, seasonPrize, seasonTurn } from './manage.js';
 import { openWindow } from './transfer.js';
-import { botLeagueTeamIn, botsSeasonTurn } from './bots.js';
+import { botLeagueTeamIn, botsSeasonTurn, botsWeekly } from './bots.js';
 import { newCup } from './cup.js';
 export { STADIUM_CAP };
 export const CAREER_K = { income: 1.25, cost: 0.8, time: 0.6 };
@@ -114,18 +114,20 @@ export function applyMyResult(c, oppIdx, home, goals) {
     c.tm = Math.max(0, Math.min(100, c.tm + (home ? (result === 'win' ? 3 : result === 'draw' ? -1 : c.staff.fans >= 3 ? -3 : -4) : result === 'win' ? 2 : result === 'draw' ? 0 : -2)));
     c.metrics.M = Math.max(30, Math.min(95, c.metrics.M + (result === 'win' ? 2 : result === 'loss' ? -2 : 0)));
     afterWeek(c, c.team.lineup || []);
+    botsWeekly(c);
     l.week++;
     if (!c.tw.midDone && l.week === Math.floor(l.fixtures.length / 2))
         openWindow(c, 'mid'); // devre arasi transfer donemi
     return { fm, rank: rank(l), result };
 }
-export function skipWeek(c) { simOthers(c, false); afterWeek(c, [], false); c.league.week++; if (!c.tw.midDone && c.league.week === Math.floor(c.league.fixtures.length / 2))
+export function skipWeek(c) { simOthers(c, false); afterWeek(c, [], false); botsWeekly(c); c.league.week++; if (!c.tw.midDone && c.league.week === Math.floor(c.league.fixtures.length / 2))
     openWindow(c, 'mid'); }
 // sezon sonu: kupa ve tarihce; ayni lig yeni sezon (fikstur ayni siraya, tablo sifir)
 export function closeSeason(c) {
     const l = c.league;
     const r = rank(l);
     const me = l.table[0];
+    const finalOrder = order(l);
     const pz = seasonPrize(c, r, l.teams.length);
     c.history.push({ season: l.season, rank: r, w: me.w, d: me.d, l: me.l });
     if (r === 1)
@@ -137,7 +139,7 @@ export function closeSeason(c) {
     c.stats.seasons = l.season;
     const youths = seasonTurn(c);
     fixLineup(c);
-    botsSeasonTurn(c);
+    botsSeasonTurn(c, finalOrder);
     c.tw.midDone = false;
     openWindow(c, 'pre');
     paySponsor(c);

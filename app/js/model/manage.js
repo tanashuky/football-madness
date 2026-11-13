@@ -14,8 +14,8 @@ const rint = (a, b) => Math.floor(rnd(a, b + 1));
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 // ---------- tesisler ----------
 export const STADIUM_CAP = [0, 5000, 10000, 15000, 20000, 25000, 32000, 40000, 46000, 53000, 60000];
-const STADIUM_COST = [0, 0, 4000, 6800, 11600, 19700, 33400, 56800, 96600, 164100, 279000]; // hedef seviyeye gore
-const ACADEMY = [null, { cost: 5000, weeks: 2, upkeep: 150, youth: 1, gg: [35, 45] }, { cost: 10000, weeks: 4, upkeep: 300, youth: 2, gg: [35, 47] }, { cost: 20000, weeks: 6, upkeep: 450, youth: 2, gg: [37, 49] }, { cost: 40000, weeks: 9, upkeep: 600, youth: 3, gg: [38, 50] }, { cost: 80000, weeks: 12, upkeep: 800, youth: 3, gg: [40, 52] }];
+export const STADIUM_COST = [0, 0, 4000, 6800, 11600, 19700, 33400, 56800, 96600, 164100, 279000]; // hedef seviyeye gore
+export const ACADEMY = [null, { cost: 5000, weeks: 2, upkeep: 150, youth: 1, gg: [35, 45] }, { cost: 10000, weeks: 4, upkeep: 300, youth: 2, gg: [35, 47] }, { cost: 20000, weeks: 6, upkeep: 450, youth: 2, gg: [37, 49] }, { cost: 40000, weeks: 9, upkeep: 600, youth: 3, gg: [38, 50] }, { cost: 80000, weeks: 12, upkeep: 800, youth: 3, gg: [40, 52] }];
 export const FAC_MAX = { stadium: 10, academy: 5 };
 export function upgradeInfo(c, f) {
     const to = c.facilities[f].level + 1;
@@ -67,9 +67,9 @@ export function setStaff(c, k, lv) {
 export const ts = (c) => Math.round(100 * ((0.3 * c.facilities.stadium.level) / 10 + (0.4 * c.facilities.academy.level) / 5 + (0.3 * (STAFF.reduce((a, k) => a + c.staff[k], 0) / 5)) / 5));
 // sponsor (1. kademe 5.000 FM/sezon, + TS/5 yuzde) ve sezon sonu odulu (sampiyon 8.000; 2. %75, 3. %60, ortalar %40 -> %20, son %10)
 export function paySponsor(c) { addLedger(c, 'sponsor', Math.round(5000 * CAREER_K.income * (1 + ts(c) / 500))); }
+export function prizeFor(rank, n) { const pct = rank === 1 ? 100 : rank === 2 ? 75 : rank === 3 ? 60 : rank === n ? 10 : n <= 5 ? 40 : 40 - (20 * (rank - 4)) / Math.max(1, n - 5); return Math.round((8000 * CAREER_K.income * pct) / 100); }
 export function seasonPrize(c, rank, n) {
-    const pct = rank === 1 ? 100 : rank === 2 ? 75 : rank === 3 ? 60 : rank === n ? 10 : n <= 5 ? 40 : 40 - (20 * (rank - 4)) / Math.max(1, n - 5);
-    const fm = Math.round((8000 * CAREER_K.income * pct) / 100);
+    const fm = prizeFor(rank, n);
     addLedger(c, `prize:${rank}`, fm);
     const scouts = rank <= 3 ? 3 : 2;
     c.scoutFree += scouts;
@@ -271,7 +271,7 @@ export function marketValue(p) {
     const ageK = p.age <= 21 ? 1.3 : p.age <= 29 ? 1.0 : p.age <= 31 ? 0.7 : p.age <= 33 ? 0.45 : 0.25;
     return Math.round((1000 * Math.exp((p.gg - 50) / 10) * ageK * Math.pow(1.15, p.traits.length)) / 10) * 10;
 }
-export const ROSTER_MIN = 14, ROSTER_MAX = 25;
+export const ROSTER_MIN = 11, ROSTER_MAX = 25, MATCH_MIN = 7; // kadro 11'in altina dusurulemez; 7'den az oyuncuyla maca cikilamaz (IFAB Kural 3)
 // ---------- scout ----------
 export const SCOUTS = [{ id: 'std', cost: 3000, gg: [45, 60], traitP: 0.4, force: false }, { id: 'good', cost: 8000, gg: [55, 70], traitP: 0.4, force: false }, { id: 'elite', cost: 20000, gg: [65, 78], traitP: 1, force: true }];
 export const SCOUT_HOURS = 8; // oneri: dokumanda sure yok; Kariyer carpaniyla ~4,8 saat
@@ -300,8 +300,6 @@ export function sell(c, id, price) {
     const p = c.roster[i];
     if (c.roster.length <= ROSTER_MIN)
         return 'min';
-    if (p.natPos === 'GK' && c.roster.filter((q) => q.natPos === 'GK').length <= 2)
-        return 'gk';
     addLedger(c, `sell:${p.name}`, price ?? sellPrice(p));
     c.roster.splice(i, 1);
     if (c.team.lineup)
