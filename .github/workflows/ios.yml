@@ -12,7 +12,7 @@ permissions:
   contents: read
 jobs:
   build:
-    runs-on: macos-15
+    runs-on: macos-15-intel # arm64 Mac makinelerinde kapasite sorunu vardi
     timeout-minutes: 45
     env:
       ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
