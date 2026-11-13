@@ -109,6 +109,9 @@ export function userTeamIn(club, roster, tt, m, benchCap = 0, out) {
     const mk = (p, pos) => ({ num: p.num, name: p.name, pos, natPos: p.natPos, gg: Math.round(p.gg), age: p.age, traits: p.traits, fatigue: Math.round(p.fatigue), id: p.id });
     const lineup = tt.lineup;
     t.players = lineup.map((id, i) => mk(byId[id], slots[i]));
+    if (out)
+        t.players.forEach((pl, i) => { if (out(byId[lineup[i]]))
+            pl.absent = true; }); // eksik kadro: yerine konacak saglam oyuncu yoksa mevki bos baslar
     t.bench = roster.filter((p) => !lineup.includes(p.id) && !(out && out(p))).sort((a, b) => (a.natPos === 'GK' ? -1 : b.natPos === 'GK' ? 1 : 0)).map((p) => mk(p, p.natPos));
     const duties = {};
     for (const [id, d] of Object.entries(tt.duties || {})) {

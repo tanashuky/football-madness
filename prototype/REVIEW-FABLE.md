@@ -318,3 +318,13 @@ Commit sırası: 8ee1406 hız/pencereler → dd51833 şekiller → 7402036 göre
 - **Kiralık oyuncu** satılamaz, listelenemez, sözleşmesi uzatılamaz; maaşın anlaşılan payı ödenir.
 - Eksikler: botlar kendi aralarında kiralama yapmıyor; satın alma teklifine madde ekleme/talep etme yok (madde uzatmada belirleniyor); imzada sözleşme süresi seçilmiyor (varsayılan, sonra uzatılabilir); kupada hükmen yenilgi yok.
 - Test: `fm-proto/contracts.cjs`.
+
+## Eksiklerin tamamlanması (istemci + motor)
+- **Hedefin gerisindeki kulüp:** hedef sıradaki takımla puan farkı kalan hafta × 0,8'den azsa (yetişebilir) ve kasası dar değilse daha da hırslanır; yetişemeyecekse tasarrufa döner.
+- **Bot teklifleri yalnız ihtiyaçla:** bot pazara ancak yedeksiz mevkisi varsa ya da ilk 11'inin en zayıf oyuncusu takım ortalamasının belirgin altındaysa (hırslı 2, dengeli 4, satıcı 6 puan) girer; adayın en az 3 puan iyi olması gerekir. Listede olmayan oyuncuna her bot dönem başına en çok bir teklif verir. Teklifler yalnız transfer döneminde.
+- **Bot–bot kiralama:** alacak aday bulamayan bot, başka bir botun ilk 11'inde olmayan oyuncusunu sezon sonuna kadar kiralar; sezon sonunda sahibine döner.
+- **İmzada sözleşme süresi ve madde:** hemen al ve teklifte süre (1–5 sezon) ve serbest kalma maddesi seçilir; düşük madde maaşı düşürür. Takım ortalamasının 4 puan üstündeki oyuncu maddesiz sözleşmeyi kabul etmez, değerinin 2 katı madde talep eder (karşı teklif olarak gelir).
+- **Serbest bırakma:** sözleşmesi bitmeyen oyuncuyu bırakmak için kalan maaşı ödenir (bu sezonun kalan haftaları + kalan sezonlar). Botlar için de geçerli; ödeyemeyecekse bırakamaz.
+- **Eksik kadro:** 7–10 sağlam oyuncuyla maça çıkılır, boş mevkiler boş başlar (motora `PlayerIn.absent` eklendi); kaleci yoksa en zayıf saha oyuncusu kaleye geçer. 7'nin altında lig ve kupada hükmen 0–3.
+- Bot kadro tabanı: yerine adam alabilecekse 18'in altına (en az 17) inebilir; sezon dönümünde altyapıdan 20'ye tamamlar.
+- Test: `fm-proto/short.cjs` (9 kişiyle maç, 6 kişiyle hükmen).

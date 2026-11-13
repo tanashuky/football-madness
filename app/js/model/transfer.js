@@ -1,6 +1,6 @@
 import { addLedger } from './career.js';
 import { ROSTER_MAX, fixLineup, freeNumber, genYouths, marketValue, mkPlayer, sell } from './manage.js';
-import { loanBids, loanIn, loanOut, loanVerdict, sign } from './contracts.js';
+import { loanBids, loanIn, loanOut, loanVerdict, sign, wantsClause } from './contracts.js';
 import { bidOnListings, botWeek, botsIncome, ensureBots, moveToBot, round10, takeFromBot, verdict } from './bots.js';
 export const FREE_SIZE = 14, WEEKS = { pre: 4, mid: 2 };
 const rnd = (a, b) => a + Math.random() * (b - a);
@@ -48,7 +48,7 @@ export function findMarket(c, id) {
     }
     return null;
 }
-function take(c, m, price) {
+function take(c, m, price, years, clauseK) {
     let p = m.p;
     if (m.ti < 0)
         c.pool = c.pool.filter((it) => it.p.id !== m.p.id);
@@ -59,12 +59,12 @@ function take(c, m, price) {
     addLedger(c, `buy:${p.name}`, -price);
     p.num = freeNumber(c.roster);
     delete p.clause;
-    sign(c, p);
+    sign(c, p, years, clauseK);
     c.roster.push(p);
     return true;
 }
 export const canDeal = (c) => c.tw.open && !c.tw.closing;
-export function buyNow(c, id) {
+export function buyNow(c, id, years, clauseK) {
     if (!canDeal(c))
         return 'closed';
     const m = findMarket(c, id);
@@ -74,19 +74,21 @@ export function buyNow(c, id) {
         return 'full';
     if (c.fm < m.ask)
         return 'fm';
-    if (!take(c, m, m.ask))
+    if (clauseK === 0 && wantsClause(c, m.p))
+        return 'wantclause';
+    if (!take(c, m, m.ask, years, clauseK))
         return 'no';
     c.tw.offers = c.tw.offers.filter((o) => o.id !== id);
     return 'ok';
 }
-export function sendOffer(c, id, amount) {
+export function sendOffer(c, id, amount, years, clauseK) {
     if (!canDeal(c))
         return 'closed';
     const m = findMarket(c, id);
     if (!m)
         return 'no';
     c.tw.offers = c.tw.offers.filter((o) => o.id !== id);
-    c.tw.offers.push({ id, name: m.p.name, amount: round10(amount), state: 'pending', week: c.tw.week });
+    c.tw.offers.push({ id, name: m.p.name, amount: round10(amount), state: 'pending', week: c.tw.week, years, clauseK });
     return 'ok';
 }
 // kiralama teklifi: ucret + sure, maas payi, istege bagli satin alma opsiyonu
@@ -111,7 +113,7 @@ export function acceptCounter(c, id) {
         return 'full';
     if (c.fm < o.counter)
         return 'fm';
-    if (!take(c, m, o.counter))
+    if (!take(c, m, o.counter, o.years, o.clauseK))
         return 'no';
     o.state = 'accepted';
     return 'ok';
@@ -212,7 +214,13 @@ function resolve(c) {
             ask = vd.ask ?? round10(min * 1.3);
         }
         if (o.amount >= min) {
-            if (c.fm >= o.amount && c.roster.length < ROSTER_MAX && take(c, m, o.amount))
+            if (o.clauseK === 0 && wantsClause(c, m.p)) {
+                o.state = 'counter';
+                o.counter = o.amount;
+                o.clauseK = 2;
+                o.why = 'wantclause';
+            } // kulup kabul etti, futbolcu madde talep ediyor
+            else if (c.fm >= o.amount && c.roster.length < ROSTER_MAX && take(c, m, o.amount, o.years, o.clauseK))
                 o.state = 'accepted';
             else
                 o.state = 'failed';

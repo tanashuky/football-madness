@@ -16,6 +16,7 @@ export interface PlayerIn {
   gg: number;
   traits?: string[];
   fatigue?: number; // mac oncesi yorgunluk Y (0-100)
+  absent?: boolean; // eksik kadro: bu mevki bos baslar (sahaya cikamayan oyuncu)
 }
 
 export interface TacticIn {
@@ -922,7 +923,7 @@ export function createMatch(a0: TeamIn, b0: TeamIn, seed: number, opts?: { knock
         ox,
         oy,
         yellow: 0,
-        off: false,
+        off: !!p.absent,
         hx: s === 0 ? 1 : -1,
         hy: 0,
       });

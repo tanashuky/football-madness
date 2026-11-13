@@ -693,7 +693,7 @@ export function createMatch(a0, b0, seed, opts) {
                 ox,
                 oy,
                 yellow: 0,
-                off: false,
+                off: !!p.absent,
                 hx: s === 0 ? 1 : -1,
                 hy: 0,
             });

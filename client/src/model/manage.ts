@@ -91,6 +91,8 @@ export function applyCards(c: Career, cup: boolean, played: { num: number; yello
 export function matchLineup(c: Career, cup: boolean): string[] | undefined {
   const lu = c.team.lineup ? [...c.team.lineup] : undefined; if (!lu) return lu; const by = Object.fromEntries(c.roster.map((p) => [p.id, p]));
   lu.forEach((id, i) => { const p = by[id]; if (!p || !unavailable(p, cup)) return; const free = c.roster.filter((q) => !unavailable(q, cup) && !lu.includes(q.id)); const pick = free.filter((q) => q.natPos === p.natPos).sort((a, b) => b.gg - a.gg)[0] || free.filter((q) => (p.natPos === 'GK') === (q.natPos === 'GK')).sort((a, b) => b.gg - a.gg)[0]; if (pick) lu[i] = pick.id; });
+  // eksik kadro (7-10 oyuncu): kale bos kalmasin; sahaya cikabilen en zayif oyuncu kaleye gecer
+  if (by[lu[0]] && unavailable(by[lu[0]], cup)) { let j = -1; lu.forEach((id, i) => { if (i && by[id] && !unavailable(by[id], cup) && (j < 0 || by[id].gg < by[lu[j]].gg)) j = i; }); if (j > 0) { const x = lu[0]; lu[0] = lu[j]; lu[j] = x; } }
   return lu;
 }
 // sakat futbolcu ilk 11'de kalamaz: ayni mevkiden (yoksa en guclu) saglam yedekle degisir

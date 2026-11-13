@@ -67,7 +67,7 @@ export function verdict(c: Career, ti: number, p: RosterPlayer, canReplace: bool
   const out = (refuse: Why): Verdict => ({ min: Infinity, refuse, listed: false, starter });
   const h = hash(`${p.id}:${l.season}:${c.tw.kind}:${c.tw.week}`);
   if (p.loan) return out('loan'); // kiralik oyuncu el degistirmez
-  if (roster.length <= BOT_KEEP) return out('min');
+  if (roster.length <= 16 || (roster.length <= BOT_KEEP && !canReplace)) return out('min'); // mac kadrosunun altina ancak yerine adam alabilecekse iner
   // kulubun kurtulmak istedigi oyuncu: bedelsiz bile birakir
   const broke = (tm.fm || 0) < 0 && (p.wage || 0) > wageFor(tm.gg);
   if (!starter && ((overpaid(p) && p.age >= 30) || p.age >= 33 || (same.indexOf(p) >= need + 2 && p.gg < tm.gg - 6) || broke)) return { min: 0, ask: round10(v * (0.3 + 0.2 * h)), listed: true, starter, unwanted: true };
@@ -94,7 +94,9 @@ export function takeFromBot(c: Career, ti: number, id: string, price: number): R
 const freeItem = (p: RosterPlayer) => ({ p, price: round10(marketValue(p) * rnd(0.85, 1)), left: 0, fresh: false, club: '' });
 const news = (c: Career, kind: string, club: string, p: RosterPlayer) => { c.news.unshift(`${kind}|${club}|${p.name}|${Math.round(p.gg)}`); if (c.news.length > 8) c.news.length = 8; };
 const spend = (tm: LeagueTeam, fm: number) => { tm.fm = (tm.fm || 0) - fm; tm.tb = Math.max(0, (tm.tb || 0) - fm); };
-function release(c: Career, tm: LeagueTeam, p: RosterPlayer) { tm.roster!.splice(tm.roster!.indexOf(p), 1); c.pool.push(freeItem(p)); news(c, 'free', tm.short, p); refreshGG(tm); }
+// sozlesmesi bitmeyen oyuncuyu birakmak: kalan maasi odenir
+export const severance = (c: Career, p: RosterPlayer) => p.loan ? 0 : Math.round(((p.wage || 0)) * ((c.league.fixtures.length - c.league.week) + Math.max(0, (p.end ?? c.league.season) - c.league.season) * c.league.fixtures.length));
+function release(c: Career, tm: LeagueTeam, p: RosterPlayer) { tm.fm = (tm.fm || 0) - severance(c, p); delete p.end; delete p.clause; tm.roster!.splice(tm.roster!.indexOf(p), 1); c.pool.push(freeItem(p)); news(c, 'free', tm.short, p); refreshGG(tm); }
 
 // botlarin haftasi: fazlaligi birakir; en zayif ya da yedeksiz mevkisine gore, transfer butcesi ve maas dengesi icinde alir ya da hic almaz
 export function botWeek(c: Career, canReplaceAfter: boolean) {
@@ -104,22 +106,23 @@ export function botWeek(c: Career, canReplaceAfter: boolean) {
     const tm = l.teams[bi], roster = tm.roster!;
     // 25 siniri ve maas butcesi: asilirsa en zayif yedek serbest kalir. Donemin son haftasinda alici bulamayan istenmeyen oyuncu da birakilir
     while (roster.length > ROSTER_MAX || (wages(tm) > wageCap(tm) && roster.length > BOT_KEEP)) { const st = new Set(xi(tm).map((x) => x.p.id)); const sp = roster.filter((q) => !st.has(q.id) && !q.loan && (q.natPos !== 'GK' || roster.filter((g) => g.natPos === 'GK').length > 2)).sort((a, b) => a.gg - b.gg)[0]; if (!sp) break; release(c, tm, sp); }
-    if (!canReplaceAfter) for (const p of [...roster]) { if (roster.length <= BOT_KEEP) break; if (verdict(c, bi, p, true).unwanted && Math.random() < 0.6) release(c, tm, p); }
-    if (roster.length >= ROSTER_MAX || Math.random() > 0.45 + smart * 0.05) continue; // her bot her hafta pazara girmez
+    if (!canReplaceAfter) for (const p of [...roster]) { if (roster.length <= BOT_KEEP) break; if (verdict(c, bi, p, true).unwanted && severance(c, p) <= Math.max(0, tm.fm || 0) * 0.3) release(c, tm, p); } // kalan maasini odeyebiliyorsa birakir
+    if (roster.length >= ROSTER_MAX) continue;
     const line = xi(tm); if (!line.length) continue;
     const weak = [...line].sort((a, b) => (a.p.gg - (a.p.natPos === a.slot ? 0 : 6)) - (b.p.gg - (b.p.natPos === b.slot ? 0 : 6)))[0];
     let pos = weak.slot, cur = weak.p.gg - (weak.p.natPos === weak.slot ? 0 : 6);
     // derinlik: yedegi olmayan mevki varsa once o kapatilir
     const thin = roster.length < 22 ? [...new Set(FORM_POS[tm.formation])].find((s) => roster.filter((q) => q.natPos === s).length <= FORM_POS[tm.formation].filter((x) => x === s).length) : undefined;
+    // gercek ihtiyac: yedeksiz mevki ya da takim ortalamasinin belirgin altinda kalan ilk 11 oyuncusu (hirsli kulup daha titizdir). Yoksa pazara girmez
     if (thin && cur >= tm.gg - 3) { pos = thin; cur = tm.gg - 12; }
-    else if (cur >= tm.gg + (tm.style === 'ambitious' ? 4 : 2)) continue; // en zayif halka bile yeterli: transfer gerekmiyor
+    else if (tm.gg - cur < (tm.style === 'ambitious' ? 2 : tm.style === 'seller' ? 6 : 4)) continue;
     const budget = Math.max(0, Math.min(tm.tb || 0, tm.fm || 0)); const room = wageCap(tm) - wages(tm);
     const maxAge = tm.style === 'seller' ? 24 : tm.style === 'ambitious' ? 33 : 30; // satici genc ve gelisecek oyuncuya, hirsli hazir oyuncuya bakar
     type Cand = { p: RosterPlayer; from: number; price: number }; const cands: Cand[] = [];
-    const want = (p: RosterPlayer) => !p.loan && p.natPos === pos && p.gg >= cur + 2 && p.age <= maxAge && (p.wage || 0) <= room && marketValue(p) * 0.6 <= budget;
+    const want = (p: RosterPlayer) => !p.loan && p.natPos === pos && p.gg >= cur + 3 && p.age <= maxAge && (p.wage || 0) <= room && marketValue(p) * 0.6 <= budget;
     for (const it of c.pool) if (want(it.p)) cands.push({ p: it.p, from: -1, price: it.price });
     l.teams.forEach((ot, oi) => { if (oi === bi) return; for (const p of oi === 0 ? c.roster : ot.roster || []) if (want(p)) cands.push({ p, from: oi, price: marketValue(p) }); });
-    if (!cands.length) continue;
+    if (!cands.length) { borrow(c, bi, pos, cur, budget, room); continue; }
     const score = (x: Cand) => x.p.gg - x.price / 2000 - x.p.age * (tm.style === 'seller' ? 0.5 : 0.1);
     cands.sort((a, b) => score(b) - score(a));
     const pick = cands[Math.min(cands.length - 1, Math.floor(Math.random() * (6 - smart)))]; const p = pick.p;
@@ -131,6 +134,7 @@ export function botWeek(c: Career, canReplaceAfter: boolean) {
       if (p.loan) continue;
       if (p.clause && will >= p.clause && (tm.fm || 0) >= p.clause) { const fee = p.clause; if (sell(c, p.id, fee) === 'ok') { delete p.clause; spend(tm, fee); moveToBot(c, bi, p); news(c, 'clause', tm.short, p); c.tw.listings = c.tw.listings.filter((x) => x.id !== p.id); } continue; }
       const ls = c.tw.listings.find((x) => x.id === p.id); if (ls && (ls.offer || ls.loan)) continue;
+      const wkey = `${l.season}:${c.tw.kind}`; if (tm.bidW === wkey && !(ls && ls.ask > 0)) continue; tm.bidW = wkey; // listede olmayan oyuncuma donem basina bir teklif
       const amount = ls && ls.ask > 0 && will >= ls.ask ? ls.ask : round10(will * rnd(0.8, 0.95)); if (amount <= 0) continue;
       const offer = { club: tm.short, amount, name: p.name, gg: Math.round(p.gg), ti: bi };
       if (ls) ls.offer = offer; else c.tw.listings.push({ id: p.id, ask: 0, offer });
@@ -139,6 +143,15 @@ export function botWeek(c: Career, canReplaceAfter: boolean) {
       const pay = byClause && (vd.refuse || p.clause! < vd.min) ? p.clause! : round10((vd.min + Math.min(will, vd.ask ?? will)) / 2); if (byClause) delete p.clause; const got = takeFromBot(c, pick.from, p.id, pay); if (!got) continue; spend(tm, pay); moveToBot(c, bi, got); news(c, 'buy', tm.short, got);
     }
   }
+}
+// alamiyorsa kiralar: baska bir botun ilk 11'inde olmayan oyuncusunu sezon sonuna kadar (bot-bot kiralama)
+function borrow(c: Career, bi: number, pos: string, cur: number, budget: number, room: number) {
+  const tm = c.league.teams[bi]; let best: { p: RosterPlayer; oi: number; fee: number } | null = null;
+  c.league.teams.forEach((ot, oi) => { if (oi === bi || ot.me || !ot.roster || ot.roster.length <= BOT_KEEP) return;
+    for (const p of ot.roster) { if (p.loan || p.natPos !== pos || p.gg < cur + 3 || (p.wage || 0) > room) continue; const vd = verdict(c, oi, p, true); if (vd.starter) continue;
+      const fee = vd.unwanted ? 0 : round10(marketValue(p) * (p.age <= 23 ? 0.03 : 0.07)); if (fee > budget) continue; if (!best || p.gg > best.p.gg) best = { p, oi, fee }; } });
+  const b = best as { p: RosterPlayer; oi: number; fee: number } | null; if (!b) return; const ot = c.league.teams[b.oi];
+  ot.roster!.splice(ot.roster!.indexOf(b.p), 1); ot.fm = (ot.fm || 0) + b.fee; refreshGG(ot); spend(tm, b.fee); b.p.loan = { from: b.oi, until: c.league.season, share: 100 }; moveToBot(c, bi, b.p); news(c, 'loan', tm.short, b.p);
 }
 // satis listeme koydugum futbolcular: isine yarayacak botlar teklif verir (istenen fiyat makulse tam fiyat)
 export function bidOnListings(c: Career) {
@@ -162,7 +175,10 @@ export function reviewClubs(c: Career) {
   ensureBots(c); const l = c.league, n = l.teams.length, ord = order(l);
   l.teams.forEach((tm, i) => { if (tm.me) return; const rank = ord.indexOf(i) + 1; const exp = tm.goal === 'title' ? 2 : tm.goal === 'top' ? Math.ceil(n / 2) : tm.goal === 'mid' ? Math.ceil(n * 0.75) : n;
     const wk = weeklyCost(tm); const rich = (tm.fm || 0) > wk * 20, poor = (tm.fm || 0) < wk * 4; let s: 'seller' | 'balanced' | 'ambitious' = tm.goal === 'title' ? 'ambitious' : tm.goal === 'stay' ? 'seller' : 'balanced';
-    if (l.week >= 3) { if (rank > exp + Math.max(1, Math.floor(n / 4))) s = 'seller'; /* hedef kacti: gelecek sezon icin tasarruf */ else if (rank < exp - Math.max(1, Math.floor(n / 4)) && !poor) s = 'ambitious'; /* beklenmedik basari: yuklen */ }
+    if (l.week >= 3 && rank > exp) { // hedefin gerisinde: yetisebilecekse daha da yuklenir, yetisemeyecekse gelecek sezon icin tasarrufa doner
+      const need = l.table[ord[exp - 1]].pts - l.table[i].pts, left = l.fixtures.length - l.week;
+      s = need <= left * 0.8 && !poor ? 'ambitious' : 'seller';
+    } else if (l.week >= 3 && rank < exp - Math.max(1, Math.floor(n / 4)) && !poor) s = 'ambitious'; // beklenmedik basari: yuklen
     if (rich && s !== 'ambitious') s = s === 'seller' ? 'balanced' : 'ambitious'; if (poor) s = 'seller';
     tm.style = s; if ((tm.fm || 0) < 0 && (tm.staffLv || 0) > 0) tm.staffLv = (tm.staffLv || 0) - 1; // kasa ekside: ekip kuculur
     // bilet: tribun dolduysa bir kademe artir, bosaldiysa indir (kullanici gibi deneyerek bulur)
@@ -213,7 +229,7 @@ export function botsSeasonTurn(c: Career, finalOrder: number[]) {
     if (tm.acad) for (let i = 0; i < ACADEMY[tm.acad]!.youth && tm.roster.length < 23; i++) youth();
     const needPos = (pos: any, k: number) => { while (tm.roster!.filter((p) => p.natPos === pos).length < k) youth(pos); };
     needPos('GK', 2); for (const s of new Set(FORM_POS[tm.formation])) needPos(s, FORM_POS[tm.formation].filter((x) => x === s).length);
-    while (tm.roster.length < BOT_KEEP) youth();
+    while (tm.roster.length < 20) youth();
     refreshGG(tm);
   });
 }

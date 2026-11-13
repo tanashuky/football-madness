@@ -5,7 +5,7 @@
 import { FORM_POS } from '../engine.js';
 import { addLedger } from './career.js';
 import { ROSTER_MAX, ROSTER_MIN, freeNumber, marketValue, wageFor } from './manage.js';
-import { BOT_KEEP, moveToBot, refreshGG, round10, verdict, wages } from './bots.js';
+import { BOT_KEEP, moveToBot, refreshGG, round10, severance, verdict, wages } from './bots.js';
 const hash = (s) => { let h = 2166136261; for (let i = 0; i < s.length; i++)
     h = Math.imul(h ^ s.charCodeAt(i), 16777619); return (h >>> 0) % 1000; };
 const clean = (c, id) => { if (c.team.lineup)
@@ -37,7 +37,37 @@ export function ensureContracts(c) {
             }
     });
 }
-export function sign(c, p, years = defaultYears(p)) { p.end = c.league.season + years - 1; delete p.loan; }
+// imza: sure ve madde secilebilir; dusuk madde maasi dusurur (1,5x: %10, 2x: %5), maddesiz %5 pahali
+export const clauseWage = (k) => (k === 1.5 ? 0.9 : k === 2 ? 0.95 : k === 0 ? 1.05 : 1);
+export function sign(c, p, years = defaultYears(p), clauseK) { p.end = c.league.season + Math.max(1, Math.min(maxYears(p), years)) - 1; delete p.loan; if (clauseK !== undefined) {
+    p.wage = Math.max(1, Math.round((p.wage || wageFor(p.gg)) * clauseWage(clauseK) * (1 - 0.03 * (c.staff.manager || 0))));
+    if (clauseK > 0)
+        p.clause = round10(marketValue(p) * clauseK);
+    else
+        delete p.clause;
+} }
+// yildiz oyuncu maddesiz sozlesmeyi kabul etmez: madde talep eder
+export const wantsClause = (c, p) => p.gg >= c.roster.reduce((a, q) => a + q.gg, 0) / Math.max(1, c.roster.length) + 4;
+// sozlesmesi bitmeyen oyuncuyu serbest birakmak: kalan maasi odenir
+export function releasePlayer(c, id) {
+    const p = c.roster.find((x) => x.id === id);
+    if (!p || p.loan)
+        return 'no';
+    if (c.roster.length <= ROSTER_MIN)
+        return 'min';
+    const fee = severance(c, p);
+    if (c.fm < fee)
+        return 'fm';
+    c.roster.splice(c.roster.indexOf(p), 1);
+    clean(c, id);
+    if (fee)
+        addLedger(c, `release:${p.name}`, -fee);
+    delete p.end;
+    delete p.clause;
+    delete p.coach;
+    c.pool.push({ p, price: round10(marketValue(p) * 0.9), left: 0, fresh: false, club: '' });
+    return 'ok';
+}
 // uzatma: futbolcu guncel gucune gore maas ister (30 yas ustu %15, digerleri %5 zam); menajer seviyesi basina %3 indirim.
 // madde: dusuk madde kabul edersen maas talebi duser (1,5x: %10, 2x: %5), maddesiz sozlesme %5 pahali
 export const CLAUSES = [0, 1.5, 2, 3];
@@ -252,6 +282,21 @@ export function seasonEndContracts(c) {
             out.push(`home|${p.name}`);
         }
     });
+    // botlarin birbirinden kiraladiklari sahibine doner
+    c.league.teams.forEach((tm) => { if (tm.me || !tm.roster)
+        return; for (const p of [...tm.roster]) {
+        if (!p.loan || p.loan.from === 0 || p.loan.until > s)
+            continue;
+        const own = c.league.teams[p.loan.from];
+        tm.roster.splice(tm.roster.indexOf(p), 1);
+        refreshGG(tm);
+        delete p.loan;
+        if (own && own.roster) {
+            p.num = freeNumber(own.roster);
+            own.roster.push(p);
+            refreshGG(own);
+        }
+    } });
     // biten sozlesmeler
     for (const p of expiring(c)) {
         if (mgr && adviseRenew(c, p)) {

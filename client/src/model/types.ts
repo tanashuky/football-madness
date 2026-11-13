@@ -26,7 +26,7 @@ export interface TeamSetup {
   duties: Record<string, Duty>; rules: string[]; shapeDef?: Shape; shapeAtt?: Shape; rotations?: string[][];
 }
 export interface LeagueTeam { name: string; short: string; color: string; color2: string; formation: Formation; doctrine: Doctrine; gg: number; me?: boolean; roster?: RosterPlayer[]; fm?: number; style?: 'seller' | 'balanced' | 'ambitious';
-  goal?: 'title' | 'top' | 'mid' | 'stay'; stad?: number; acad?: number; staffLv?: number; ticket?: number; tm?: number; tb?: number; lastAtt?: number }
+  goal?: 'title' | 'top' | 'mid' | 'stay'; stad?: number; acad?: number; staffLv?: number; ticket?: number; tm?: number; tb?: number; lastAtt?: number; bidW?: string }
 export interface TableRow { p: number; w: number; d: number; l: number; gf: number; ga: number; pts: number }
 export interface LeagueResult { week: number; a: number; b: number; ga_: number; gb_: number }
 export interface League {
@@ -56,7 +56,7 @@ export interface Career {
   cup: CupState | null;
 }
 export interface PoolItem { p: RosterPlayer; price: number; left: number; fresh: boolean; club: string; mine?: boolean }
-export interface Offer { id: string; name: string; amount: number; state: 'pending' | 'accepted' | 'rejected' | 'counter' | 'failed' | 'gone'; counter?: number; week: number; why?: string; loan?: LoanTerms }
+export interface Offer { id: string; name: string; amount: number; state: 'pending' | 'accepted' | 'rejected' | 'counter' | 'failed' | 'gone'; counter?: number; week: number; why?: string; loan?: LoanTerms; years?: number; clauseK?: number }
 export interface Listing { id: string; ask: number; loan?: LoanTerms; offer: { club: string; amount: number; name: string; gg: number; ti?: number } | null }
 export interface TransferWindow { open: boolean; kind: 'pre' | 'mid'; week: number; weeks: number; closing: boolean; offers: Offer[]; listings: Listing[]; midDone: boolean }
 export interface Gate { season: number; week: number; opp: string; price: number; att: number; cap: number; fm: number }

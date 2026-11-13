@@ -5,7 +5,7 @@
 import type { Career, Offer, PoolItem, RosterPlayer } from './types.js';
 import { addLedger } from './career.js';
 import { ROSTER_MAX, fixLineup, freeNumber, genYouths, marketValue, mkPlayer, sell } from './manage.js';
-import { loanBids, loanIn, loanOut, loanVerdict, sign } from './contracts.js';
+import { loanBids, loanIn, loanOut, loanVerdict, sign, wantsClause } from './contracts.js';
 import type { LoanTerms } from './types.js';
 import { bidOnListings, botWeek, botsIncome, ensureBots, moveToBot, round10, takeFromBot, verdict } from './bots.js';
 
@@ -38,19 +38,20 @@ export function findMarket(c: Career, id: string): MarketRow | null {
   for (let ti = 0; ti < c.league.teams.length; ti++) { const tm = c.league.teams[ti]; if (tm.me) continue; const p = (tm.roster || []).find((q) => q.id === id); if (p) { const vd = verdict(c, ti, p, true); return { p, ti, club: tm.short, ask: vd.refuse ? undefined : vd.ask, listed: vd.listed }; } }
   return null;
 }
-function take(c: Career, m: MarketRow, price: number): boolean {
+function take(c: Career, m: MarketRow, price: number, years?: number, clauseK?: number): boolean {
   let p: RosterPlayer | null = m.p; if (m.ti < 0) c.pool = c.pool.filter((it) => it.p.id !== m.p.id); else p = takeFromBot(c, m.ti, m.p.id, price);
-  if (!p) return false; addLedger(c, `buy:${p.name}`, -price); p.num = freeNumber(c.roster); delete p.clause; sign(c, p); c.roster.push(p); return true;
+  if (!p) return false; addLedger(c, `buy:${p.name}`, -price); p.num = freeNumber(c.roster); delete p.clause; sign(c, p, years, clauseK); c.roster.push(p); return true;
 }
 export const canDeal = (c: Career) => c.tw.open && !c.tw.closing;
-export function buyNow(c: Career, id: string): 'ok' | 'fm' | 'full' | 'closed' | 'no' {
+export function buyNow(c: Career, id: string, years?: number, clauseK?: number): 'ok' | 'fm' | 'full' | 'closed' | 'no' | 'wantclause' {
   if (!canDeal(c)) return 'closed'; const m = findMarket(c, id); if (!m || m.ask === undefined) return 'no';
   if (c.roster.length >= ROSTER_MAX) return 'full'; if (c.fm < m.ask) return 'fm';
-  if (!take(c, m, m.ask)) return 'no'; c.tw.offers = c.tw.offers.filter((o) => o.id !== id); return 'ok';
+  if (clauseK === 0 && wantsClause(c, m.p)) return 'wantclause';
+  if (!take(c, m, m.ask, years, clauseK)) return 'no'; c.tw.offers = c.tw.offers.filter((o) => o.id !== id); return 'ok';
 }
-export function sendOffer(c: Career, id: string, amount: number): 'ok' | 'closed' | 'no' {
+export function sendOffer(c: Career, id: string, amount: number, years?: number, clauseK?: number): 'ok' | 'closed' | 'no' {
   if (!canDeal(c)) return 'closed'; const m = findMarket(c, id); if (!m) return 'no';
-  c.tw.offers = c.tw.offers.filter((o) => o.id !== id); c.tw.offers.push({ id, name: m.p.name, amount: round10(amount), state: 'pending', week: c.tw.week }); return 'ok';
+  c.tw.offers = c.tw.offers.filter((o) => o.id !== id); c.tw.offers.push({ id, name: m.p.name, amount: round10(amount), state: 'pending', week: c.tw.week, years, clauseK }); return 'ok';
 }
 // kiralama teklifi: ucret + sure, maas payi, istege bagli satin alma opsiyonu
 export function sendLoanOffer(c: Career, id: string, fee: number, terms: LoanTerms): 'ok' | 'closed' | 'no' {
@@ -62,7 +63,7 @@ export function withdrawOffer(c: Career, id: string) { c.tw.offers = c.tw.offers
 export function acceptCounter(c: Career, id: string): 'ok' | 'fm' | 'full' | 'no' {
   const o = c.tw.offers.find((x) => x.id === id && x.state === 'counter'); const m = findMarket(c, id); if (!o || !m || !c.tw.open) return 'no';
   if (c.roster.length >= ROSTER_MAX) return 'full'; if (c.fm < o.counter!) return 'fm';
-  if (!take(c, m, o.counter!)) return 'no'; o.state = 'accepted'; return 'ok';
+  if (!take(c, m, o.counter!, o.years, o.clauseK)) return 'no'; o.state = 'accepted'; return 'ok';
 }
 // satis listesi
 export function listPlayer(c: Career, id: string, ask: number): 'ok' | 'closed' | 'no' {
@@ -91,7 +92,9 @@ function resolve(c: Career) {
     let min: number, ask: number; // alt limit ve istenen fiyat
     if (m.ti < 0) { ask = m.ask!; min = round10(ask * 0.8); } // serbest futbolcu: imza parasi
     else { const vd = verdict(c, m.ti, m.p, canReplace); if (vd.refuse) { o.state = 'rejected'; o.why = vd.refuse; continue; } min = vd.min; ask = vd.ask ?? round10(min * 1.3); }
-    if (o.amount >= min) { if (c.fm >= o.amount && c.roster.length < ROSTER_MAX && take(c, m, o.amount)) o.state = 'accepted'; else o.state = 'failed'; }
+    if (o.amount >= min) {
+      if (o.clauseK === 0 && wantsClause(c, m.p)) { o.state = 'counter'; o.counter = o.amount; o.clauseK = 2; o.why = 'wantclause'; } // kulup kabul etti, futbolcu madde talep ediyor
+      else if (c.fm >= o.amount && c.roster.length < ROSTER_MAX && take(c, m, o.amount, o.years, o.clauseK)) o.state = 'accepted'; else o.state = 'failed'; }
     else if (o.amount >= min * 0.6) { o.state = 'counter'; o.counter = round10((min + ask) / 2); } // alt limitin altinda: kulup arada bir fiyat ister
     else { o.state = 'rejected'; o.why = 'low'; }
   }
