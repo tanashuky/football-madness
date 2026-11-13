@@ -5,6 +5,8 @@
 import type { Career, Offer, PoolItem, RosterPlayer } from './types.js';
 import { addLedger } from './career.js';
 import { ROSTER_MAX, fixLineup, freeNumber, genYouths, marketValue, mkPlayer, sell } from './manage.js';
+import { loanBids, loanIn, loanOut, loanVerdict, sign } from './contracts.js';
+import type { LoanTerms } from './types.js';
 import { bidOnListings, botWeek, botsIncome, ensureBots, moveToBot, round10, takeFromBot, verdict } from './bots.js';
 
 export const FREE_SIZE = 14, WEEKS = { pre: 4, mid: 2 };
@@ -38,7 +40,7 @@ export function findMarket(c: Career, id: string): MarketRow | null {
 }
 function take(c: Career, m: MarketRow, price: number): boolean {
   let p: RosterPlayer | null = m.p; if (m.ti < 0) c.pool = c.pool.filter((it) => it.p.id !== m.p.id); else p = takeFromBot(c, m.ti, m.p.id, price);
-  if (!p) return false; addLedger(c, `buy:${p.name}`, -price); p.num = freeNumber(c.roster); c.roster.push(p); return true;
+  if (!p) return false; addLedger(c, `buy:${p.name}`, -price); p.num = freeNumber(c.roster); delete p.clause; sign(c, p); c.roster.push(p); return true;
 }
 export const canDeal = (c: Career) => c.tw.open && !c.tw.closing;
 export function buyNow(c: Career, id: string): 'ok' | 'fm' | 'full' | 'closed' | 'no' {
@@ -50,6 +52,11 @@ export function sendOffer(c: Career, id: string, amount: number): 'ok' | 'closed
   if (!canDeal(c)) return 'closed'; const m = findMarket(c, id); if (!m) return 'no';
   c.tw.offers = c.tw.offers.filter((o) => o.id !== id); c.tw.offers.push({ id, name: m.p.name, amount: round10(amount), state: 'pending', week: c.tw.week }); return 'ok';
 }
+// kiralama teklifi: ucret + sure, maas payi, istege bagli satin alma opsiyonu
+export function sendLoanOffer(c: Career, id: string, fee: number, terms: LoanTerms): 'ok' | 'closed' | 'no' {
+  if (!canDeal(c)) return 'closed'; const m = findMarket(c, id); if (!m || m.ti < 0) return 'no';
+  c.tw.offers = c.tw.offers.filter((o) => o.id !== id); c.tw.offers.push({ id, name: m.p.name, amount: round10(fee), state: 'pending', week: c.tw.week, loan: terms }); return 'ok';
+}
 export function withdrawOffer(c: Career, id: string) { c.tw.offers = c.tw.offers.filter((o) => o.id !== id); }
 // karsi teklifi kabul: kapanis gununde de yapilabilir
 export function acceptCounter(c: Career, id: string): 'ok' | 'fm' | 'full' | 'no' {
@@ -59,16 +66,20 @@ export function acceptCounter(c: Career, id: string): 'ok' | 'fm' | 'full' | 'no
 }
 // satis listesi
 export function listPlayer(c: Career, id: string, ask: number): 'ok' | 'closed' | 'no' {
-  if (!canDeal(c)) return 'closed'; const p = c.roster.find((x) => x.id === id); if (!p) return 'no';
+  if (!canDeal(c)) return 'closed'; const p = c.roster.find((x) => x.id === id); if (!p || p.loan) return 'no';
   c.tw.listings = c.tw.listings.filter((l) => l.id !== id); c.tw.listings.push({ id, ask: round10(ask), offer: null }); return 'ok';
 }
 export function unlist(c: Career, id: string) { c.tw.listings = c.tw.listings.filter((l) => l.id !== id); }
 export function quickSell(c: Career, id: string) { if (!canDeal(c)) return 'closed' as const; const p = c.roster.find((x) => x.id === id); const r = sell(c, id); if (r === 'ok') { unlist(c, id); if (p) c.pool.push({ p, price: round10(marketValue(p) * 0.9), left: 0, fresh: false, club: '' }); } return r; }
 export function acceptBid(c: Career, id: string): 'ok' | 'min' | 'gk' | 'no' {
-  const l = c.tw.listings.find((x) => x.id === id); if (!l || !l.offer || !c.tw.open) return 'no'; const p = c.roster.find((x) => x.id === id); const o = l.offer;
+  const l = c.tw.listings.find((x) => x.id === id); if (!l || !l.offer || !c.tw.open) return 'no'; if (l.loan) return loanOut(c, id); const p = c.roster.find((x) => x.id === id); const o = l.offer;
   const r = sell(c, id, o.amount); if (r === 'ok') { if (p && o.ti !== undefined && c.league.teams[o.ti]) { const tm = c.league.teams[o.ti]; tm.fm = (tm.fm || 0) - o.amount; moveToBot(c, o.ti, p); } c.news.unshift(`buy|${o.club}|${o.name}|${o.gg}`); unlist(c, id); } return r;
 }
-export function declineBid(c: Career, id: string) { const l = c.tw.listings.find((x) => x.id === id); if (!l) return; if (l.ask > 0) l.offer = null; else unlist(c, id); }
+export function declineBid(c: Career, id: string) { const l = c.tw.listings.find((x) => x.id === id); if (!l) return; if (l.ask > 0 || l.loan) l.offer = null; else unlist(c, id); }
+export function listLoan(c: Career, id: string, ask: number, terms: LoanTerms): 'ok' | 'closed' | 'no' {
+  if (!canDeal(c)) return 'closed'; const p = c.roster.find((x) => x.id === id); if (!p || p.loan) return 'no';
+  c.tw.listings = c.tw.listings.filter((l) => l.id !== id); c.tw.listings.push({ id, ask: round10(ask), offer: null, loan: terms }); return 'ok';
+}
 // haftanin cevaplari: tekliflerime kulupler kendi cikarlarina gore cevap verir; kabul edilmeyen bot teklifleri duser
 function resolve(c: Career) {
   const tw = c.tw; const canReplace = tw.weeks - tw.week >= 1 && !tw.closing; // cevaptan sonra satici yerine adam alabilir mi
@@ -76,6 +87,7 @@ function resolve(c: Career) {
     if (o.state === 'counter') { o.state = 'rejected'; o.why = 'low'; continue; } // cevaplanmayan karsi teklif duser
     if (o.state !== 'pending') continue;
     const m = findMarket(c, o.id); if (!m) { o.state = 'gone'; continue; }
+    if (o.loan) { const lv = loanVerdict(c, m.ti, m.p, o.amount, o.loan); if (!lv.ok) { o.state = 'rejected'; o.why = lv.why; } else o.state = loanIn(c, m.ti, o.id, o.amount, o.loan) ? 'accepted' : 'failed'; continue; }
     let min: number, ask: number; // alt limit ve istenen fiyat
     if (m.ti < 0) { ask = m.ask!; min = round10(ask * 0.8); } // serbest futbolcu: imza parasi
     else { const vd = verdict(c, m.ti, m.p, canReplace); if (vd.refuse) { o.state = 'rejected'; o.why = vd.refuse; continue; } min = vd.min; ask = vd.ask ?? round10(min * 1.3); }
@@ -84,7 +96,7 @@ function resolve(c: Career) {
     else { o.state = 'rejected'; o.why = 'low'; }
   }
   // gecen haftanin bot teklifleri: listedeki futbolcuda istenen fiyat karsilandiysa satis tamamlanir, digerleri duser
-  for (const l of [...tw.listings]) { if (!c.roster.some((x) => x.id === l.id)) { unlist(c, l.id); continue; } if (l.offer && l.ask > 0 && l.offer.amount >= l.ask) { acceptBid(c, l.id); continue; } if (l.ask > 0) l.offer = null; else unlist(c, l.id); }
+  for (const l of [...tw.listings]) { if (!c.roster.some((x) => x.id === l.id)) { unlist(c, l.id); continue; } if (l.loan) { l.offer = null; continue; } if (l.offer && l.ask > 0 && l.offer.amount >= l.ask) { acceptBid(c, l.id); continue; } if (l.ask > 0) l.offer = null; else unlist(c, l.id); }
 }
 const awaiting = (c: Career) => c.tw.offers.some((o) => o.state === 'counter') || c.tw.listings.some((l) => !!l.offer);
 // "Sonraki hafta": cevaplar gelir, botlar hareket eder; son haftadan sonra kapanis gunu; kapanis gununden sonra donem biter
@@ -92,8 +104,8 @@ export function nextWeek(c: Career): 'week' | 'closing' | 'closed' {
   const tw = c.tw; if (!tw.open) return 'closed';
   if (tw.closing) { closeWindow(c); return 'closed'; }
   resolve(c);
-  if (tw.week >= tw.weeks) { bidOnListings(c); tw.closing = true; if (!awaiting(c)) { closeWindow(c); return 'closed'; } return 'closing'; }
-  botWeek(c, tw.weeks - tw.week >= 2); bidOnListings(c); tw.week++; return 'week';
+  if (tw.week >= tw.weeks) { bidOnListings(c); loanBids(c); tw.closing = true; if (!awaiting(c)) { closeWindow(c); return 'closed'; } return 'closing'; }
+  botWeek(c, tw.weeks - tw.week >= 2); bidOnListings(c); loanBids(c); tw.week++; return 'week';
 }
 // "Donemi kapat": kalan haftalar atlanir; bekleyen cevap varsa kapanis gunu, yoksa dogrudan biter
 export function skipWindow(c: Career): 'closing' | 'closed' {
@@ -108,6 +120,6 @@ function closeWindow(c: Career) {
 // altyapidan kadroya: her zaman; donem disinda alinirsa bir sonraki doneme kadar kupada oynayamaz
 export function promoteYouth(c: Career, id: string): boolean {
   const i = c.youth.findIndex((p) => p.id === id); if (i < 0 || c.roster.length >= ROSTER_MAX) return false;
-  const p = c.youth[i]; c.youth.splice(i, 1); if (!c.tw.open) p.reg = false; p.num = freeNumber(c.roster); c.roster.push(p); return true;
+  const p = c.youth[i]; c.youth.splice(i, 1); if (!c.tw.open) p.reg = false; p.num = freeNumber(c.roster); sign(c, p); c.roster.push(p); return true;
 }
 export const offerOf = (c: Career, id: string): Offer | undefined => c.tw.offers.find((o) => o.id === id);

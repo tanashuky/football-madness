@@ -1,5 +1,6 @@
 import { addLedger } from './career.js';
 import { ROSTER_MAX, fixLineup, freeNumber, genYouths, marketValue, mkPlayer, sell } from './manage.js';
+import { loanBids, loanIn, loanOut, loanVerdict, sign } from './contracts.js';
 import { bidOnListings, botWeek, botsIncome, ensureBots, moveToBot, round10, takeFromBot, verdict } from './bots.js';
 export const FREE_SIZE = 14, WEEKS = { pre: 4, mid: 2 };
 const rnd = (a, b) => a + Math.random() * (b - a);
@@ -57,6 +58,8 @@ function take(c, m, price) {
         return false;
     addLedger(c, `buy:${p.name}`, -price);
     p.num = freeNumber(c.roster);
+    delete p.clause;
+    sign(c, p);
     c.roster.push(p);
     return true;
 }
@@ -86,6 +89,17 @@ export function sendOffer(c, id, amount) {
     c.tw.offers.push({ id, name: m.p.name, amount: round10(amount), state: 'pending', week: c.tw.week });
     return 'ok';
 }
+// kiralama teklifi: ucret + sure, maas payi, istege bagli satin alma opsiyonu
+export function sendLoanOffer(c, id, fee, terms) {
+    if (!canDeal(c))
+        return 'closed';
+    const m = findMarket(c, id);
+    if (!m || m.ti < 0)
+        return 'no';
+    c.tw.offers = c.tw.offers.filter((o) => o.id !== id);
+    c.tw.offers.push({ id, name: m.p.name, amount: round10(fee), state: 'pending', week: c.tw.week, loan: terms });
+    return 'ok';
+}
 export function withdrawOffer(c, id) { c.tw.offers = c.tw.offers.filter((o) => o.id !== id); }
 // karsi teklifi kabul: kapanis gununde de yapilabilir
 export function acceptCounter(c, id) {
@@ -107,7 +121,7 @@ export function listPlayer(c, id, ask) {
     if (!canDeal(c))
         return 'closed';
     const p = c.roster.find((x) => x.id === id);
-    if (!p)
+    if (!p || p.loan)
         return 'no';
     c.tw.listings = c.tw.listings.filter((l) => l.id !== id);
     c.tw.listings.push({ id, ask: round10(ask), offer: null });
@@ -124,6 +138,8 @@ export function acceptBid(c, id) {
     const l = c.tw.listings.find((x) => x.id === id);
     if (!l || !l.offer || !c.tw.open)
         return 'no';
+    if (l.loan)
+        return loanOut(c, id);
     const p = c.roster.find((x) => x.id === id);
     const o = l.offer;
     const r = sell(c, id, o.amount);
@@ -139,10 +155,20 @@ export function acceptBid(c, id) {
     return r;
 }
 export function declineBid(c, id) { const l = c.tw.listings.find((x) => x.id === id); if (!l)
-    return; if (l.ask > 0)
+    return; if (l.ask > 0 || l.loan)
     l.offer = null;
 else
     unlist(c, id); }
+export function listLoan(c, id, ask, terms) {
+    if (!canDeal(c))
+        return 'closed';
+    const p = c.roster.find((x) => x.id === id);
+    if (!p || p.loan)
+        return 'no';
+    c.tw.listings = c.tw.listings.filter((l) => l.id !== id);
+    c.tw.listings.push({ id, ask: round10(ask), offer: null, loan: terms });
+    return 'ok';
+}
 // haftanin cevaplari: tekliflerime kulupler kendi cikarlarina gore cevap verir; kabul edilmeyen bot teklifleri duser
 function resolve(c) {
     const tw = c.tw;
@@ -158,6 +184,16 @@ function resolve(c) {
         const m = findMarket(c, o.id);
         if (!m) {
             o.state = 'gone';
+            continue;
+        }
+        if (o.loan) {
+            const lv = loanVerdict(c, m.ti, m.p, o.amount, o.loan);
+            if (!lv.ok) {
+                o.state = 'rejected';
+                o.why = lv.why;
+            }
+            else
+                o.state = loanIn(c, m.ti, o.id, o.amount, o.loan) ? 'accepted' : 'failed';
             continue;
         }
         let min, ask; // alt limit ve istenen fiyat
@@ -196,6 +232,10 @@ function resolve(c) {
             unlist(c, l.id);
             continue;
         }
+        if (l.loan) {
+            l.offer = null;
+            continue;
+        }
         if (l.offer && l.ask > 0 && l.offer.amount >= l.ask) {
             acceptBid(c, l.id);
             continue;
@@ -219,6 +259,7 @@ export function nextWeek(c) {
     resolve(c);
     if (tw.week >= tw.weeks) {
         bidOnListings(c);
+        loanBids(c);
         tw.closing = true;
         if (!awaiting(c)) {
             closeWindow(c);
@@ -228,6 +269,7 @@ export function nextWeek(c) {
     }
     botWeek(c, tw.weeks - tw.week >= 2);
     bidOnListings(c);
+    loanBids(c);
     tw.week++;
     return 'week';
 }
@@ -271,6 +313,7 @@ export function promoteYouth(c, id) {
     if (!c.tw.open)
         p.reg = false;
     p.num = freeNumber(c.roster);
+    sign(c, p);
     c.roster.push(p);
     return true;
 }

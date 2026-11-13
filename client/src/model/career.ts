@@ -6,6 +6,7 @@ import { newRoster, newTeamSetup } from './club.js';
 import { TEMPLATES, botTeamIn } from './templates.js';
 import { STADIUM_CAP, afterWeek, fixLineup, gate, paySponsor, seasonPrize, seasonTurn } from './manage.js';
 import { openWindow } from './transfer.js';
+import { seasonEndContracts } from './contracts.js';
 import { botLeagueTeamIn, botsSeasonTurn, botsWeekly } from './bots.js';
 import { newCup } from './cup.js';
 export { STADIUM_CAP };
@@ -34,7 +35,7 @@ export function newCareer(club: Club, o: { size: number; diff: number; minutes: 
     fm: Math.round(2000 * CAREER_K.income), ledger: [], facilities: { stadium: { level: 1 }, academy: { level: 0 } }, tm: 52,
     stats: { played: 0, won: 0, drawn: 0, lost: 0, seasons: 1 }, trophies: [], history: [],
     metrics: { U: 55, T: 55, F: 55, M: 70 }, train: { day: '', count: 0, job: null, last: null }, scout: { job: null, found: null }, pool: [], nextId: 1, lastTick: Date.now(),
-    staff: { tactic: 0, physical: 0, psych: 0, physio: 0, fans: 0 }, scoutFree: 0, news: [], cup: null,
+    staff: { tactic: 0, physical: 0, psych: 0, physio: 0, fans: 0, manager: 0 }, scoutFree: 0, news: [], cup: null,
     tw: { open: false, kind: 'pre', week: 1, weeks: 4, closing: false, offers: [], listings: [], midDone: false }, youth: [], ticket: 1, gates: [],
   };
   openWindow(c, 'pre'); paySponsor(c); // kariyer sezon basi transfer donemiyle baslar
@@ -82,14 +83,15 @@ export function applyMyResult(c: Career, oppIdx: number, home: boolean, goals: [
 }
 export function skipWeek(c: Career) { simOthers(c, false); afterWeek(c, [], false); botsWeekly(c); c.league.week++; if (!c.tw.midDone && c.league.week === Math.floor(c.league.fixtures.length / 2)) openWindow(c, 'mid'); }
 // sezon sonu: kupa ve tarihce; ayni lig yeni sezon (fikstur ayni siraya, tablo sifir)
-export function closeSeason(c: Career): { youths: RosterPlayer[]; prize: number; scouts: number; rank: number } {
+export function closeSeason(c: Career): { youths: RosterPlayer[]; prize: number; scouts: number; rank: number; left: string[] } {
   const l = c.league; const r = rank(l); const me = l.table[0]; const finalOrder = order(l);
   const pz = seasonPrize(c, r, l.teams.length);
   c.history.push({ season: l.season, rank: r, w: me.w, d: me.d, l: me.l });
   if (r === 1) c.trophies.push({ season: l.season, kind: 'league', name: 'Kariyer Ligi' });
+  const left = seasonEndContracts(c); // biten sozlesmeler, donen kiraliklar (sezon numarasi degismeden once)
   l.season++; l.week = 0; l.results = []; l.table = emptyTable(l.teams.length); c.stats.seasons = l.season;
   const youths = seasonTurn(c); fixLineup(c); botsSeasonTurn(c, finalOrder);
   c.tw.midDone = false; openWindow(c, 'pre');
   paySponsor(c); c.cup = newCup(c, r); // kupa 2. sezondan itibaren, onceki sezon sirasina gore
-  return { youths, prize: pz.fm, scouts: pz.scouts, rank: r };
+  return { youths, prize: pz.fm, scouts: pz.scouts, rank: r, left };
 }

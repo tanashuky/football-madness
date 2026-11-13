@@ -9,6 +9,9 @@ export interface Club {
 }
 export interface RosterPlayer {
   id: string; num: number; name: string; natPos: Pos; gg: number; age: number; traits: string[]; fatigue: number;
+  end?: number; // sozlesme: bu sezonun sonunda biter
+  clause?: number; // serbest kalma maddesi: bu tutari odeyen kulup futbolcuyu alir
+  loan?: Loan; // kiralik olarak bu kadroda
   inj?: number; // sakatlik: kac mac oynayamaz
   reg?: boolean; // false: kupa kadrosuna yazilmadi (donem disinda altyapidan alindi)
   wage?: number; // haftalik maas (FM); sezon sonunda GG'ye gore artar, asla dusmez
@@ -53,11 +56,14 @@ export interface Career {
   cup: CupState | null;
 }
 export interface PoolItem { p: RosterPlayer; price: number; left: number; fresh: boolean; club: string; mine?: boolean }
-export interface Offer { id: string; name: string; amount: number; state: 'pending' | 'accepted' | 'rejected' | 'counter' | 'failed' | 'gone'; counter?: number; week: number; why?: string }
-export interface Listing { id: string; ask: number; offer: { club: string; amount: number; name: string; gg: number; ti?: number } | null }
+export interface Offer { id: string; name: string; amount: number; state: 'pending' | 'accepted' | 'rejected' | 'counter' | 'failed' | 'gone'; counter?: number; week: number; why?: string; loan?: LoanTerms }
+export interface Listing { id: string; ask: number; loan?: LoanTerms; offer: { club: string; amount: number; name: string; gg: number; ti?: number } | null }
 export interface TransferWindow { open: boolean; kind: 'pre' | 'mid'; week: number; weeks: number; closing: boolean; offers: Offer[]; listings: Listing[]; midDone: boolean }
 export interface Gate { season: number; week: number; opp: string; price: number; att: number; cap: number; fm: number }
-export type StaffKey = 'tactic' | 'physical' | 'psych' | 'physio' | 'fans';
+export type StaffKey = 'tactic' | 'physical' | 'psych' | 'physio' | 'fans' | 'manager';
+// kiralama: from = sahibi kulubun lig sirasi (0 = kullanici), until = bu sezonun sonunda doner, share = maasin kiralayanca odenen yuzdesi, opt = satin alma opsiyonu
+export interface Loan { from: number; until: number; share: number; opt?: number }
+export interface LoanTerms { years: number; share: number; opt?: number }
 export interface CupState { kind: 'star' | 'cont'; season: number; round: number; alive: boolean; done: boolean; opps: LeagueTeam[]; home: boolean[]; log: { round: number; opp: string; gf: number; ga: number; pens: [number, number] | null; win: boolean }[] }
 export interface MatchModeState { elo: number; played: number; last: string | null }
 export interface RewardEntry { t: number; src: 'career' | 'online'; kind: string; pp: number; boost?: number }

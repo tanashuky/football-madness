@@ -74,7 +74,7 @@ function normalizeCareer(c) {
     c.gates = Array.isArray(c.gates) ? c.gates : [];
     c.nextId = c.nextId || 1;
     c.lastTick = c.lastTick || 0;
-    c.staff = { tactic: 0, physical: 0, psych: 0, physio: 0, fans: 0, ...(c.staff || {}) };
+    c.staff = { tactic: 0, physical: 0, psych: 0, physio: 0, fans: 0, manager: 0, ...(c.staff || {}) };
     c.scoutFree = c.scoutFree || 0;
     c.news = Array.isArray(c.news) ? c.news : [];
     c.cup = c.cup || null;

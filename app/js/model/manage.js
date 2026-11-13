@@ -7,6 +7,7 @@ const scale = () => { try {
 catch (e) {
     return 1;
 } };
+import { ensureContracts } from './contracts.js';
 const dur = (ms) => (ms * CAREER_K.time) / scale();
 const cost = (fm) => Math.round(fm * CAREER_K.cost);
 const rnd = (a, b) => a + Math.random() * (b - a);
@@ -45,7 +46,7 @@ export const tmNeutral = (c) => 50 + 2 * c.facilities.stadium.level + 2 * c.staf
 // doluluk = min(1; 0,35 + 0,65 x TM/100)
 export const occupancy = (c) => Math.min(1, 0.35 + (0.65 * c.tm) / 100);
 // ---------- ekipler: seviye 0-5, haftalik maas, ise alma ucreti 2 haftalik maas ----------
-export const STAFF = ['tactic', 'physical', 'psych', 'physio', 'fans'];
+export const STAFF = ['tactic', 'physical', 'psych', 'physio', 'fans', 'manager'];
 const STAFF_WAGE = [0, 200, 400, 700, 1100, 1600];
 export const staffWage = (lv) => cost(STAFF_WAGE[lv] || 0);
 export const staffWages = (c) => STAFF.reduce((a, k) => a + staffWage(c.staff[k]), 0);
@@ -98,7 +99,9 @@ export function ensureWages(c) { for (const p of c.roster)
         p.wage = wageFor(p.gg); }
 export const COACH_WAGE = [0, 300, 600, 1000];
 export const coachWage = (lv) => cost(COACH_WAGE[lv] || 0);
-export const playerWages = (c) => c.roster.reduce((a, p) => a + (p.wage || 0), 0);
+// kiralik gelen: maasin anlasilan payi; kiraya verdigim: kalan pay bende
+export const paidWage = (p) => Math.round(((p.wage || 0) * (p.loan ? p.loan.share : 100)) / 100);
+export const playerWages = (c) => c.roster.reduce((a, p) => a + paidWage(p), 0) + c.league.teams.reduce((a, tm) => a + (tm.me ? 0 : (tm.roster || []).reduce((x, p) => x + (p.loan && p.loan.from === 0 ? Math.round(((p.wage || 0) * (100 - p.loan.share)) / 100) : 0), 0)), 0);
 export const coachWages = (c) => c.roster.reduce((a, p) => a + coachWage(p.coach || 0), 0);
 export const trainCap = (p) => [7, 8, 9, 10][p.coach || 0]; // sezonluk bireysel GG tavani (antrenorsuz 7: oneri)
 // maasi GG'sinin hak ettiginden yuksek futbolcu daha ucuza satilir (en fazla yari fiyat)
@@ -298,6 +301,8 @@ export function sell(c, id, price) {
     if (i < 0)
         return 'no';
     const p = c.roster[i];
+    if (p.loan)
+        return 'no'; // kiralik oyuncu satilamaz
     if (c.roster.length <= ROSTER_MIN)
         return 'min';
     addLedger(c, `sell:${p.name}`, price ?? sellPrice(p));
@@ -314,6 +319,7 @@ export function sell(c, id, price) {
 export function tick(c, now = Date.now()) {
     const done = [];
     ensureWages(c);
+    ensureContracts(c);
     for (const f of ['stadium', 'academy']) {
         const b = c.facilities[f];
         if (b.busyUntil && now >= b.busyUntil) {

@@ -4,6 +4,7 @@
 import { DOCTRINES, FORM_POS, NAMES_B } from '../engine.js';
 import { defaultLineup, mkSquad, newTeamSetup, userTeamIn } from './club.js';
 import { botBrain } from './templates.js';
+import { sell } from './manage.js';
 import { ACADEMY, ROSTER_MAX, STADIUM_CAP, STADIUM_COST, TICKET_BASE, TICKET_STEPS, freeNumber, marketValue, mkPlayer, overpaid, prizeFor, staffWage, wageFor } from './manage.js';
 import { CAREER_K, form, order } from './career.js';
 const rnd = (a, b) => a + Math.random() * (b - a);
@@ -18,7 +19,7 @@ const xi = (tm, roster = tm.roster) => { const slots = FORM_POS[tm.formation]; c
 const xiSum = (tm, roster = tm.roster) => xi(tm, roster).reduce((a, x) => a + x.p.gg - (x.p.natPos === x.slot ? 0 : 6), 0) - (11 - Math.min(11, roster.length)) * 40;
 export function refreshGG(tm) { if (tm.roster && tm.roster.length >= 11)
     tm.gg = Math.round(xi(tm).reduce((a, x) => a + x.p.gg, 0) / 11); }
-export const wages = (tm) => (tm.roster || []).reduce((a, p) => a + (p.wage || 0), 0);
+export const wages = (tm) => (tm.roster || []).reduce((a, p) => a + Math.round(((p.wage || 0) * (p.loan ? p.loan.share : 100)) / 100), 0);
 export const BOT_KEEP = 18; // bot kendi tercihiyle mac kadrosunun altina inmez (kural siniri 11)
 const wageCap = (tm) => 22 * wageFor(tm.gg + 5);
 // haftalik gider: futbolcu maasi + ekip (3 birim) + altyapi bakimi
@@ -89,6 +90,8 @@ export function verdict(c, ti, p, canReplace) {
         drop += 8; // yedegi yok
     const out = (refuse) => ({ min: Infinity, refuse, listed: false, starter });
     const h = hash(`${p.id}:${l.season}:${c.tw.kind}:${c.tw.week}`);
+    if (p.loan)
+        return out('loan'); // kiralik oyuncu el degistirmez
     if (roster.length <= BOT_KEEP)
         return out('min');
     // kulubun kurtulmak istedigi oyuncu: bedelsiz bile birakir
@@ -145,7 +148,7 @@ export function botWeek(c, canReplaceAfter) {
         // 25 siniri ve maas butcesi: asilirsa en zayif yedek serbest kalir. Donemin son haftasinda alici bulamayan istenmeyen oyuncu da birakilir
         while (roster.length > ROSTER_MAX || (wages(tm) > wageCap(tm) && roster.length > BOT_KEEP)) {
             const st = new Set(xi(tm).map((x) => x.p.id));
-            const sp = roster.filter((q) => !st.has(q.id) && (q.natPos !== 'GK' || roster.filter((g) => g.natPos === 'GK').length > 2)).sort((a, b) => a.gg - b.gg)[0];
+            const sp = roster.filter((q) => !st.has(q.id) && !q.loan && (q.natPos !== 'GK' || roster.filter((g) => g.natPos === 'GK').length > 2)).sort((a, b) => a.gg - b.gg)[0];
             if (!sp)
                 break;
             release(c, tm, sp);
@@ -176,7 +179,7 @@ export function botWeek(c, canReplaceAfter) {
         const room = wageCap(tm) - wages(tm);
         const maxAge = tm.style === 'seller' ? 24 : tm.style === 'ambitious' ? 33 : 30; // satici genc ve gelisecek oyuncuya, hirsli hazir oyuncuya bakar
         const cands = [];
-        const want = (p) => p.natPos === pos && p.gg >= cur + 2 && p.age <= maxAge && (p.wage || 0) <= room && marketValue(p) * 0.6 <= budget;
+        const want = (p) => !p.loan && p.natPos === pos && p.gg >= cur + 2 && p.age <= maxAge && (p.wage || 0) <= room && marketValue(p) * 0.6 <= budget;
         for (const it of c.pool)
             if (want(it.p))
                 cands.push({ p: it.p, from: -1, price: it.price });
@@ -200,9 +203,22 @@ export function botWeek(c, canReplaceAfter) {
             moveToBot(c, bi, p);
             news(c, 'buy', tm.short, p);
         }
-        else if (pick.from === 0) { // kullanicinin futbolcusu: teklif gelir, karar kullanicinin
+        else if (pick.from === 0) { // kullanicinin futbolcusu: teklif gelir, karar kullanicinin (serbest kalma maddesi odenirse karar sorulmaz)
+            if (p.loan)
+                continue;
+            if (p.clause && will >= p.clause && (tm.fm || 0) >= p.clause) {
+                const fee = p.clause;
+                if (sell(c, p.id, fee) === 'ok') {
+                    delete p.clause;
+                    spend(tm, fee);
+                    moveToBot(c, bi, p);
+                    news(c, 'clause', tm.short, p);
+                    c.tw.listings = c.tw.listings.filter((x) => x.id !== p.id);
+                }
+                continue;
+            }
             const ls = c.tw.listings.find((x) => x.id === p.id);
-            if (ls && ls.offer)
+            if (ls && (ls.offer || ls.loan))
                 continue;
             const amount = ls && ls.ask > 0 && will >= ls.ask ? ls.ask : round10(will * rnd(0.8, 0.95));
             if (amount <= 0)
@@ -215,9 +231,12 @@ export function botWeek(c, canReplaceAfter) {
         }
         else { // baska bir bot: satici kendi cikarina gore karar verir
             const vd = verdict(c, pick.from, p, canReplaceAfter);
-            if (vd.refuse || will < vd.min)
+            const byClause = !!p.clause && will >= p.clause;
+            if (!byClause && (vd.refuse || will < vd.min))
                 continue;
-            const pay = round10((vd.min + Math.min(will, vd.ask ?? will)) / 2);
+            const pay = byClause && (vd.refuse || p.clause < vd.min) ? p.clause : round10((vd.min + Math.min(will, vd.ask ?? will)) / 2);
+            if (byClause)
+                delete p.clause;
             const got = takeFromBot(c, pick.from, p.id, pay);
             if (!got)
                 continue;
@@ -231,7 +250,7 @@ export function botWeek(c, canReplaceAfter) {
 export function bidOnListings(c) {
     const l = c.league;
     for (const ls of c.tw.listings) {
-        if (ls.offer || ls.ask <= 0)
+        if (ls.offer || ls.ask <= 0 || ls.loan)
             continue;
         const p = c.roster.find((x) => x.id === ls.id);
         if (!p)

@@ -10,6 +10,7 @@ import { INTENSITY, SESSIONS_PER_DAY, academyUpkeep, STAFF, building, coachWages
 import { DOCTRINES } from '../engine.js';
 import { ROUNDS, cupDue } from '../model/cup.js';
 import { track } from '../model/missions.js';
+import { decisions, loanedOut } from '../model/contracts.js';
 import { bindRenew, bindWindowBar, renewTab, windowBar } from './transfer.js';
 import { TICKET_BASE, TICKET_STEPS, occupancy } from '../model/manage.js';
 import { grantCareer } from '../model/rewards.js';
@@ -38,7 +39,16 @@ else
 const formTags = (f) => f.length ? html `${f.map((x) => tag(x === 'W' ? t('th.w') : x === 'D' ? t('th.d') : t('th.l'), x === 'W' ? 'g' : x === 'L' ? 'r' : ''))}` : html `<span class="muted">–</span>`;
 const left = (until) => fmtLeft(until - Date.now());
 const boostBtn = (what) => (store.db.rewards.boosts > 0 ? html `<button class="btn sm ghost" data-boost="${what}">⚡ ${t('mng.boost')}</button>` : html ``);
-const ledgerText = (x) => { const [a, b, c2] = x.split(':'); return a === 'build' ? `${t('fac.' + b)} → ${t('fac.level', { n: c2 })}` : a === 'scout' ? `${t('renew.scout')} (${t('scout.' + b)})` : a === 'buy' ? `${t('mng.buy')}: ${b}` : a === 'sell' ? `${t('mng.sell')}: ${b}` : a === 'upkeep' ? t('mng.upkeep') : a === 'wages' ? t('staff.wages') : a === 'pwages' ? t('wage.players') : a === 'coach' ? t('coach.title') : a === 'mission' ? t('missions.title') : a === 'staff' ? `${t('staff.' + b)} → ${t('fac.level', { n: c2 })}` : a === 'sponsor' ? t('fin.sponsor') : a === 'prize' ? `${t('fin.prize')} (${t('career.rank', { n: b })})` : a === 'cup' ? `${t('cup.title.short')} · ${b === 'entry' ? t('cup.entry') : t('cup.r.' + Math.max(0, ROUNDS.indexOf(b))) + ' ' + (c2 || '')}` : /^\d+\.\d+ [HA] /.test(x) ? x.replace(' H ', ` ${t('career.home')} `).replace(' A ', ` ${t('career.away')} `) : x; };
+const ledgerText = (x) => { const [a, b, c2] = x.split(':'); return a === 'build' ? `${t('fac.' + b)} → ${t('fac.level', { n: c2 })}` : a === 'scout' ? `${t('renew.scout')} (${t('scout.' + b)})` : a === 'buy' ? `${t('mng.buy')}: ${b}` : a === 'sell' ? `${t('mng.sell')}: ${b}` : a === 'upkeep' ? t('mng.upkeep') : a === 'wages' ? t('staff.wages') : a === 'pwages' ? t('wage.players') : a === 'coach' ? t('coach.title') : a === 'mission' ? t('missions.title') : a === 'staff' ? `${t('staff.' + b)} → ${t('fac.level', { n: c2 })}` : a === 'sponsor' ? t('fin.sponsor') : a === 'prize' ? `${t('fin.prize')} (${t('career.rank', { n: b })})` : a === 'cup' ? `${t('cup.title.short')} · ${b === 'entry' ? t('cup.entry') : t('cup.r.' + Math.max(0, ROUNDS.indexOf(b))) + ' ' + (c2 || '')}` : a === 'clause' ? `${t('cl.title')}: ${b}` : a === 'loanfee' || a === 'loanout' ? `${t('loan.tag')}: ${b}` : a === 'option' || a === 'optsold' ? `${t('loan.opt')}: ${b}` : /^\d+\.\d+ [HA] /.test(x) ? x.replace(' H ', ` ${t('career.home')} `).replace(' A ', ` ${t('career.away')} `) : x; };
+function decisionCard(k) {
+    const ds = decisions(k);
+    const out = loanedOut(k);
+    const mgr = (k.staff.manager || 0) > 0;
+    if (!ds.length && !out.length)
+        return '';
+    return card(html `${mgr ? t('mgr.title') : t('mgr.notes')} <small>${mgr ? t('mgr.sub') : t('mgr.sub.none')}</small>`, html `<div class="list compact">${ds.map((d) => html `<div class="li" data-go="player" data-ctx='{"id":"${d.p.id}","src":"squad"}'><div><div class="nm">${d.p.name} <small class="muted">${d.p.natPos} · ${Math.round(d.p.gg)}</small></div><div class="sub">${t('dec.' + d.kind)}${mgr ? ' · ' + t(d.advise ? 'dec.yes.' + d.kind : 'dec.no.' + d.kind) : ''}</div></div><div class="gg">›</div></div>`)}
+    ${out.map((o) => html `<div class="li static"><div><div class="nm">${o.p.name} <small class="muted">${o.p.natPos} · ${Math.round(o.p.gg)}</small></div><div class="sub">${t('loan.at', { club: o.club, s: o.p.loan.until })}${o.p.loan.opt ? ' · ' + t('loan.opt') + ' ' + money(o.p.loan.opt) : ''}</div></div></div>`)}</div>${muted(mgr ? t('mgr.hint') : t('mgr.hint.none'))}`);
+}
 function clubTab(k) {
     const l = k.league;
     const c = store.db.account.club;
@@ -52,6 +62,7 @@ function clubTab(k) {
       ${busy ? html `<div class="row"><span class="tag o">🏗 ${t('fac.level', { n: lv + 1 })} · ${left(busy)}</span>${boostBtn('build')}</div>` : u ? html `<div class="row"><button class="btn sm ${bld || k.fm < u.cost ? '' : 'prim'}" data-up="${f}" ${bld || k.fm < u.cost ? raw('disabled') : ''}>${t('fac.upgrade', { n: u.to })} · ${money(u.cost)} · ${fmtLeft(u.ms)}</button></div>` : html `<span class="tag g">${t('fac.max')}</span>`}</div>`;
     };
     return html `
+    ${decisionCard(k)}
     ${card(t('club.today'), html `<p>${dot(c.color)} <b>${c.name}</b> · ${t('career.season', { n: l.season })} · ${t('career.played', { w: l.week, total: l.fixtures.length })} · ${t('career.rank', { n: rank(l) })}</p>
       <p>${t('career.form')}: ${formTags(form(l, 0))}</p>
       ${nxt ? html `<p class="muted">${t('career.next')}: ${l.teams[nxt.oppIdx].name} (${nxt.home ? t('career.home') : t('career.away')})</p>` : seasonDone(l) ? muted(t('career.seasonend')) : ''}`)}
@@ -131,7 +142,10 @@ register('career', (c) => {
                 bye.onclick = () => { skipWeek(k); save(); render(); };
             const ag = $('sAgain');
             if (ag)
-                ag.onclick = () => { const r = rank(k.league); const cs = closeSeason(k); const youths = cs.youths; setTimeout(() => { toast(t('fin.prize.toast', { fm: money(cs.prize), n: cs.scouts }), 'ok'); if (youths.length)
+                ag.onclick = () => { const r = rank(k.league); const cs = closeSeason(k); const youths = cs.youths; setTimeout(() => { toast(t('fin.prize.toast', { fm: money(cs.prize), n: cs.scouts }), 'ok'); for (const x of cs.left.slice(0, 5)) {
+                    const [a, n] = x.split('|');
+                    toast(t('se.' + a, { name: n }), a === 'left' || a === 'back' ? '' : 'ok');
+                } if (youths.length)
                     toast(t('academy.new', { n: youths.length }), 'ok'); toast(t('cup.entered', { cup: t('cup.' + k.cup.kind) }), 'ok'); }, 400); if (r === 1) {
                     const pp = grantCareer(store.db.rewards, 'title');
                     if (pp)

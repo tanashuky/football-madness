@@ -7,6 +7,7 @@ import { CAREER_K, addLedger } from './career.js';
 export const HOUR = 3600e3, DAY = 24 * HOUR, WEEK = 7 * DAY;
 // test/gelistirme: localStorage 'fm.timeScale' sureleri boler (ornegin 100000)
 const scale = () => { try { return Math.max(1, +(localStorage.getItem('fm.timeScale') || 1)); } catch (e) { return 1; } };
+import { ensureContracts } from './contracts.js';
 const dur = (ms: number) => (ms * CAREER_K.time) / scale();
 const cost = (fm: number) => Math.round(fm * CAREER_K.cost);
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
@@ -36,7 +37,7 @@ export const tmNeutral = (c: Career) => 50 + 2 * c.facilities.stadium.level + 2 
 export const occupancy = (c: Career) => Math.min(1, 0.35 + (0.65 * c.tm) / 100);
 
 // ---------- ekipler: seviye 0-5, haftalik maas, ise alma ucreti 2 haftalik maas ----------
-export const STAFF: StaffKey[] = ['tactic', 'physical', 'psych', 'physio', 'fans'];
+export const STAFF: StaffKey[] = ['tactic', 'physical', 'psych', 'physio', 'fans', 'manager'];
 const STAFF_WAGE = [0, 200, 400, 700, 1100, 1600];
 export const staffWage = (lv: number) => cost(STAFF_WAGE[lv] || 0);
 export const staffWages = (c: Career) => STAFF.reduce((a, k) => a + staffWage(c.staff[k]), 0);
@@ -69,7 +70,9 @@ export const signWage = (p: { gg: number; age: number }) => Math.round(wageFor(p
 export function ensureWages(c: Career) { for (const p of c.roster) if (!p.wage) p.wage = wageFor(p.gg); }
 export const COACH_WAGE = [0, 300, 600, 1000];
 export const coachWage = (lv: number) => cost(COACH_WAGE[lv] || 0);
-export const playerWages = (c: Career) => c.roster.reduce((a, p) => a + (p.wage || 0), 0);
+// kiralik gelen: maasin anlasilan payi; kiraya verdigim: kalan pay bende
+export const paidWage = (p: RosterPlayer) => Math.round(((p.wage || 0) * (p.loan ? p.loan.share : 100)) / 100);
+export const playerWages = (c: Career) => c.roster.reduce((a, p) => a + paidWage(p), 0) + c.league.teams.reduce((a, tm) => a + (tm.me ? 0 : (tm.roster || []).reduce((x, p) => x + (p.loan && p.loan.from === 0 ? Math.round(((p.wage || 0) * (100 - p.loan.share)) / 100) : 0), 0)), 0);
 export const coachWages = (c: Career) => c.roster.reduce((a, p) => a + coachWage(p.coach || 0), 0);
 export const trainCap = (p: RosterPlayer) => [7, 8, 9, 10][p.coach || 0]; // sezonluk bireysel GG tavani (antrenorsuz 7: oneri)
 // maasi GG'sinin hak ettiginden yuksek futbolcu daha ucuza satilir (en fazla yari fiyat)
@@ -159,7 +162,7 @@ export function signFound(c: Career): boolean { const p = c.scout.found; if (!p 
 // ---------- satis (transfer donemi kurallari transfer.ts'de) ----------
 export const sellPrice = (p: RosterPlayer) => Math.round((marketValue(p) * 0.9 * (overpaid(p) ? clamp(wageFor(p.gg) / (p.wage || 1), 0.5, 1) : 1)) / 10) * 10; // bot kulupler PD'nin %90'ini oder
 export function sell(c: Career, id: string, price?: number): 'ok' | 'min' | 'gk' | 'no' {
-  const i = c.roster.findIndex((p) => p.id === id); if (i < 0) return 'no'; const p = c.roster[i];
+  const i = c.roster.findIndex((p) => p.id === id); if (i < 0) return 'no'; const p = c.roster[i]; if (p.loan) return 'no'; // kiralik oyuncu satilamaz
   if (c.roster.length <= ROSTER_MIN) return 'min';
   addLedger(c, `sell:${p.name}`, price ?? sellPrice(p)); c.roster.splice(i, 1);
   if (c.team.lineup) c.team.lineup = c.team.lineup.filter((x) => x !== id); if (c.team.duties) delete c.team.duties[id]; if (c.team.rotations) c.team.rotations = c.team.rotations.map((r) => r.filter((x) => x !== id)).filter((r) => r.length >= 2);
@@ -168,7 +171,7 @@ export function sell(c: Career, id: string, price?: number): 'ok' | 'min' | 'gk'
 
 // ---------- zaman: biten isler, pasif toparlanma ----------
 export function tick(c: Career, now = Date.now()): string[] {
-  const done: string[] = []; ensureWages(c);
+  const done: string[] = []; ensureWages(c); ensureContracts(c);
   for (const f of ['stadium', 'academy'] as FacKey[]) { const b = c.facilities[f]; if (b.busyUntil && now >= b.busyUntil) { b.level++; delete b.busyUntil; done.push('fac:' + f); } }
   if (c.train.job && now >= c.train.job.until) { finishTraining(c); done.push('train'); }
   if (c.scout.job && now >= c.scout.job.until) { const j = c.scout.job; const s = SCOUTS[j.tier]; c.scout.found = mkPlayer(c, s.gg, [17, 30], s.traitP, s.force, (j.pos || undefined) as Pos | undefined); c.scout.job = null; done.push('scout'); }
