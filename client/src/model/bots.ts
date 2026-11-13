@@ -34,9 +34,9 @@ export function ensureBots(c: Career) {
 // bot lig takimi -> motor girdisi (kendi kadrosundan en iyi 11)
 export function botLeagueTeamIn(c: Career, idx: number): TeamIn {
   ensureBots(c); const tm = c.league.teams[idx];
-  if (tm.me) return userTeamIn({ name: tm.name, short: tm.short, color: tm.color, color2: tm.color2, gg: tm.gg } as Club, c.roster, c.team, c.metrics, 9); // atlanan haftada kendi takimim
+  if (tm.me) return userTeamIn({ name: tm.name, short: tm.short, color: tm.color, color2: tm.color2, gg: tm.gg } as Club, c.roster, c.team, c.metrics, 7); // atlanan haftada kendi takimim
   const tt = { ...newTeamSetup(), formation: tm.formation, doctrine: tm.doctrine, tactic: { ...(DOCTRINES[tm.doctrine].tactic as any) } };
-  const t = userTeamIn({ name: tm.name, short: tm.short, color: tm.color, color2: tm.color2, gg: tm.gg } as Club, tm.roster!, tt, undefined, 9);
+  const t = userTeamIn({ name: tm.name, short: tm.short, color: tm.color, color2: tm.color2, gg: tm.gg } as Club, tm.roster!, tt, undefined, 7);
   return botBrain(t, tm.doctrine, c.diff);
 }
 

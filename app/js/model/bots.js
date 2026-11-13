@@ -43,9 +43,9 @@ export function botLeagueTeamIn(c, idx) {
     ensureBots(c);
     const tm = c.league.teams[idx];
     if (tm.me)
-        return userTeamIn({ name: tm.name, short: tm.short, color: tm.color, color2: tm.color2, gg: tm.gg }, c.roster, c.team, c.metrics, 9); // atlanan haftada kendi takimim
+        return userTeamIn({ name: tm.name, short: tm.short, color: tm.color, color2: tm.color2, gg: tm.gg }, c.roster, c.team, c.metrics, 7); // atlanan haftada kendi takimim
     const tt = { ...newTeamSetup(), formation: tm.formation, doctrine: tm.doctrine, tactic: { ...DOCTRINES[tm.doctrine].tactic } };
-    const t = userTeamIn({ name: tm.name, short: tm.short, color: tm.color, color2: tm.color2, gg: tm.gg }, tm.roster, tt, undefined, 9);
+    const t = userTeamIn({ name: tm.name, short: tm.short, color: tm.color, color2: tm.color2, gg: tm.gg }, tm.roster, tt, undefined, 7);
     return botBrain(t, tm.doctrine, c.diff);
 }
 // kulubun bu futbolcu icin karari. canReplace: cevap verildikten sonra yerine adam alacak hafta kaldi mi

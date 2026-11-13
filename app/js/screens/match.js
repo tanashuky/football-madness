@@ -46,8 +46,8 @@ function roomTeams(c) {
     const tt = { ...k.team, lineup: matchLineup(k, !!c.cup) };
     const out = (p) => unavailable(p, !!c.cup);
     if (c.cup && k.cup)
-        return { me: userTeamIn(club, k.roster, tt, k.metrics, 9, out), opp: botTeamIn(k.cup.opps[k.cup.round], k.diff, NAMES_B) };
-    return { me: userTeamIn(club, k.roster, tt, k.metrics, 9, out), opp: botLeagueTeamIn(k, c.oppIdx) };
+        return { me: userTeamIn(club, k.roster, tt, k.metrics, 7, out), opp: botTeamIn(k.cup.opps[k.cup.round], k.diff, NAMES_B) };
+    return { me: userTeamIn(club, k.roster, tt, k.metrics, 7, out), opp: botLeagueTeamIn(k, c.oppIdx) };
 }
 register('room', (c) => {
     const { me, opp } = roomTeams(c);

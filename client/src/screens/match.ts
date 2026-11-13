@@ -35,8 +35,8 @@ function roomTeams(c: RoomCtx): { me: TeamIn; opp: TeamIn } {
   const k = store.db.career!; const club = store.db.account!.club;
   if (ensureLineup(k.roster, k.team)) save(); // kayitli dizilis her zaman gecerli olsun (yorgunluk, sakatlik ve ceza buna gore islenir)
   const tt = { ...k.team, lineup: matchLineup(k, !!c.cup) }; const out = (p: any) => unavailable(p, !!c.cup);
-  if (c.cup && k.cup) return { me: userTeamIn(club, k.roster, tt, k.metrics, 9, out), opp: botTeamIn(k.cup.opps[k.cup.round], k.diff, NAMES_B) };
-  return { me: userTeamIn(club, k.roster, tt, k.metrics, 9, out), opp: botLeagueTeamIn(k, c.oppIdx!) };
+  if (c.cup && k.cup) return { me: userTeamIn(club, k.roster, tt, k.metrics, 7, out), opp: botTeamIn(k.cup.opps[k.cup.round], k.diff, NAMES_B) };
+  return { me: userTeamIn(club, k.roster, tt, k.metrics, 7, out), opp: botLeagueTeamIn(k, c.oppIdx!) };
 }
 register('room', (c: RoomCtx) => {
   const { me, opp } = roomTeams(c); const s = store.db.settings; if (c.kind === 'career') track(store.db, { t: 'analysis' }); const home_ = c.home !== false; const k = store.db.career;
