@@ -131,11 +131,14 @@ export function botWeek(c: Career, canReplaceAfter: boolean) {
     if (pick.from === -1) { // serbest futbolcu
       if (will < pick.price * 0.9) continue; spend(tm, Math.min(pick.price, will)); c.pool = c.pool.filter((it) => it.p !== p); moveToBot(c, bi, p); news(c, 'buy', tm.short, p);
     } else if (pick.from === 0) { // kullanicinin futbolcusu: teklif gelir, karar kullanicinin (serbest kalma maddesi odenirse karar sorulmaz)
-      if (p.loan) continue;
+      if (p.loan) continue; const mlv = c.staff.manager || 0;
       if (p.clause && will >= p.clause && (tm.fm || 0) >= p.clause) { const fee = p.clause; if (sell(c, p.id, fee) === 'ok') { delete p.clause; spend(tm, fee); moveToBot(c, bi, p); news(c, 'clause', tm.short, p); c.tw.listings = c.tw.listings.filter((x) => x.id !== p.id); } continue; }
       const ls = c.tw.listings.find((x) => x.id === p.id); if (ls && (ls.offer || ls.loan)) continue;
       const wkey = `${l.season}:${c.tw.kind}`; if (tm.bidW === wkey && !(ls && ls.ask > 0)) continue; tm.bidW = wkey; // listede olmayan oyuncuma donem basina bir teklif
-      const amount = ls && ls.ask > 0 && will >= ls.ask ? ls.ask : round10(will * rnd(0.8, 0.95)); if (amount <= 0) continue;
+      if ((c.noBids || p.nfs) && !(ls && ls.ask > 0)) continue; // kullanici teklifleri otomatik reddediyor
+      // menajer onden pazarlik eder (seviye basina +%3, botun ust limitini asmadan) ve makul olmayan teklifi hic getirmez
+      const amount = ls && ls.ask > 0 && will >= ls.ask ? ls.ask : round10(Math.min(will, will * rnd(0.8, 0.95) * (1 + 0.03 * mlv))); if (amount <= 0) continue;
+      if (mlv > 0 && !(ls && ls.ask > 0) && amount < marketValue(p) * (0.8 + 0.03 * mlv)) continue;
       const offer = { club: tm.short, amount, name: p.name, gg: Math.round(p.gg), ti: bi };
       if (ls) ls.offer = offer; else c.tw.listings.push({ id: p.id, ask: 0, offer });
     } else { // baska bir bot: satici kendi cikarina gore karar verir
@@ -163,7 +166,7 @@ export function bidOnListings(c: Career) {
       const ref = same[Math.min(same.length, need) - 1]; const gain = clamp(p.gg - (ref ? ref.gg : tm.gg - 10), -6, 8); if (gain < -3 || (p.wage || 0) > wageCap(tm) - wages(tm)) return;
       const fair = Math.min(Math.max(0, Math.min(tm.tb || 0, tm.fm || 0)), marketValue(p) * (1 + 0.04 * gain) * (overpaid(p) ? 0.85 : 1)); if (!best || fair > best.fair) best = { ti, fair }; });
     const b = best as { ti: number; fair: number } | null; if (!b || b.fair < ls.ask * 0.6) continue;
-    const amount = b.fair >= ls.ask ? ls.ask : round10(b.fair * rnd(0.9, 1)); if (amount <= 0 || (amount < ls.ask && Math.random() < 0.35)) continue;
+    const amount = b.fair >= ls.ask ? ls.ask : round10(Math.min(b.fair, b.fair * rnd(0.9, 1) * (1 + 0.02 * (c.staff.manager || 0)))); if (amount <= 0 || (amount < ls.ask && Math.random() < 0.35)) continue;
     ls.offer = { club: l.teams[b.ti].short, amount, name: p.name, gg: Math.round(p.gg), ti: b.ti };
   }
 }

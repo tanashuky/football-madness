@@ -211,6 +211,7 @@ export function botWeek(c, canReplaceAfter) {
         else if (pick.from === 0) { // kullanicinin futbolcusu: teklif gelir, karar kullanicinin (serbest kalma maddesi odenirse karar sorulmaz)
             if (p.loan)
                 continue;
+            const mlv = c.staff.manager || 0;
             if (p.clause && will >= p.clause && (tm.fm || 0) >= p.clause) {
                 const fee = p.clause;
                 if (sell(c, p.id, fee) === 'ok') {
@@ -229,8 +230,13 @@ export function botWeek(c, canReplaceAfter) {
             if (tm.bidW === wkey && !(ls && ls.ask > 0))
                 continue;
             tm.bidW = wkey; // listede olmayan oyuncuma donem basina bir teklif
-            const amount = ls && ls.ask > 0 && will >= ls.ask ? ls.ask : round10(will * rnd(0.8, 0.95));
+            if ((c.noBids || p.nfs) && !(ls && ls.ask > 0))
+                continue; // kullanici teklifleri otomatik reddediyor
+            // menajer onden pazarlik eder (seviye basina +%3, botun ust limitini asmadan) ve makul olmayan teklifi hic getirmez
+            const amount = ls && ls.ask > 0 && will >= ls.ask ? ls.ask : round10(Math.min(will, will * rnd(0.8, 0.95) * (1 + 0.03 * mlv)));
             if (amount <= 0)
+                continue;
+            if (mlv > 0 && !(ls && ls.ask > 0) && amount < marketValue(p) * (0.8 + 0.03 * mlv))
                 continue;
             const offer = { club: tm.short, amount, name: p.name, gg: Math.round(p.gg), ti: bi };
             if (ls)
@@ -315,7 +321,7 @@ export function bidOnListings(c) {
         const b = best;
         if (!b || b.fair < ls.ask * 0.6)
             continue;
-        const amount = b.fair >= ls.ask ? ls.ask : round10(b.fair * rnd(0.9, 1));
+        const amount = b.fair >= ls.ask ? ls.ask : round10(Math.min(b.fair, b.fair * rnd(0.9, 1) * (1 + 0.02 * (c.staff.manager || 0))));
         if (amount <= 0 || (amount < ls.ask && Math.random() < 0.35))
             continue;
         ls.offer = { club: l.teams[b.ti].short, amount, name: p.name, gg: Math.round(p.gg), ti: b.ti };

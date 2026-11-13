@@ -9,6 +9,7 @@ export interface Club {
 }
 export interface RosterPlayer {
   id: string; num: number; name: string; natPos: Pos; gg: number; age: number; traits: string[]; fatigue: number;
+  nfs?: boolean; // satilik degil: bu oyuncuya gelen teklifler otomatik reddedilir
   end?: number; // sozlesme: bu sezonun sonunda biter
   clause?: number; // serbest kalma maddesi: bu tutari odeyen kulup futbolcuyu alir
   loan?: Loan; // kiralik olarak bu kadroda
@@ -50,6 +51,7 @@ export interface Career {
   tw: TransferWindow; youth: RosterPlayer[]; // altyapida bekleyen gencler
   ticket: number; gates: Gate[]; // bilet fiyati carpani (0,5-2) ve son ic saha maclari
   nextId: number; lastTick: number;
+  noBids?: boolean; // tum transfer tekliflerini otomatik reddet (listeye koyduklarim haric)
   staff: Record<StaffKey, number>; // ekip seviyeleri 0-5
   scoutFree: number; // ucretsiz standart scout hakki (sezon sonu odulu)
   news: string[]; // transfer haberleri (son 6)

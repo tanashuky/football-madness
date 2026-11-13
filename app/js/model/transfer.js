@@ -227,8 +227,8 @@ function resolve(c) {
         }
         else if (o.amount >= min * 0.6) {
             o.state = 'counter';
-            o.counter = round10((min + ask) / 2);
-        } // alt limitin altinda: kulup arada bir fiyat ister
+            o.counter = round10(Math.max(min, ((min + ask) / 2) * (1 - 0.02 * (c.staff.manager || 0))));
+        } // menajer karsi teklifi asagi ceker // alt limitin altinda: kulup arada bir fiyat ister
         else {
             o.state = 'rejected';
             o.why = 'low';

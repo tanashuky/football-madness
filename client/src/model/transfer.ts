@@ -95,7 +95,7 @@ function resolve(c: Career) {
     if (o.amount >= min) {
       if (o.clauseK === 0 && wantsClause(c, m.p)) { o.state = 'counter'; o.counter = o.amount; o.clauseK = 2; o.why = 'wantclause'; } // kulup kabul etti, futbolcu madde talep ediyor
       else if (c.fm >= o.amount && c.roster.length < ROSTER_MAX && take(c, m, o.amount, o.years, o.clauseK)) o.state = 'accepted'; else o.state = 'failed'; }
-    else if (o.amount >= min * 0.6) { o.state = 'counter'; o.counter = round10((min + ask) / 2); } // alt limitin altinda: kulup arada bir fiyat ister
+    else if (o.amount >= min * 0.6) { o.state = 'counter'; o.counter = round10(Math.max(min, ((min + ask) / 2) * (1 - 0.02 * (c.staff.manager || 0)))); } // menajer karsi teklifi asagi ceker // alt limitin altinda: kulup arada bir fiyat ister
     else { o.state = 'rejected'; o.why = 'low'; }
   }
   // gecen haftanin bot teklifleri: listedeki futbolcuda istenen fiyat karsilandiysa satis tamamlanir, digerleri duser

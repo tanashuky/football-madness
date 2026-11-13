@@ -328,3 +328,7 @@ Commit sırası: 8ee1406 hız/pencereler → dd51833 şekiller → 7402036 göre
 - **Eksik kadro:** 7–10 sağlam oyuncuyla maça çıkılır, boş mevkiler boş başlar (motora `PlayerIn.absent` eklendi); kaleci yoksa en zayıf saha oyuncusu kaleye geçer. 7'nin altında lig ve kupada hükmen 0–3.
 - Bot kadro tabanı: yerine adam alabilecekse 18'in altına (en az 17) inebilir; sezon dönümünde altyapıdan 20'ye tamamlar.
 - Test: `fm-proto/short.cjs` (9 kişiyle maç, 6 kişiyle hükmen).
+
+## Otomatik ret ve menajerin ön pazarlığı
+- **Otomatik ret:** takım bazlı (Teklifler sekmesi: "gelen teklifleri otomatik reddet", listeye koyduklarım hariç) ve oyuncu bazlı ("satılık değil"). Serbest kalma maddesi ödenirse bu ayar geçerli olmaz.
+- **Menajer:** gelen teklifi önden pazarlıkla yükseltir (seviye başına +%3, botun üst limitini aşmadan), piyasa değerinin %80 + seviye×%3'ünün altındaki teklifi hiç getirmez; karşı teklifleri seviye başına %2 aşağı çeker (alt limitin altına inmez). Sayılar onay bekliyor.

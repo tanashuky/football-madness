@@ -82,7 +82,7 @@ export function renewTab(k) {
         const mine = tw.offers.map((o) => html `<div class="li static"><div><div class="nm">${o.name} <small class="muted">${money(o.amount)}</small>${o.loan ? html ` ${tag(t('loan.tag'), 'o')}` : ''}</div><div class="sub">${t('offer.' + o.state)}${o.state === 'counter' ? ': ' + money(o.counter || 0) : ''}${(o.state === 'rejected' || o.why === 'wantclause') && o.why ? ' · ' + t('why.' + o.why) : ''}</div></div><div class="acts">${o.state === 'counter' ? html `<button class="btn sm prim" data-cacc="${o.id}">${t('offer.accept')}</button>` : ''}${o.state === 'pending' || o.state === 'counter' ? html `<button class="btn sm ghost" data-owd="${o.id}">${o.state === 'counter' ? t('offer.decline') : t('offer.withdraw')}</button>` : ''}</div></div>`);
         const bids = tw.listings.map((l) => { const p = k.roster.find((x) => x.id === l.id); if (!p)
             return html ``; return html `<div class="li static"><div><div class="nm">${p.name} <small class="muted">${l.loan ? t('loan.listed') + ' ' + money(l.ask) : l.ask > 0 ? t('list.ask') + ' ' + money(l.ask) : t('list.unlisted')}</small></div><div class="sub">${l.offer ? t('list.bid', { club: l.offer.club, fm: money(l.offer.amount) }) : t('list.wait')}</div></div><div class="acts">${l.offer ? html `<button class="btn sm prim" data-bacc="${l.id}">${t('offer.accept')}</button><button class="btn sm ghost" data-bdec="${l.id}">${t('offer.decline')}</button>` : html `<button class="btn sm ghost" data-unl="${l.id}">${t('list.remove')}</button>`}</div></div>`; });
-        body = html `${card(t('tw.myoffers'), mine.length ? html `<div class="list compact">${mine}</div>` : muted(t('tw.myoffers.none')))}${card(t('tw.mylist'), bids.length ? html `<div class="list compact">${bids}</div>` : muted(t('tw.mylist.none')))}`;
+        body = html `<label class="chk row"><input type="checkbox" id="noBids" ${k.noBids ? raw('checked') : ''}> ${t('bid.auto.team')}</label>${card(t('tw.myoffers'), mine.length ? html `<div class="list compact">${mine}</div>` : muted(t('tw.myoffers.none')))}${card(t('tw.mylist'), bids.length ? html `<div class="list compact">${bids}</div>` : muted(t('tw.mylist.none')))}`;
     }
     else if (V.sub === 'sell') {
         const rows = k.roster.map((p) => { const l = tw.listings.find((x) => x.id === p.id); return { p, note: l ? html ` ${tag(t('list.listed'), 'y')}` : '' }; });
@@ -105,6 +105,10 @@ export function renewTab(k) {
 }
 export function bindRenew(root, k, re, fail) {
     bindWindowBar(k);
+    const nb = $('noBids');
+    if (nb)
+        nb.onchange = () => { k.noBids = nb.checked; if (nb.checked)
+            k.tw.listings = k.tw.listings.filter((l) => l.ask > 0 || l.loan); re(); };
     const rs = $('rSub');
     if (rs)
         rs.onclick = (e) => { const b = e.target.closest('button'); if (b) {
@@ -213,6 +217,7 @@ register('player', (c) => {
       <div class="row"><button class="btn danger" id="pQuick" ${!deal ? raw('disabled') : ''}>${t('pl.quicksell', { fm: money(sellPrice(p)) })}</button></div>
       <div class="row"><label class="f inline">${t('list.ask')} ${pct(v, [90, 100, 110, 120, 130], 'pAskPct', 110)}</label><button class="btn" id="pList" ${!deal ? raw('disabled') : ''}>${lst ? t('pl.list.update') : t('pl.list')}</button>${lst ? html `<button class="btn ghost sm" id="pUnlist">${t('list.remove')}</button>` : ''}</div>
       ${lst ? html `<p class="muted small">${t('list.listed')}: ${money(lst.ask)}${lst.offer ? ' · ' + t('list.bid', { club: lst.offer.club, fm: money(lst.offer.amount) }) : ''}</p>` : ''}
+      <label class="chk row"><input type="checkbox" id="pNfs" ${p.nfs ? raw('checked') : ''}> ${t('bid.auto.player')}</label>
       <div class="row"><button class="btn ghost sm danger" id="pRelease">${t('pl.release', { fm: money(severance(k, p)) })}</button></div>
       <p class="muted small">${deal ? t('pl.list.hint') : k.tw.open ? t('tw.closing.desc') : t('tw.closed.desc')}</p>`);
     }
@@ -283,6 +288,10 @@ register('player', (c) => {
                     back(t('pl.released'));
                 else
                     fail(r); };
+            const pn = $('pNfs');
+            if (pn)
+                pn.onchange = () => { p.nfs = pn.checked; if (p.nfs)
+                    k.tw.listings = k.tw.listings.filter((l) => l.id !== p.id || l.ask > 0 || l.loan); save(); };
             const pu = $('pUnlist');
             if (pu)
                 pu.onclick = () => { unlist(k, p.id); save(); render(); };
