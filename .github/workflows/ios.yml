@@ -1,0 +1,75 @@
+# iOS paketi: yayindaki istemciyi (app/) Capacitor ile sarar, GitHub'in Mac makinesinde derler ve TestFlight'a yukler.
+# Gizli degiskenler (depo ayarlarinda): ASC_ISSUER_ID, ASC_KEY_ID, ASC_KEY_P8 (App Store Connect API anahtari).
+# Elle baslatilir (Actions > ios-testflight > Run workflow) ya da bu dosya / client/ios degisince calisir.
+name: ios-testflight
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/ios.yml', 'client/ios/**']
+concurrency: { group: ios-testflight, cancel-in-progress: true }
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Anahtar ve uygulama kimligi
+        run: |
+          for v in ASC_ISSUER_ID ASC_KEY_ID ASC_KEY_P8; do if [ -z "${!v}" ]; then echo "::error::Gizli degisken eksik: $v"; exit 1; fi; done
+          mkdir -p "$RUNNER_TEMP/keys"
+          printf '%s\n' "$ASC_KEY_P8" > "$RUNNER_TEMP/keys/AuthKey_${ASC_KEY_ID}.p8"
+          echo "ASC_KEY_PATH=$RUNNER_TEMP/keys/AuthKey_${ASC_KEY_ID}.p8" >> "$GITHUB_ENV"
+          node client/ios/asc.mjs "$RUNNER_TEMP/keys/AuthKey_${ASC_KEY_ID}.p8" >> "$GITHUB_ENV"
+      - name: Web dosyalari
+        run: |
+          mkdir -p ios-build/www
+          cp -R app/. ios-build/www/
+          cp -R icons ios-build/www/icons
+          sed -i '' 's#\.\./icons/#icons/#g' ios-build/www/index.html
+      - name: Capacitor projesi
+        working-directory: ios-build
+        run: |
+          npm init -y > /dev/null
+          npm install @capacitor/core@7 @capacitor/cli@7 @capacitor/ios@7
+          npx cap init "Football Madness" "$BUNDLE_ID" --web-dir www
+          npx cap add ios
+          npx cap sync ios
+          cp ../client/ios/icon-1024.png ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png
+          plutil -replace ITSAppUsesNonExemptEncryption -bool NO ios/App/App/Info.plist
+      - name: Arsivle
+        working-directory: ios-build
+        run: |
+          set -o pipefail
+          xcodebuild -workspace ios/App/App.xcworkspace -scheme App -configuration Release -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/App.xcarchive" archive \
+            -allowProvisioningUpdates -authenticationKeyPath "$ASC_KEY_PATH" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            DEVELOPMENT_TEAM="$TEAM_ID" CODE_SIGN_STYLE=Automatic CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" MARKETING_VERSION=1.0 | tail -n 60
+      - name: TestFlight'a yukle
+        working-directory: ios-build
+        run: |
+          set -o pipefail
+          cat > export.plist <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>$TEAM_ID</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+          </dict></plist>
+          PLIST
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/App.xcarchive" -exportOptionsPlist export.plist -exportPath "$RUNNER_TEMP/out" \
+            -allowProvisioningUpdates -authenticationKeyPath "$ASC_KEY_PATH" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID" | tail -n 40
+      - name: Anahtari sil
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/keys"
