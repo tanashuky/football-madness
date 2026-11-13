@@ -65,14 +65,14 @@ export function renewTab(k: Career): Raw {
         <label>${t('flt.age')}<select data-f="ageMax">${opt([99, 21, 24, 27, 30], f.ageMax, 99, (v) => '≤' + v)}</select></label>
         <label class="chk"><input type="checkbox" data-f="trait" ${f.trait ? raw('checked') : ''}> ${t('flt.trait')}</label>
         <label class="chk"><input type="checkbox" data-f="budget" ${f.budget ? raw('checked') : ''}> ${t('flt.budget', { fm: money(k.fm) })}</label></div>
-      ${table('pool', ['pos', 'name', 'gg', 'age', 'price', 'wage', 'trait', 'club', 'left'], rows, 'pool')}`;
+      ${table('pool', ['name', 'pos', 'gg', 'age', 'price', 'wage', 'trait', 'club', 'left'], rows, 'pool')}`;
   } else if (V.sub === 'offers') {
     const mine = tw.offers.map((o) => html`<div class="li static"><div><div class="nm">${o.name} <small class="muted">${money(o.amount)}</small></div><div class="sub">${t('offer.' + o.state)}${o.state === 'counter' ? ': ' + money(o.counter || 0) : ''}</div></div><div class="acts">${o.state === 'counter' ? html`<button class="btn sm prim" data-cacc="${o.id}">${t('offer.accept')}</button>` : ''}${o.state === 'pending' || o.state === 'counter' ? html`<button class="btn sm ghost" data-owd="${o.id}">${o.state === 'counter' ? t('offer.decline') : t('offer.withdraw')}</button>` : ''}</div></div>`);
     const bids = tw.listings.map((l) => { const p = k.roster.find((x) => x.id === l.id); if (!p) return html``; return html`<div class="li static"><div><div class="nm">${p.name} <small class="muted">${t('list.ask')} ${money(l.ask)}</small></div><div class="sub">${l.offer ? t('list.bid', { club: l.offer.club, fm: money(l.offer.amount) }) : t('list.wait')}</div></div><div class="acts">${l.offer ? html`<button class="btn sm prim" data-bacc="${l.id}">${t('offer.accept')}</button><button class="btn sm ghost" data-bdec="${l.id}">${t('offer.decline')}</button>` : html`<button class="btn sm ghost" data-unl="${l.id}">${t('list.remove')}</button>`}</div></div>`; });
     body = html`${card(t('tw.myoffers'), mine.length ? html`<div class="list compact">${mine}</div>` : muted(t('tw.myoffers.none')))}${card(t('tw.mylist'), bids.length ? html`<div class="list compact">${bids}</div>` : muted(t('tw.mylist.none')))}`;
   } else if (V.sub === 'sell') {
     const rows: Row[] = k.roster.map((p) => { const l = tw.listings.find((x) => x.id === p.id); return { p, note: l ? html` ${tag(t('list.listed'), 'y')}` : '' }; });
-    body = html`${muted(t('sell.desc'))}${table('sell', ['pos', 'name', 'gg', 'age', 'value', 'wage', 'trait', 'fat'], rows, 'squad')}`;
+    body = html`${muted(t('sell.desc'))}${table('sell', ['name', 'pos', 'gg', 'age', 'value', 'wage', 'trait', 'fat'], rows, 'squad')}`;
   } else if (V.sub === 'scout') {
     const sc = k.scout; const full = k.roster.length >= ROSTER_MAX;
     body = card(html`${t('renew.scout')} <small>${t('mng.roster', { n: k.roster.length, max: ROSTER_MAX })}</small>`, sc.found ? html`<div class="li" data-go="player" data-ctx='{"id":"${sc.found.id}","src":"scout"}'><div class="num">${sc.found.natPos}</div><div><div class="nm">${sc.found.name}</div><div class="sub">${t('squad.gg')} ${Math.round(sc.found.gg)} · ${sc.found.age} ${t('squad.age')} · ${money(sc.found.wage || 0)}${sc.found.traits.map((x) => ' · ' + x).join('')}</div></div><div class="gg">${money(marketValue(sc.found))}</div></div>

@@ -70,7 +70,7 @@ export function renewTab(k) {
         <label>${t('flt.age')}<select data-f="ageMax">${opt([99, 21, 24, 27, 30], f.ageMax, 99, (v) => '≤' + v)}</select></label>
         <label class="chk"><input type="checkbox" data-f="trait" ${f.trait ? raw('checked') : ''}> ${t('flt.trait')}</label>
         <label class="chk"><input type="checkbox" data-f="budget" ${f.budget ? raw('checked') : ''}> ${t('flt.budget', { fm: money(k.fm) })}</label></div>
-      ${table('pool', ['pos', 'name', 'gg', 'age', 'price', 'wage', 'trait', 'club', 'left'], rows, 'pool')}`;
+      ${table('pool', ['name', 'pos', 'gg', 'age', 'price', 'wage', 'trait', 'club', 'left'], rows, 'pool')}`;
     }
     else if (V.sub === 'offers') {
         const mine = tw.offers.map((o) => html `<div class="li static"><div><div class="nm">${o.name} <small class="muted">${money(o.amount)}</small></div><div class="sub">${t('offer.' + o.state)}${o.state === 'counter' ? ': ' + money(o.counter || 0) : ''}</div></div><div class="acts">${o.state === 'counter' ? html `<button class="btn sm prim" data-cacc="${o.id}">${t('offer.accept')}</button>` : ''}${o.state === 'pending' || o.state === 'counter' ? html `<button class="btn sm ghost" data-owd="${o.id}">${o.state === 'counter' ? t('offer.decline') : t('offer.withdraw')}</button>` : ''}</div></div>`);
@@ -80,7 +80,7 @@ export function renewTab(k) {
     }
     else if (V.sub === 'sell') {
         const rows = k.roster.map((p) => { const l = tw.listings.find((x) => x.id === p.id); return { p, note: l ? html ` ${tag(t('list.listed'), 'y')}` : '' }; });
-        body = html `${muted(t('sell.desc'))}${table('sell', ['pos', 'name', 'gg', 'age', 'value', 'wage', 'trait', 'fat'], rows, 'squad')}`;
+        body = html `${muted(t('sell.desc'))}${table('sell', ['name', 'pos', 'gg', 'age', 'value', 'wage', 'trait', 'fat'], rows, 'squad')}`;
     }
     else if (V.sub === 'scout') {
         const sc = k.scout;

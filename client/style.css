@@ -181,10 +181,10 @@ input.code { background: #0b100e; color: var(--chalk); border: 1px solid var(--l
 @media (max-width: 640px) { .cards.squadgrid > div:last-child { order: -1; position: sticky; top: -12px; z-index: 3; } .cards.squadgrid > div:last-child .card { box-shadow: 0 8px 18px rgba(0,0,0,.45); } }
 .panel .phead { display: flex; align-items: center; justify-content: space-between; gap: 10px; position: sticky; top: -16px; background: var(--stand); z-index: 4; padding: 4px 0; margin-top: -4px; } .panel .phead h3 { margin: 0; }
 /* --- transfer: siralanabilir tablo, filtreler, futbolcu sayfasi --- */
-.tblwrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+.tblwrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--line); border-radius: 12px; background: var(--stand); }
 table.grid { width: 100%; border-collapse: collapse; font-size: .92em; white-space: nowrap; }
 .grid th, .grid td { padding: 9px 7px; text-align: left; border-bottom: 1px solid var(--line); }
-.grid th { padding: 0; position: sticky; top: 0; background: var(--card); }
+.grid th { padding: 0; position: sticky; top: 0; background: var(--stand); }
 .grid th button { all: unset; display: block; box-sizing: border-box; width: 100%; padding: 9px 8px; cursor: pointer; font-size: .82em; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
 .grid th.n button, .grid td.n { text-align: right; font-variant-numeric: tabular-nums; }
 .grid tbody tr[data-go] { cursor: pointer; } .grid tbody tr[data-go]:active { background: rgba(255,255,255,.06); }
@@ -201,3 +201,4 @@ table.grid { width: 100%; border-collapse: collapse; font-size: .92em; white-spa
 .kvs { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; margin-top: 8px; }
 .kv { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; } .kv span { font-size: .78em; color: var(--muted); }
 label.f.inline { display: inline-flex; flex-direction: row; align-items: center; gap: 8px; }
+.grid th.w, .grid td.w { position: sticky; left: 0; z-index: 1; background: var(--stand); box-shadow: 1px 0 0 var(--line); } .grid th.w { z-index: 2; }

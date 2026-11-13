@@ -28,12 +28,10 @@ export function money(fm) {
     const v = Math.abs(fm) * 1000, sign = fm < 0 ? '−' : '';
     const f = (n, d) => new Intl.NumberFormat(locale(), { maximumFractionDigits: d }).format(n);
     if (v >= 1e9)
-        return `${sign}€${f(v / 1e9, 2)} Mr`;
+        return `${sign}${f(v / 1e9, 2)} Mr €`;
     if (v >= 1e6)
-        return `${sign}€${f(v / 1e6, v >= 1e8 ? 0 : v >= 1e7 ? 1 : 2)} M`;
-    if (v >= 1e3)
-        return `${sign}€${f(v / 1e3, 0)} K`;
-    return `${sign}€${f(v, 0)}`;
+        return `${sign}${f(v / 1e6, v >= 1e8 ? 0 : v >= 1e7 ? 1 : 2)} M €`;
+    return `${sign}${f(v, 0)} €`; // milyona kadar tam sayi: 625.000 €
 }
 export function fmtDate(d) { return new Intl.DateTimeFormat(locale(), { dateStyle: 'medium', timeStyle: 'short' }).format(d); }
 export function fmtTime(d) { return new Intl.DateTimeFormat(locale(), { timeStyle: 'short' }).format(d); }
