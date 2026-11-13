@@ -5,21 +5,21 @@ import { go, register, render } from '../core/router.js';
 import { store, save } from '../core/store.js';
 import { card, confirmBox, muted, sel, tag, toast } from '../core/ui.js';
 import { ROSTER_MAX, SCOUTS, fmtLeft, marketValue, overpaid, scoutCost, sellPrice, signFound, startScout, wageFor } from '../model/manage.js';
-import { acceptBid, acceptCounter, buyNow, canDeal, declineBid, listPlayer, nextWeek, offerOf, promoteYouth, quickSell, sendOffer, skipWindow, unlist, withdrawOffer } from '../model/transfer.js';
+import { acceptBid, acceptCounter, buyNow, canDeal, declineBid, findMarket, listPlayer, market, nextWeek, offerOf, promoteYouth, quickSell, sendOffer, skipWindow, unlist, withdrawOffer } from '../model/transfer.js';
 import { track } from '../model/missions.js';
 import { careerTabs, onCareerTab } from './career.js';
 const POS_ORDER = ['GK', 'CB', 'FB', 'DM', 'CM', 'W', 'ST'];
 // gorunum durumu (ekranlar arasi gecerken korunur)
-const V = { sub: 'pool', sort: { pool: { k: 'gg', d: -1 }, sell: { k: 'gg', d: -1 } }, f: { pos: '', ggMin: 0, ggMax: 99, ageMax: 99, trait: false, budget: false } };
+const V = { sub: 'pool', sort: { pool: { k: 'gg', d: -1 }, sell: { k: 'gg', d: -1 } }, f: { pos: '', st: '', ggMin: 0, ggMax: 99, ageMax: 99, trait: false, budget: false } };
 const COLS = {
     pos: { k: 'pos', label: 'col.pos', get: (r) => POS_ORDER.indexOf(r.p.natPos), show: (r) => html `<b class="ps">${r.p.natPos}</b>` },
-    name: { k: 'name', label: 'col.name', wide: true, get: (r) => r.p.name, show: (r) => html `${r.p.name}${r.fresh ? html ` ${tag(t('pool.new'), 'g')}` : ''}${r.note || ''}` },
+    name: { k: 'name', label: 'col.name', wide: true, get: (r) => r.p.name, show: (r) => html `${r.p.name}${r.note || ''}` },
     age: { k: 'age', label: 'col.age', num: true, get: (r) => r.p.age, show: (r) => String(r.p.age) },
     gg: { k: 'gg', label: 'col.gg', num: true, get: (r) => r.p.gg, show: (r) => html `<b>${Math.round(r.p.gg)}</b>` },
     trait: { k: 'trait', label: 'col.trait', get: (r) => r.p.traits.length, show: (r) => r.p.traits.join(', ') || '–' },
     wage: { k: 'wage', label: 'col.wage', num: true, get: (r) => r.p.wage || 0, show: (r) => html `<span class="${overpaid(r.p) ? 'neg' : ''}">${money(r.p.wage || 0)}</span>` },
     value: { k: 'value', label: 'col.value', num: true, get: (r) => marketValue(r.p), show: (r) => money(marketValue(r.p)) },
-    price: { k: 'price', label: 'col.price', num: true, get: (r) => r.price || 0, show: (r) => html `<b>${money(r.price || 0)}</b>` },
+    price: { k: 'price', label: 'col.price', num: true, get: (r) => r.price || 0, show: (r) => r.price ? html `<b>${money(r.price)}</b>` : html `<span class="muted">${t('pool.ask')}</span>` },
     fat: { k: 'fat', label: 'col.fat', num: true, get: (r) => r.p.fatigue, show: (r) => String(Math.round(r.p.fatigue)) },
     club: { k: 'club', label: 'col.club', get: (r) => r.club || '', show: (r) => r.club || t('pool.free') },
     left: { k: 'left', label: 'col.left', num: true, get: (r) => r.left || 0, show: (r) => t('pool.weeks', { n: r.left || 0 }) },
@@ -57,25 +57,27 @@ export function renewTab(k) {
     const f = V.f;
     const tw = k.tw;
     const nOff = tw.offers.length + tw.listings.filter((l) => !!l.offer).length;
-    const subs = [['pool', `${t('mng.pool')} (${k.pool.length})`], ['offers', `${t('tw.offers')}${nOff ? ` (${nOff})` : ''}`], ['sell', t('mng.sellTitle')], ['scout', t('renew.scout')], ['youth', `${t('renew.academy')}${k.youth.length ? ` (${k.youth.length})` : ''}`]];
+    const subs = [['pool', t('mng.pool')], ['offers', `${t('tw.offers')}${nOff ? ` (${nOff})` : ''}`], ['sell', t('mng.sellTitle')], ['scout', t('renew.scout')], ['youth', `${t('renew.academy')}${k.youth.length ? ` (${k.youth.length})` : ''}`]];
     let body;
     if (V.sub === 'pool') {
-        const rows = k.pool.filter((it) => (!f.pos || it.p.natPos === f.pos) && it.p.gg >= f.ggMin && it.p.gg <= f.ggMax && it.p.age <= f.ageMax && (!f.trait || it.p.traits.length > 0) && (!f.budget || it.price <= k.fm))
-            .map((it) => { const o = offerOf(k, it.p.id); return { p: it.p, price: it.price, left: it.left, fresh: it.fresh, club: it.club, note: o ? html ` ${tag(t('offer.' + o.state), o.state === 'counter' ? 'y' : '')}` : '' }; });
+        const all = market(k);
+        const rows = all.filter((m) => (!f.pos || m.p.natPos === f.pos) && (!f.st || (f.st === 'free' ? m.ti < 0 : m.ask !== undefined)) && m.p.gg >= f.ggMin && m.p.gg <= f.ggMax && m.p.age <= f.ageMax && (!f.trait || m.p.traits.length > 0) && (!f.budget || (m.ask ?? marketValue(m.p)) <= k.fm))
+            .map((m) => { const o = offerOf(k, m.p.id); return { p: m.p, price: m.ask, club: m.club, note: o ? html ` ${tag(t('offer.' + o.state), o.state === 'counter' ? 'y' : '')}` : '' }; });
         const opt = (vals, cur, any, lab) => vals.map((v) => html `<option value="${v}" ${v === cur ? raw('selected') : ''}>${v === any ? t('flt.any') : lab(v)}</option>`);
         body = html `<div class="filters">
         <label>${t('col.pos')}<select data-f="pos"><option value="">${t('flt.any')}</option>${POS_ORDER.map((x) => html `<option value="${x}" ${f.pos === x ? raw('selected') : ''}>${t('pos.' + x)}</option>`)}</select></label>
+        <label>${t('flt.st')}<select data-f="st">${[['', t('flt.any')], ['sale', t('flt.sale')], ['free', t('pool.free')]].map(([v, l]) => html `<option value="${v}" ${f.st === v ? raw('selected') : ''}>${l}</option>`)}</select></label>
         <label>${t('flt.ggMin')}<select data-f="ggMin">${opt([0, 45, 50, 55, 60, 65, 70, 75, 80], f.ggMin, 0, (v) => v + '+')}</select></label>
         <label>${t('flt.ggMax')}<select data-f="ggMax">${opt([99, 80, 75, 70, 65, 60, 55], f.ggMax, 99, (v) => '≤' + v)}</select></label>
         <label>${t('flt.age')}<select data-f="ageMax">${opt([99, 21, 24, 27, 30], f.ageMax, 99, (v) => '≤' + v)}</select></label>
         <label class="chk"><input type="checkbox" data-f="trait" ${f.trait ? raw('checked') : ''}> ${t('flt.trait')}</label>
         <label class="chk"><input type="checkbox" data-f="budget" ${f.budget ? raw('checked') : ''}> ${t('flt.budget', { fm: money(k.fm) })}</label></div>
-      ${table('pool', ['name', 'pos', 'gg', 'age', 'price', 'wage', 'trait', 'club', 'left'], rows, 'pool')}`;
+      ${table('pool', ['name', 'pos', 'gg', 'age', 'club', 'price', 'value', 'wage', 'trait'], rows, 'pool')}${muted(t('pool.count', { n: rows.length, all: all.length }))}`;
     }
     else if (V.sub === 'offers') {
-        const mine = tw.offers.map((o) => html `<div class="li static"><div><div class="nm">${o.name} <small class="muted">${money(o.amount)}</small></div><div class="sub">${t('offer.' + o.state)}${o.state === 'counter' ? ': ' + money(o.counter || 0) : ''}</div></div><div class="acts">${o.state === 'counter' ? html `<button class="btn sm prim" data-cacc="${o.id}">${t('offer.accept')}</button>` : ''}${o.state === 'pending' || o.state === 'counter' ? html `<button class="btn sm ghost" data-owd="${o.id}">${o.state === 'counter' ? t('offer.decline') : t('offer.withdraw')}</button>` : ''}</div></div>`);
+        const mine = tw.offers.map((o) => html `<div class="li static"><div><div class="nm">${o.name} <small class="muted">${money(o.amount)}</small></div><div class="sub">${t('offer.' + o.state)}${o.state === 'counter' ? ': ' + money(o.counter || 0) : ''}${o.state === 'rejected' && o.why ? ' · ' + t('why.' + o.why) : ''}</div></div><div class="acts">${o.state === 'counter' ? html `<button class="btn sm prim" data-cacc="${o.id}">${t('offer.accept')}</button>` : ''}${o.state === 'pending' || o.state === 'counter' ? html `<button class="btn sm ghost" data-owd="${o.id}">${o.state === 'counter' ? t('offer.decline') : t('offer.withdraw')}</button>` : ''}</div></div>`);
         const bids = tw.listings.map((l) => { const p = k.roster.find((x) => x.id === l.id); if (!p)
-            return html ``; return html `<div class="li static"><div><div class="nm">${p.name} <small class="muted">${t('list.ask')} ${money(l.ask)}</small></div><div class="sub">${l.offer ? t('list.bid', { club: l.offer.club, fm: money(l.offer.amount) }) : t('list.wait')}</div></div><div class="acts">${l.offer ? html `<button class="btn sm prim" data-bacc="${l.id}">${t('offer.accept')}</button><button class="btn sm ghost" data-bdec="${l.id}">${t('offer.decline')}</button>` : html `<button class="btn sm ghost" data-unl="${l.id}">${t('list.remove')}</button>`}</div></div>`; });
+            return html ``; return html `<div class="li static"><div><div class="nm">${p.name} <small class="muted">${l.ask > 0 ? t('list.ask') + ' ' + money(l.ask) : t('list.unlisted')}</small></div><div class="sub">${l.offer ? t('list.bid', { club: l.offer.club, fm: money(l.offer.amount) }) : t('list.wait')}</div></div><div class="acts">${l.offer ? html `<button class="btn sm prim" data-bacc="${l.id}">${t('offer.accept')}</button><button class="btn sm ghost" data-bdec="${l.id}">${t('offer.decline')}</button>` : html `<button class="btn sm ghost" data-unl="${l.id}">${t('list.remove')}</button>`}</div></div>`; });
         body = html `${card(t('tw.myoffers'), mine.length ? html `<div class="list compact">${mine}</div>` : muted(t('tw.myoffers.none')))}${card(t('tw.mylist'), bids.length ? html `<div class="list compact">${bids}</div>` : muted(t('tw.mylist.none')))}`;
     }
     else if (V.sub === 'sell') {
@@ -113,7 +115,7 @@ export function bindRenew(root, k, re, fail) {
             s.d = COLS[s.k].num ? -1 : 1;
         } render(); };
     for (const el of root.querySelectorAll('[data-f]'))
-        el.onchange = () => { const key = el.dataset.f; V.f[key] = el instanceof HTMLInputElement && el.type === 'checkbox' ? el.checked : key === 'pos' ? el.value : +el.value; render(); };
+        el.onchange = () => { const key = el.dataset.f; V.f[key] = el instanceof HTMLInputElement && el.type === 'checkbox' ? el.checked : key === 'pos' || key === 'st' ? el.value : +el.value; render(); };
     for (const b of root.querySelectorAll('[data-scout]'))
         b.onclick = () => { const r = startScout(k, +b.dataset.scout, ($('scPos').value || '')); if (r === 'ok') {
             track(store.db, { t: 'scout' });
@@ -159,7 +161,7 @@ register('player', (c) => {
         go('home', {});
         return { html: '' };
     }
-    const it = c.src === 'pool' ? k.pool.find((x) => x.p.id === c.id) : null;
+    const it = c.src === 'pool' ? findMarket(k, c.id) : null;
     const p = c.src === 'pool' ? it?.p : c.src === 'scout' ? (k.scout.found && k.scout.found.id === c.id ? k.scout.found : undefined) : k.roster.find((x) => x.id === c.id);
     if (!p) {
         go('career', { tab: 'renew' });
@@ -174,9 +176,9 @@ register('player', (c) => {
     let actions = html ``;
     if (c.src === 'pool' && it)
         actions = card(t('pl.actions'), html `
-      <div class="row"><button class="btn prim" id="pBuy" ${!deal || full || k.fm < it.price ? raw('disabled') : ''}>${t('pl.buynow', { fm: money(it.price) })}</button></div>
-      <div class="row"><label class="f inline">${t('pl.offer')} ${pct(it.price, [70, 75, 80, 85, 90, 95], 'pOfferPct', 85)}</label><button class="btn" id="pOffer" ${!deal ? raw('disabled') : ''}>${o ? t('pl.offer.update') : t('pl.offer.send')}</button></div>
-      ${o ? html `<p class="muted small">${t('pl.offer.state', { fm: money(o.amount), s: t('offer.' + o.state) })}${o.state === 'counter' ? ` ${money(o.counter || 0)}` : ''}</p>${o.state === 'counter' ? html `<div class="row"><button class="btn prim sm" id="pCounter">${t('offer.accept')} · ${money(o.counter || 0)}</button></div>` : ''}` : ''}
+      ${it.ask !== undefined ? html `<div class="row"><button class="btn prim" id="pBuy" ${!deal || full || k.fm < it.ask ? raw('disabled') : ''}>${t('pl.buynow', { fm: money(it.ask) })}</button></div>` : muted(t('pl.notlisted', { club: it.club }))}
+      <div class="row"><label class="f inline">${t('pl.offer')} ${pct(marketValue(p), [70, 80, 90, 100, 110, 125, 150, 200], 'pOfferPct', it.ask !== undefined ? 90 : 110)}</label><button class="btn" id="pOffer" ${!deal ? raw('disabled') : ''}>${o ? t('pl.offer.update') : t('pl.offer.send')}</button></div>
+      ${o ? html `<p class="muted small">${t('pl.offer.state', { fm: money(o.amount), s: t('offer.' + o.state) })}${o.state === 'counter' ? ` ${money(o.counter || 0)}` : ''}${o.state === 'rejected' && o.why ? ' · ' + t('why.' + o.why) : ''}</p>${o.state === 'counter' ? html `<div class="row"><button class="btn prim sm" id="pCounter">${t('offer.accept')} · ${money(o.counter || 0)}</button></div>` : ''}` : ''}
       <p class="muted small">${deal ? t('pl.offer.hint') : k.tw.open ? t('tw.closing.desc') : t('tw.closed.desc')} · ${t('home.wallet', { fm: money(k.fm) })}</p>`);
     else if (c.src === 'squad') {
         const v = sellPrice(p) / 0.9;
@@ -203,7 +205,7 @@ register('player', (c) => {
     }
     return { title: p.name, tabs: careerTabs('renew'), onTab: onCareerTab, html: html `
     <section class="card hero"><h3>${p.name} <small>${t('pos.' + p.natPos)}${it && it.club ? ' · ' + it.club : it ? ' · ' + t('pool.free') : ''}</small></h3>
-      <div class="kvs">${info(t('col.gg'), String(Math.round(p.gg)))}${info(t('col.age'), String(p.age))}${info(t('col.value'), money(marketValue(p)))}${info(t('col.wage'), html `${money(p.wage || 0)}${overpaid(p) ? html ` ${tag(t('wage.over'), 'o')}` : ''}`)}${info(t('pl.fairwage'), money(wageFor(p.gg)))}${info(t('col.trait'), p.traits.join(', ') || '–')}${it ? info(t('col.left'), t('pool.weeks', { n: it.left })) : ''}${c.src === 'squad' ? info(t('col.fat'), String(Math.round(p.fatigue))) : ''}</div></section>
+      <div class="kvs">${info(t('col.gg'), String(Math.round(p.gg)))}${info(t('col.age'), String(p.age))}${info(t('col.value'), money(marketValue(p)))}${info(t('col.wage'), html `${money(p.wage || 0)}${overpaid(p) ? html ` ${tag(t('wage.over'), 'o')}` : ''}`)}${info(t('pl.fairwage'), money(wageFor(p.gg)))}${info(t('col.trait'), p.traits.join(', ') || '–')}${c.src === 'squad' ? info(t('col.fat'), String(Math.round(p.fatigue))) : ''}</div></section>
     <div class="cards two">${actions}${cmp}</div>`, after: () => {
             const back = (msg) => { save(); toast(msg, 'ok'); go('career', { tab: 'renew' }); };
             const fail = (r) => toast(t('mng.err.' + r), 'err');
@@ -217,7 +219,7 @@ register('player', (c) => {
                     fail(r); };
             const po = $('pOffer');
             if (po && it)
-                po.onclick = () => { const amt = Math.round((it.price * +$('pOfferPct').value) / 1000) * 10; if (sendOffer(k, p.id, amt) === 'ok') {
+                po.onclick = () => { const amt = Math.round((marketValue(p) * +$('pOfferPct').value) / 1000) * 10; if (sendOffer(k, p.id, amt) === 'ok') {
                     track(store.db, { t: 'market' });
                     save();
                     toast(t('pl.offer.sent'), 'ok');

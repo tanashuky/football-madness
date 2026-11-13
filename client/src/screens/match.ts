@@ -7,6 +7,7 @@ import { store, save } from '../core/store.js';
 import { card, dot, muted, sel, seg, tag } from '../core/ui.js';
 import { getLang } from '../core/i18n.js';
 import { TEMPLATES, DIFFS, botTeamIn, tplById } from '../model/templates.js';
+import { botLeagueTeamIn } from '../model/bots.js';
 import { avgGG, ensureLineup, userTeamIn } from '../model/club.js';
 import { form } from '../model/career.js';
 import { matchLineup, unavailable } from '../model/manage.js';
@@ -35,7 +36,7 @@ function roomTeams(c: RoomCtx): { me: TeamIn; opp: TeamIn } {
   if (ensureLineup(k.roster, k.team)) save(); // kayitli dizilis her zaman gecerli olsun (yorgunluk, sakatlik ve ceza buna gore islenir)
   const tt = { ...k.team, lineup: matchLineup(k, !!c.cup) }; const out = (p: any) => unavailable(p, !!c.cup);
   if (c.cup && k.cup) return { me: userTeamIn(club, k.roster, tt, k.metrics, 9, out), opp: botTeamIn(k.cup.opps[k.cup.round], k.diff, NAMES_B) };
-  return { me: userTeamIn(club, k.roster, tt, k.metrics, 9, out), opp: botTeamIn(k.league.teams[c.oppIdx!], k.diff, NAMES_B) };
+  return { me: userTeamIn(club, k.roster, tt, k.metrics, 9, out), opp: botLeagueTeamIn(k, c.oppIdx!) };
 }
 register('room', (c: RoomCtx) => {
   const { me, opp } = roomTeams(c); const s = store.db.settings; if (c.kind === 'career') track(store.db, { t: 'analysis' }); const home_ = c.home !== false; const k = store.db.career;

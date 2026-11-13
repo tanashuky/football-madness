@@ -288,3 +288,13 @@ Commit sırası: 8ee1406 hız/pencereler → dd51833 şekiller → 7402036 göre
 - **Altyapı:** gençler sezon sonu ve devre arasında çıkar, "Kadroya al" ile her zaman alınır; dönem dışında alınan genç sonraki döneme kadar kupada oynayamaz.
 - **Bilet fiyatı:** Kulüp sekmesinden seçilir (€50–€200). Seyirci = kapasite × min(1, doluluk × (razı olunan/fiyat)^2,5); razı olunan tutar TM, lig sırası ve rakibe göre değişir. Tahmin gösterilmez; yalnızca geçmiş maçların fiyat/seyirci/gelir tablosu. Morale etkisi yok.
 - Test: `fm-proto/transfer.cjs` (uçtan uca), client6/7/8 ve nav güncellendi.
+
+## Havuz simülasyonu kalktı: bot kulüplerin gerçek kadrosu ve kararları (istemci)
+- **Para:** her zaman tam sayı (2.500.000 €).
+- **Havuz = tüm futbolcular:** her bot kulübün ~20 kişilik gerçek kadrosu, kasası ve karakteri (satıcı / dengeli / hırslı) var; maçlarda da bu kadroyla oynar. Ayrıca ~14 serbest futbolcu. Simüle havuz, haftalık %5 fiyat düşüşü ve sabit bot kotası kaldırıldı (`model/bots.ts`).
+- **Satış kararı (`verdict`)**: futbolcu giderse ilk 11 kaç puan zayıflar, o mevkide yedek var mı, cevaptan sonra yerine adam alacak hafta kaldı mı, yıldız mı ve takım formda mı, kulübün karakteri, kasası. Sonuç: en düşük kabul fiyatı ya da gerekçeli ret (tek oyuncu / kilit oyuncu / formdaki yıldız / kadro alt sınırı). Zorluk düştükçe fiyat biçme hatası büyür.
+- **Alım kararı (`botWeek`)**: bot en zayıf mevkisine ya da yedeği olmayan mevkiye bakar; bütçe (kasanın %70'i), maaş bütçesi ve 25 kişi sınırı içinde serbestlerden, diğer botlardan ya da kullanıcıdan aday seçer; gerekmiyorsa almaz. Kullanıcının futbolcusuna teklif olarak gelir (listede olmasa da); karar kullanıcının.
+- **Hemen al** yalnızca serbest ve kulübün satış listesine koyduğu futbolcularda; diğerlerine teklif (piyasa değerinin %70–200'ü).
+- **Sezon dönümü:** botların futbolcuları da yaşlanır, gelişir, emekli olur; eksik mevkiler altyapıdan tamamlanır.
+- Test: `fm-proto/bots.cjs` (karar senaryoları + 3 sezon), `transfer.cjs` güncellendi.
+- Onay bekleyen sayılar: bot kasası (sezon başı 1.500 + sıra primi, devre arası 500), yedeksiz mevki primi (+8 puan sayılır), karşı teklif aralığı (en düşük kabulün %80'i ve üstü).

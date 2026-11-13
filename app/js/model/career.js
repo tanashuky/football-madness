@@ -1,10 +1,11 @@
 // Kariyer: botlara karsi lig; cihazda oynanir, ilerleme aninda yazilir. Ekonomi dokumandaki Online formullerinin carpanlı halidir
 // (gelir x1,25, maliyet x0,8, sure x0,6). Odul defteri rewards.ts'de.
-import { P, NAMES_A, NAMES_B, simulate } from '../engine.js';
+import { P, simulate } from '../engine.js';
 import { newRoster, newTeamSetup } from './club.js';
-import { TEMPLATES, botTeamIn } from './templates.js';
+import { TEMPLATES } from './templates.js';
 import { STADIUM_CAP, afterWeek, fixLineup, gate, paySponsor, seasonPrize, seasonTurn } from './manage.js';
 import { openWindow } from './transfer.js';
+import { botLeagueTeamIn, botsSeasonTurn } from './bots.js';
 import { newCup } from './cup.js';
 export { STADIUM_CAP };
 export const CAREER_K = { income: 1.25, cost: 0.8, time: 0.6 };
@@ -79,7 +80,7 @@ function simOthers(c, skipMine) {
     for (const [x, y] of l.fixtures[l.week]) {
         if (skipMine && (x === 0 || y === 0))
             continue;
-        const A = botTeamIn(l.teams[x], c.diff, NAMES_B), B = botTeamIn(l.teams[y], c.diff, NAMES_A);
+        const A = botLeagueTeamIn(c, x), B = botLeagueTeamIn(c, y);
         P.clockRate = 90 / c.minutes;
         P.dt = 0.1;
         const st = simulate(A, B, weekSeed(l, x));
@@ -136,6 +137,7 @@ export function closeSeason(c) {
     c.stats.seasons = l.season;
     const youths = seasonTurn(c);
     fixLineup(c);
+    botsSeasonTurn(c);
     c.tw.midDone = false;
     openWindow(c, 'pre');
     paySponsor(c);

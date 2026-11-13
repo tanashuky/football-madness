@@ -6,6 +6,7 @@ import { newRoster, newTeamSetup } from './club.js';
 import { TEMPLATES, botTeamIn } from './templates.js';
 import { STADIUM_CAP, afterWeek, fixLineup, gate, paySponsor, seasonPrize, seasonTurn } from './manage.js';
 import { openWindow } from './transfer.js';
+import { botLeagueTeamIn, botsSeasonTurn } from './bots.js';
 import { newCup } from './cup.js';
 export { STADIUM_CAP };
 
@@ -51,7 +52,7 @@ function simOthers(c: Career, skipMine: boolean) {
   const l = c.league;
   for (const [x, y] of l.fixtures[l.week]) {
     if (skipMine && (x === 0 || y === 0)) continue;
-    const A = botTeamIn(l.teams[x], c.diff, NAMES_B), B = botTeamIn(l.teams[y], c.diff, NAMES_A);
+    const A = botLeagueTeamIn(c, x), B = botLeagueTeamIn(c, y);
     P.clockRate = 90 / c.minutes; P.dt = 0.1; const st = simulate(A, B, weekSeed(l, x)); P.clockRate = 6;
     record(l, x, y, st.stats[0].goals, st.stats[1].goals);
   }
@@ -86,7 +87,7 @@ export function closeSeason(c: Career): { youths: RosterPlayer[]; prize: number;
   c.history.push({ season: l.season, rank: r, w: me.w, d: me.d, l: me.l });
   if (r === 1) c.trophies.push({ season: l.season, kind: 'league', name: 'Kariyer Ligi' });
   l.season++; l.week = 0; l.results = []; l.table = emptyTable(l.teams.length); c.stats.seasons = l.season;
-  const youths = seasonTurn(c); fixLineup(c);
+  const youths = seasonTurn(c); fixLineup(c); botsSeasonTurn(c);
   c.tw.midDone = false; openWindow(c, 'pre');
   paySponsor(c); c.cup = newCup(c, r); // kupa 2. sezondan itibaren, onceki sezon sirasina gore
   return { youths, prize: pz.fm, scouts: pz.scouts, rank: r };

@@ -22,12 +22,17 @@ const AI = {
 };
 export function botTeamIn(tpl, diff, names = NAMES_B) {
     const t = mkSquad({ name: tpl.name, short: tpl.short, color: tpl.color, color2: tpl.color2, formation: tpl.formation }, tpl.gg, names);
-    t.tactic = { ...DOCTRINES[tpl.doctrine].tactic, doctrine: tpl.doctrine };
-    t.mainTactic = { ...t.tactic };
-    t.ai = AI[diff] || AI[2];
     const ggOff = (diff - 3) * 2;
     for (const p of [...t.players, ...(t.bench || [])])
         p.gg = Math.max(30, Math.min(99, p.gg + ggOff));
+    return botBrain(t, tpl.doctrine, diff);
+}
+// bot davranisi: doktrin taktigi, zorluga gore yapay zeka ve kurallar
+export function botBrain(t, doctrine, diff) {
+    t.tactic = { ...DOCTRINES[doctrine].tactic, doctrine };
+    t.mainTactic = { ...t.tactic };
+    t.duties = {};
+    t.ai = AI[diff] || AI[2];
     t.rules = botRules(Math.max(0, diff - 2));
     t.think = Math.max(0, diff - 2);
     t.U = 53 + diff * 2;
