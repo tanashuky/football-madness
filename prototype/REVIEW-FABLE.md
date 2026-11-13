@@ -332,3 +332,9 @@ Commit sırası: 8ee1406 hız/pencereler → dd51833 şekiller → 7402036 göre
 ## Otomatik ret ve menajerin ön pazarlığı
 - **Otomatik ret:** takım bazlı (Teklifler sekmesi: "gelen teklifleri otomatik reddet", listeye koyduklarım hariç) ve oyuncu bazlı ("satılık değil"). Serbest kalma maddesi ödenirse bu ayar geçerli olmaz.
 - **Menajer:** gelen teklifi önden pazarlıkla yükseltir (seviye başına +%3, botun üst limitini aşmadan), piyasa değerinin %80 + seviye×%3'ünün altındaki teklifi hiç getirmez; karşı teklifleri seviye başına %2 aşağı çeker (alt limitin altına inmez). Sayılar onay bekliyor.
+
+## iOS paketi ve TestFlight
+- `.github/workflows/ios.yml` (ios-testflight): yayındaki `app/` dizinini Capacitor 7 ile sarar, `macos-15-intel` makinesinde Xcode 26 ile derler, TestFlight'a yükler. Elle (Actions > Run workflow) ya da `client/ios/**` / iş akışı değişince çalışır; web istemcisi değişince kendiliğinden çalışmaz.
+- Gizli değişkenler: `ASC_ISSUER_ID`, `ASC_KEY_ID`, `ASC_KEY_P8` (App Store Connect API anahtarı, **Admin** yetkili olmalı; App Manager bulut imzasına yetmiyor).
+- Paket kimliği ve takım kimliği App Store Connect'ten okunur (`client/ios/asc.mjs`). Arşiv imzasız alınır, dağıtım imzası yükleme adımında Apple'ın bulut sertifikasıyla atılır (kayıtlı cihaz gerekmez). Derleme numarası = iş akışı çalışma numarası, sürüm 1.0.
+- Karşılaşılan hatalar: geliştirme profili cihaz istiyor → imzasız arşiv; arm64 Mac kuyruğu dolu → Intel makine; "Cloud signing permission error" → Admin anahtar; "iOS 26 SDK" şartı → Xcode 26.
