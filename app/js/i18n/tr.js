@@ -44,7 +44,7 @@ export const tr = {
     'instr.press': 'Pres|Düşük|Orta|Yüksek', 'instr.line': 'Savunma hattı|Derin|Orta|Önde', 'instr.tempo': 'Tempo|Yavaş|Normal|Hızlı', 'instr.style': 'Oyun stili|Kısa pas|Dengeli|Direkt',
     'instr.width': 'Genişlik|Dar|Normal|Geniş', 'instr.compact': 'Hatlar arası|Kompakt|Normal|Açık', 'instr.fb': 'Bekler|Savunmada kal|Dengeli|Bindir', 'instr.cm': 'Merkez orta saha|Geride|Dengeli|Ceza sahasına',
     'instr.runs': 'Forvet koşuları|Güvenli|Dengeli|Riskli', 'instr.wing': 'Kanatlar|Çizgide kal|İçe kat', 'instr.trap': 'Ofsayt tuzağı|Kapalı|Açık',
-    'duty.runs': 'Koşu|Geride kal|Ayağa|Derin koşu', 'duty.press': 'Pres|Blokta kal|Normal|İlk basan', 'duty.pass': 'Pas|Kısa|Karışık|Uzun', 'duty.mark': 'Marke|Alan|Adam', 'duty.overlap': 'Bindirme|Kal|Takım|Bindir', 'duty.role': 'rol',
+    'duty.runs': 'Koşu|Geride kal|Dengeli|Arkaya koşu', 'duty.press': 'Pres|Blokta kal|Normal|İlk basan', 'duty.pass': 'Pas|Kısa|Karışık|Uzun', 'duty.mark': 'Marke|Alan|Adam', 'duty.overlap': 'Bindirme|Kal|Takım|Bindir', 'duty.role': 'rol',
     'mm.title': 'Maç Modu', 'mm.yourteam': 'Takımın', 'mm.opponent': 'Rakip', 'mm.diff': 'Zorluk', 'mm.minutes': 'Maç süresi', 'mm.mode': 'Oyun modu',
     'mode.team': 'Team play', 'mode.sim': 'Total simulation', 'mm.elo': 'Maç Modu Elo', 'mm.last': 'Son sonuç', 'mm.pick': 'Bu takımla oyna', 'mm.vs': 'Bu rakiple oyna',
     'diff.1': 'Amatör', 'diff.2': 'Yarı profesyonel', 'diff.3': 'Profesyonel', 'diff.4': 'Dünya klası', 'diff.5': 'Efsane',

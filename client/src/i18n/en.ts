@@ -50,7 +50,7 @@ export const en: Record<string, string> = {
   'instr.press': 'Pressing|Low|Medium|High', 'instr.line': 'Defensive line|Deep|Medium|High', 'instr.tempo': 'Tempo|Slow|Normal|Fast', 'instr.style': 'Style|Short passing|Balanced|Direct',
   'instr.width': 'Width|Narrow|Normal|Wide', 'instr.compact': 'Between lines|Compact|Normal|Open', 'instr.fb': 'Full-backs|Stay back|Balanced|Overlap', 'instr.cm': 'Central mids|Hold|Balanced|Into the box',
   'instr.runs': 'Striker runs|Safe|Balanced|Risky', 'instr.wing': 'Wingers|Stay wide|Cut inside', 'instr.trap': 'Offside trap|Off|On',
-  'duty.runs': 'Runs|Stay back|To feet|Deep run', 'duty.press': 'Pressing|Hold block|Normal|First presser', 'duty.pass': 'Passing|Short|Mixed|Long', 'duty.mark': 'Marking|Zonal|Man', 'duty.overlap': 'Overlap|Hold|Team|Overlap', 'duty.role': 'role',
+  'duty.runs': 'Runs|Stay back|Balanced|Run in behind', 'duty.press': 'Pressing|Hold block|Normal|First presser', 'duty.pass': 'Passing|Short|Mixed|Long', 'duty.mark': 'Marking|Zonal|Man', 'duty.overlap': 'Overlap|Hold|Team|Overlap', 'duty.role': 'role',
 
   'mm.title': 'Match Mode', 'mm.yourteam': 'Your team', 'mm.opponent': 'Opponent', 'mm.diff': 'Difficulty', 'mm.minutes': 'Match length', 'mm.mode': 'Game mode',
   'mode.team': 'Team play', 'mode.sim': 'Total simulation', 'mm.elo': 'Match Mode Elo', 'mm.last': 'Last result', 'mm.pick': 'Play with this team', 'mm.vs': 'Play against this team',
