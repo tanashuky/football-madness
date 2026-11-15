@@ -4,7 +4,7 @@
 // Kiralama: sure (sezon sonu / +1 / +2 sezon), maas paylasimi, istege bagli satin alma opsiyonu (kiralayan, sure bitmeden ya da bittiginde o tutara alir).
 import { FORM_POS } from '../engine.js';
 import { addLedger } from './career.js';
-import { ROSTER_MAX, ROSTER_MIN, freeNumber, marketValue, wageFor } from './manage.js';
+import { ROSTER_MAX, ROSTER_MIN, freeNumber, marketValue, signFee, wageFor } from './manage.js';
 import { BOT_KEEP, moveToBot, refreshGG, round10, severance, verdict, wages } from './bots.js';
 const hash = (s) => { let h = 2166136261; for (let i = 0; i < s.length; i++)
     h = Math.imul(h ^ s.charCodeAt(i), 16777619); return (h >>> 0) % 1000; };
@@ -65,7 +65,7 @@ export function releasePlayer(c, id) {
     delete p.end;
     delete p.clause;
     delete p.coach;
-    c.pool.push({ p, price: round10(marketValue(p) * 0.9), left: 0, fresh: false, club: '' });
+    c.pool.push({ p, price: signFee(p), left: 0, fresh: false, club: '' });
     return 'ok';
 }
 // uzatma: futbolcu guncel gucune gore maas ister (30 yas ustu %15, digerleri %5 zam); menajer seviyesi basina %3 indirim.
@@ -314,7 +314,7 @@ export function seasonEndContracts(c) {
         delete p.end;
         delete p.clause;
         delete p.coach;
-        c.pool.push({ p, price: round10(marketValue(p) * 0.9), left: 0, fresh: false, club: '' });
+        c.pool.push({ p, price: signFee(p), left: 0, fresh: false, club: '' });
         out.push(`left|${p.name}`);
     }
     c.league.teams.forEach((tm, ti) => {
@@ -334,7 +334,7 @@ export function seasonEndContracts(c) {
                 tm.roster.splice(tm.roster.indexOf(p), 1);
                 delete p.end;
                 delete p.clause;
-                c.pool.push({ p, price: round10(marketValue(p) * 0.9), left: 0, fresh: false, club: '' });
+                c.pool.push({ p, price: signFee(p), left: 0, fresh: false, club: '' });
                 note(c, 'free', tm.short, p);
                 refreshGG(tm);
             }

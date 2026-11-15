@@ -4,6 +4,7 @@ import { t, money } from '../core/i18n.js';
 import { go, register, render } from '../core/router.js';
 import { store, save } from '../core/store.js';
 import { card, confirmBox, muted, sel, tag, toast } from '../core/ui.js';
+import { FREE_WAGE } from '../model/manage.js';
 import { ROSTER_MAX, SCOUTS, fmtLeft, marketValue, overpaid, scoutCost, sellPrice, signFound, startScout, wageFor } from '../model/manage.js';
 import { acceptBid, acceptCounter, buyNow, canDeal, declineBid, findMarket, listPlayer, market, nextWeek, offerOf, promoteYouth, quickSell, sendOffer, skipWindow, unlist, withdrawOffer } from '../model/transfer.js';
 import { track } from '../model/missions.js';
@@ -22,7 +23,7 @@ const COLS = {
     trait: { k: 'trait', label: 'col.trait', get: (r) => r.p.traits.length, show: (r) => r.p.traits.join(', ') || '–' },
     wage: { k: 'wage', label: 'col.wage', num: true, get: (r) => r.p.wage || 0, show: (r) => html `<span class="${overpaid(r.p) ? 'neg' : ''}">${money(r.p.wage || 0)}</span>` },
     value: { k: 'value', label: 'col.value', num: true, get: (r) => marketValue(r.p), show: (r) => money(marketValue(r.p)) },
-    price: { k: 'price', label: 'col.price', num: true, get: (r) => r.price || 0, show: (r) => r.price ? html `<b>${money(r.price)}</b>` : html `<span class="muted">${t('pool.ask')}</span>` },
+    price: { k: 'price', label: 'col.price', num: true, get: (r) => r.price || 0, show: (r) => r.price ? html `<b>${money(r.price)}</b>${r.club ? '' : html ` <small class="muted">${t('pool.signfee')}</small>`}` : html `<span class="muted">${t('pool.ask')}</span>` },
     end: { k: 'end', label: 'col.end', num: true, get: (r) => (r.p.loan ? r.p.loan.until : r.p.end || 0), show: (r) => r.p.loan ? tag(t('loan.tag'), 'o') : r.p.end ? t('con.until', { s: r.p.end }) : '–' },
     fat: { k: 'fat', label: 'col.fat', num: true, get: (r) => r.p.fatigue, show: (r) => String(Math.round(r.p.fatigue)) },
     club: { k: 'club', label: 'col.club', get: (r) => r.club || '', show: (r) => r.club || t('pool.free') },
@@ -192,12 +193,12 @@ register('player', (c) => {
     let extra = html ``;
     if (c.src === 'pool' && it)
         actions = card(t('pl.actions'), html `
-      ${it.ask !== undefined ? html `<div class="row"><button class="btn prim" id="pBuy" ${!deal || full || k.fm < it.ask ? raw('disabled') : ''}>${t('pl.buynow', { fm: money(it.ask) })}</button></div>` : muted(t('pl.notlisted', { club: it.club }))}
+      ${it.ask !== undefined ? html `<div class="row"><button class="btn prim" id="pBuy" ${!deal || full || k.fm < it.ask ? raw('disabled') : ''}>${t(it.ti < 0 ? 'pl.signfree' : 'pl.buynow', { fm: money(it.ask) })}</button></div>` : muted(t('pl.notlisted', { club: it.club }))}
       <div class="filters"><label>${t('con.years')}<select id="sgY">${Array.from({ length: Math.min(maxYears(p), 5) }, (_, i) => i + 1).map((y) => html `<option value="${y}" ${y === Math.min(3, maxYears(p)) ? raw('selected') : ''}>${t('loan.y', { n: y })}</option>`)}</select></label>
-        <label>${t('cl.title')}<select id="sgC">${CLAUSES.map((x) => html `<option value="${x}" ${x === 3 ? raw('selected') : ''}>${x ? money(Math.round((marketValue(p) * x) / 10) * 10) : t('cl.none')} · ${money(Math.max(1, Math.round((p.wage || 0) * clauseWage(x) * (1 - 0.03 * (k.staff.manager || 0)))))}${t('con.perweek')}</option>`)}</select></label></div>
-      <div class="row"><label class="f inline">${t('pl.offer')} ${pct(marketValue(p), [0, 25, 50, 70, 80, 90, 100, 110, 125, 150, 200], 'pOfferPct', it.ask !== undefined ? Math.max(25, [25, 50, 70, 80, 90, 100, 110, 125].filter((x) => (marketValue(p) * x) / 100 <= it.ask * 0.92).pop() || 25) : 110)}</label><button class="btn" id="pOffer" ${!deal ? raw('disabled') : ''}>${o ? t('pl.offer.update') : t('pl.offer.send')}</button></div>
+        <label>${t('cl.title')}<select id="sgC">${CLAUSES.map((x) => html `<option value="${x}" ${x === 3 ? raw('selected') : ''}>${x ? money(Math.round((marketValue(p) * x) / 10) * 10) : t('cl.none')} · ${money(Math.max(1, Math.round((p.wage || 0) * (it.ti < 0 ? FREE_WAGE : 1) * clauseWage(x) * (1 - 0.03 * (k.staff.manager || 0)))))}${t('con.perweek')}</option>`)}</select></label></div>
+      <div class="row"><label class="f inline">${t(it.ti < 0 ? 'pl.offer.free' : 'pl.offer')} ${it.ti < 0 ? pct(it.ask, [50, 60, 70, 80, 90], 'pOfferPct', 80) : pct(marketValue(p), [0, 25, 50, 70, 80, 90, 100, 110, 125, 150, 200], 'pOfferPct', it.ask !== undefined ? Math.max(25, [25, 50, 70, 80, 90, 100, 110, 125].filter((x) => (marketValue(p) * x) / 100 <= it.ask * 0.92).pop() || 25) : 110)}</label><button class="btn" id="pOffer" ${!deal ? raw('disabled') : ''}>${o ? t('pl.offer.update') : t('pl.offer.send')}</button></div>
       ${o ? html `<p class="muted small">${t('pl.offer.state', { fm: money(o.amount), s: t('offer.' + o.state) })}${o.state === 'counter' ? ` ${money(o.counter || 0)}` : ''}${(o.state === 'rejected' || o.why === 'wantclause') && o.why ? ' · ' + t('why.' + o.why) : ''}</p>${o.state === 'counter' ? html `<div class="row"><button class="btn prim sm" id="pCounter">${t('offer.accept')} · ${money(o.counter || 0)}</button></div>` : ''}` : ''}
-      <p class="muted small">${deal ? t('pl.offer.hint') : k.tw.open ? t('tw.closing.desc') : t('tw.closed.desc')} · ${t('home.wallet', { fm: money(k.fm) })}</p>`);
+      <p class="muted small">${deal ? t(it.ti < 0 ? 'pl.free.hint' : 'pl.offer.hint') : k.tw.open ? t('tw.closing.desc') : t('tw.closed.desc')} · ${t('home.wallet', { fm: money(k.fm) })}</p>`);
     if (c.src === 'pool' && it && it.ti >= 0)
         extra = html `${p.clause ? card(t('cl.title'), html `<p>${t('cl.desc', { fm: money(p.clause) })}</p><div class="row"><button class="btn" id="pClause" ${!deal || full || k.fm < p.clause ? raw('disabled') : ''}>${t('cl.pay', { fm: money(p.clause) })}</button></div>`) : ''}
       ${card(t('loan.req'), html `${terms('lr', v0)}<div class="row"><button class="btn" id="pLoan" ${!deal ? raw('disabled') : ''}>${t('loan.send')}</button></div>${muted(t('loan.req.hint'))}`)}`;
@@ -253,7 +254,7 @@ register('player', (c) => {
                     fail(r); };
             const po = $('pOffer');
             if (po && it)
-                po.onclick = () => { const amt = Math.round((marketValue(p) * +$('pOfferPct').value) / 1000) * 10; if (sendOffer(k, p.id, amt, sg().y, sg().c) === 'ok') {
+                po.onclick = () => { const amt = Math.round(((it.ti < 0 ? it.ask : marketValue(p)) * +$('pOfferPct').value) / 1000) * 10; if (sendOffer(k, p.id, amt, sg().y, sg().c) === 'ok') {
                     track(store.db, { t: 'market' });
                     save();
                     toast(t('pl.offer.sent'), 'ok');

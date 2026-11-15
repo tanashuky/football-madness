@@ -50,6 +50,9 @@ export function setStaff(c: Career, k: StaffKey, lv: number): 'ok' | 'fm' | 'no'
 export const ts = (c: Career) => Math.round(100 * ((0.3 * c.facilities.stadium.level) / 10 + (0.4 * c.facilities.academy.level) / 5 + (0.3 * (STAFF.reduce((a, k) => a + c.staff[k], 0) / 5)) / 5));
 // sponsor (1. kademe 5.000 FM/sezon, + TS/5 yuzde) ve sezon sonu odulu (sampiyon 8.000; 2. %75, 3. %60, ortalar %40 -> %20, son %10)
 export function paySponsor(c: Career) { addLedger(c, 'sponsor', Math.round(5000 * CAREER_K.income * (1 + ts(c) / 500))); }
+// serbest futbolcu bonservis odenmeden alinir: kulube degil futbolcuya imza parasi (degerin %15'i) odenir, maas talebi %15 yuksektir
+export const FREE_WAGE = 1.15;
+export const signFee = (p: RosterPlayer) => Math.round((marketValue(p) * 0.15) / 10) * 10;
 export function prizeFor(rank: number, n: number): number { const pct = rank === 1 ? 100 : rank === 2 ? 75 : rank === 3 ? 60 : rank === n ? 10 : n <= 5 ? 40 : 40 - (20 * (rank - 4)) / Math.max(1, n - 5); return Math.round((8000 * CAREER_K.income * pct) / 100); }
 export function seasonPrize(c: Career, rank: number, n: number): { fm: number; scouts: number } {
   const fm = prizeFor(rank, n); addLedger(c, `prize:${rank}`, fm);

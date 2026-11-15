@@ -5,7 +5,7 @@
 import { FORM_POS } from '../engine.js';
 import type { Career, LoanTerms, RosterPlayer } from './types.js';
 import { addLedger } from './career.js';
-import { ROSTER_MAX, ROSTER_MIN, freeNumber, marketValue, wageFor } from './manage.js';
+import { ROSTER_MAX, ROSTER_MIN, freeNumber, marketValue, signFee, wageFor } from './manage.js';
 import { BOT_KEEP, moveToBot, refreshGG, round10, severance, verdict, wages } from './bots.js';
 
 const hash = (s: string) => { let h = 2166136261; for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619); return (h >>> 0) % 1000; };
@@ -29,7 +29,7 @@ export const wantsClause = (c: Career, p: RosterPlayer) => p.gg >= c.roster.redu
 // sozlesmesi bitmeyen oyuncuyu serbest birakmak: kalan maasi odenir
 export function releasePlayer(c: Career, id: string): 'ok' | 'fm' | 'min' | 'no' {
   const p = c.roster.find((x) => x.id === id); if (!p || p.loan) return 'no'; if (c.roster.length <= ROSTER_MIN) return 'min'; const fee = severance(c, p); if (c.fm < fee) return 'fm';
-  c.roster.splice(c.roster.indexOf(p), 1); clean(c, id); if (fee) addLedger(c, `release:${p.name}`, -fee); delete p.end; delete p.clause; delete p.coach; c.pool.push({ p, price: round10(marketValue(p) * 0.9), left: 0, fresh: false, club: '' }); return 'ok';
+  c.roster.splice(c.roster.indexOf(p), 1); clean(c, id); if (fee) addLedger(c, `release:${p.name}`, -fee); delete p.end; delete p.clause; delete p.coach; c.pool.push({ p, price: signFee(p), left: 0, fresh: false, club: '' }); return 'ok';
 }
 // uzatma: futbolcu guncel gucune gore maas ister (30 yas ustu %15, digerleri %5 zam); menajer seviyesi basina %3 indirim.
 // madde: dusuk madde kabul edersen maas talebi duser (1,5x: %10, 2x: %5), maddesiz sozlesme %5 pahali
@@ -119,10 +119,10 @@ export function seasonEndContracts(c: Career): string[] {
   // biten sozlesmeler
   for (const p of expiring(c)) { if (mgr && adviseRenew(c, p)) { renew(c, p.id, Math.min(2, maxYears(p)), p.clause ? 3 : 0); out.push(`renewed|${p.name}`); continue; }
     if (c.roster.length <= ROSTER_MIN) { p.end = s + 1; out.push(`renewed|${p.name}`); continue; } // 11'in altina dusmemek icin bir sezon uzar
-    c.roster.splice(c.roster.indexOf(p), 1); clean(c, p.id); delete p.end; delete p.clause; delete p.coach; c.pool.push({ p, price: round10(marketValue(p) * 0.9), left: 0, fresh: false, club: '' }); out.push(`left|${p.name}`); }
+    c.roster.splice(c.roster.indexOf(p), 1); clean(c, p.id); delete p.end; delete p.clause; delete p.coach; c.pool.push({ p, price: signFee(p), left: 0, fresh: false, club: '' }); out.push(`left|${p.name}`); }
   c.league.teams.forEach((tm, ti) => { if (tm.me || !tm.roster) return; for (const p of [...tm.roster]) { if (p.loan || p.end === undefined || p.end > s) continue;
     const vd = verdict(c, ti, p, true); if (!vd.unwanted || tm.roster.length <= BOT_KEEP) { p.end = s + 1 + (hash(p.id + s) % 3); p.wage = Math.max(p.wage || 0, wageFor(p.gg)); if (p.clause) p.clause = round10(marketValue(p) * 2); }
-    else { tm.roster.splice(tm.roster.indexOf(p), 1); delete p.end; delete p.clause; c.pool.push({ p, price: round10(marketValue(p) * 0.9), left: 0, fresh: false, club: '' }); note(c, 'free', tm.short, p); refreshGG(tm); } } });
+    else { tm.roster.splice(tm.roster.indexOf(p), 1); delete p.end; delete p.clause; c.pool.push({ p, price: signFee(p), left: 0, fresh: false, club: '' }); note(c, 'free', tm.short, p); refreshGG(tm); } } });
   return out;
 }
 // karar listesi (Kulup sekmesi): biten sozlesmeler, opsiyonu olan kiraliklar. Menajer varsa oneriyle gelir

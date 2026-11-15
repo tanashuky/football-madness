@@ -4,7 +4,7 @@
 import { DOCTRINES, FORM_POS, NAMES_B } from '../engine.js';
 import { defaultLineup, mkSquad, newTeamSetup, userTeamIn } from './club.js';
 import { botBrain } from './templates.js';
-import { sell } from './manage.js';
+import { FREE_WAGE, sell, signFee } from './manage.js';
 import { ACADEMY, ROSTER_MAX, STADIUM_CAP, STADIUM_COST, TICKET_BASE, TICKET_STEPS, freeNumber, marketValue, mkPlayer, overpaid, prizeFor, staffWage, wageFor } from './manage.js';
 import { CAREER_K, form, order } from './career.js';
 const rnd = (a, b) => a + Math.random() * (b - a);
@@ -132,7 +132,7 @@ export function moveToBot(c, ti, p) { const tm = c.league.teams[ti]; p.num = fre
 const REINVEST = { seller: 0.4, balanced: 0.7, ambitious: 0.9 };
 export function takeFromBot(c, ti, id, price) { const tm = c.league.teams[ti]; const i = tm.roster.findIndex((q) => q.id === id); if (i < 0)
     return null; const [p] = tm.roster.splice(i, 1); tm.fm = (tm.fm || 0) + price; tm.tb = (tm.tb || 0) + price * REINVEST[tm.style || 'balanced']; refreshGG(tm); return p; }
-const freeItem = (p) => ({ p, price: round10(marketValue(p) * rnd(0.85, 1)), left: 0, fresh: false, club: '' });
+const freeItem = (p) => ({ p, price: signFee(p), left: 0, fresh: false, club: '' });
 const news = (c, kind, club, p) => { c.news.unshift(`${kind}|${club}|${p.name}|${Math.round(p.gg)}`); if (c.news.length > 8)
     c.news.length = 8; };
 const spend = (tm, fm) => { tm.fm = (tm.fm || 0) - fm; tm.tb = Math.max(0, (tm.tb || 0) - fm); };
@@ -185,7 +185,7 @@ export function botWeek(c, canReplaceAfter) {
         const want = (p) => !p.loan && p.natPos === pos && p.gg >= cur + 3 && p.age <= maxAge && (p.wage || 0) <= room && marketValue(p) * 0.6 <= budget;
         for (const it of c.pool)
             if (want(it.p))
-                cands.push({ p: it.p, from: -1, price: it.price });
+                cands.push({ p: it.p, from: -1, price: signFee(it.p) });
         l.teams.forEach((ot, oi) => { if (oi === bi)
             return; for (const p of oi === 0 ? c.roster : ot.roster || [])
             if (want(p))
@@ -201,9 +201,10 @@ export function botWeek(c, canReplaceAfter) {
         // ust limit: ihtiyac ve butce buyudukce daha cok oder
         const will = Math.min(budget, round10(marketValue(p) * (1 + 0.05 * Math.min(8, p.gg - cur)) * (1 + clamp(budget / Math.max(1, marketValue(p)) / 12, 0, 0.5)) * (1 + (3 - smart) * 0.05)));
         if (pick.from === -1) { // serbest futbolcu
-            if (will < pick.price * 0.9)
+            if (will < pick.price)
                 continue;
-            spend(tm, Math.min(pick.price, will));
+            spend(tm, pick.price);
+            p.wage = Math.round((p.wage || 0) * FREE_WAGE);
             c.pool = c.pool.filter((it) => it.p !== p);
             moveToBot(c, bi, p);
             news(c, 'buy', tm.short, p);

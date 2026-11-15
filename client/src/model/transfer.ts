@@ -4,7 +4,7 @@
 // kapanis gununde yeni islem yok, yalniz bekleyen cevaplar sonuclanir. Havuz dinamik: botlar her hafta alir/satar, alinmayan gider, fiyat duser.
 import type { Career, Offer, PoolItem, RosterPlayer } from './types.js';
 import { addLedger } from './career.js';
-import { ROSTER_MAX, fixLineup, freeNumber, genYouths, marketValue, mkPlayer, sell } from './manage.js';
+import { FREE_WAGE, ROSTER_MAX, fixLineup, freeNumber, genYouths, marketValue, mkPlayer, sell, signFee } from './manage.js';
 import { loanBids, loanIn, loanOut, loanVerdict, sign, wantsClause } from './contracts.js';
 import type { LoanTerms } from './types.js';
 import { bidOnListings, botWeek, botsIncome, ensureBots, moveToBot, round10, takeFromBot, verdict } from './bots.js';
@@ -16,7 +16,7 @@ function newFree(c: Career): PoolItem {
   const base = Math.round(c.league.teams.reduce((a, t) => a + t.gg, 0) / c.league.teams.length);
   const star = Math.random() < 0.2; // arada bir yildiz serbest kalir
   const p = mkPlayer(c, star ? [base + 4, base + 14] : [base - 12, base + 4], [18, 34], star ? 0.8 : 0.3);
-  return { p, price: round10(marketValue(p) * rnd(0.85, 1)), left: 0, fresh: false, club: '' };
+  return { p, price: signFee(p), left: 0, fresh: false, club: '' };
 }
 export function openWindow(c: Career, kind: 'pre' | 'mid') {
   ensureBots(c);
@@ -29,18 +29,18 @@ export function openWindow(c: Career, kind: 'pre' | 'mid') {
 export interface MarketRow { p: RosterPlayer; ti: number; club: string; ask?: number; listed?: boolean }
 const replaceLeft = (c: Career) => c.tw.open && !c.tw.closing && c.tw.weeks - c.tw.week >= 1;
 export function market(c: Career): MarketRow[] {
-  ensureBots(c); const out: MarketRow[] = c.pool.map((it) => ({ p: it.p, ti: -1, club: '', ask: it.price, listed: true }));
+  ensureBots(c); const out: MarketRow[] = c.pool.map((it) => ({ p: it.p, ti: -1, club: '', ask: signFee(it.p), listed: true }));
   c.league.teams.forEach((tm, ti) => { if (tm.me) return; for (const p of tm.roster || []) { const vd = verdict(c, ti, p, true); out.push({ p, ti, club: tm.short, ask: vd.refuse ? undefined : vd.ask, listed: vd.listed }); } });
   return out;
 }
 export function findMarket(c: Career, id: string): MarketRow | null {
-  const it = c.pool.find((x) => x.p.id === id); if (it) return { p: it.p, ti: -1, club: '', ask: it.price };
+  const it = c.pool.find((x) => x.p.id === id); if (it) return { p: it.p, ti: -1, club: '', ask: signFee(it.p) };
   for (let ti = 0; ti < c.league.teams.length; ti++) { const tm = c.league.teams[ti]; if (tm.me) continue; const p = (tm.roster || []).find((q) => q.id === id); if (p) { const vd = verdict(c, ti, p, true); return { p, ti, club: tm.short, ask: vd.refuse ? undefined : vd.ask, listed: vd.listed }; } }
   return null;
 }
 function take(c: Career, m: MarketRow, price: number, years?: number, clauseK?: number): boolean {
-  let p: RosterPlayer | null = m.p; if (m.ti < 0) c.pool = c.pool.filter((it) => it.p.id !== m.p.id); else p = takeFromBot(c, m.ti, m.p.id, price);
-  if (!p) return false; addLedger(c, `buy:${p.name}`, -price); p.num = freeNumber(c.roster); delete p.clause; sign(c, p, years, clauseK); c.roster.push(p); return true;
+  let p: RosterPlayer | null = m.p; if (m.ti < 0) { c.pool = c.pool.filter((it) => it.p.id !== m.p.id); p.wage = Math.round((p.wage || 0) * FREE_WAGE); } else p = takeFromBot(c, m.ti, m.p.id, price);
+  if (!p) return false; addLedger(c, `${m.ti < 0 ? 'signfee' : 'buy'}:${p.name}`, -price); p.num = freeNumber(c.roster); delete p.clause; sign(c, p, years, clauseK); c.roster.push(p); return true;
 }
 export const canDeal = (c: Career) => c.tw.open && !c.tw.closing;
 export function buyNow(c: Career, id: string, years?: number, clauseK?: number): 'ok' | 'fm' | 'full' | 'closed' | 'no' | 'wantclause' {
@@ -71,7 +71,7 @@ export function listPlayer(c: Career, id: string, ask: number): 'ok' | 'closed' 
   c.tw.listings = c.tw.listings.filter((l) => l.id !== id); c.tw.listings.push({ id, ask: round10(ask), offer: null }); return 'ok';
 }
 export function unlist(c: Career, id: string) { c.tw.listings = c.tw.listings.filter((l) => l.id !== id); }
-export function quickSell(c: Career, id: string) { if (!canDeal(c)) return 'closed' as const; const p = c.roster.find((x) => x.id === id); const r = sell(c, id); if (r === 'ok') { unlist(c, id); if (p) c.pool.push({ p, price: round10(marketValue(p) * 0.9), left: 0, fresh: false, club: '' }); } return r; }
+export function quickSell(c: Career, id: string) { if (!canDeal(c)) return 'closed' as const; const p = c.roster.find((x) => x.id === id); const r = sell(c, id); if (r === 'ok') { unlist(c, id); if (p) c.pool.push({ p, price: signFee(p), left: 0, fresh: false, club: '' }); } return r; }
 export function acceptBid(c: Career, id: string): 'ok' | 'min' | 'gk' | 'no' {
   const l = c.tw.listings.find((x) => x.id === id); if (!l || !l.offer || !c.tw.open) return 'no'; if (l.loan) return loanOut(c, id); const p = c.roster.find((x) => x.id === id); const o = l.offer;
   const r = sell(c, id, o.amount); if (r === 'ok') { if (p && o.ti !== undefined && c.league.teams[o.ti]) { const tm = c.league.teams[o.ti]; tm.fm = (tm.fm || 0) - o.amount; moveToBot(c, o.ti, p); } c.news.unshift(`buy|${o.club}|${o.name}|${o.gg}`); unlist(c, id); } return r;

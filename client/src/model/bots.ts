@@ -5,7 +5,7 @@ import { DOCTRINES, FORM_POS, NAMES_B, type TeamIn } from '../engine.js';
 import type { Career, Club, LeagueTeam, RosterPlayer } from './types.js';
 import { defaultLineup, mkSquad, newTeamSetup, userTeamIn } from './club.js';
 import { botBrain } from './templates.js';
-import { sell } from './manage.js';
+import { FREE_WAGE, sell, signFee } from './manage.js';
 import { ACADEMY, ROSTER_MAX, STADIUM_CAP, STADIUM_COST, TICKET_BASE, TICKET_STEPS, freeNumber, marketValue, mkPlayer, overpaid, prizeFor, staffWage, wageFor } from './manage.js';
 import { CAREER_K, form, order } from './career.js';
 
@@ -91,7 +91,7 @@ export function moveToBot(c: Career, ti: number, p: RosterPlayer) { const tm = c
 // satis geliri kasaya girer; karaktere gore bir kismi ayni donemde transfere ayrilir
 const REINVEST = { seller: 0.4, balanced: 0.7, ambitious: 0.9 };
 export function takeFromBot(c: Career, ti: number, id: string, price: number): RosterPlayer | null { const tm = c.league.teams[ti]; const i = tm.roster!.findIndex((q) => q.id === id); if (i < 0) return null; const [p] = tm.roster!.splice(i, 1); tm.fm = (tm.fm || 0) + price; tm.tb = (tm.tb || 0) + price * REINVEST[tm.style || 'balanced']; refreshGG(tm); return p; }
-const freeItem = (p: RosterPlayer) => ({ p, price: round10(marketValue(p) * rnd(0.85, 1)), left: 0, fresh: false, club: '' });
+const freeItem = (p: RosterPlayer) => ({ p, price: signFee(p), left: 0, fresh: false, club: '' });
 const news = (c: Career, kind: string, club: string, p: RosterPlayer) => { c.news.unshift(`${kind}|${club}|${p.name}|${Math.round(p.gg)}`); if (c.news.length > 8) c.news.length = 8; };
 const spend = (tm: LeagueTeam, fm: number) => { tm.fm = (tm.fm || 0) - fm; tm.tb = Math.max(0, (tm.tb || 0) - fm); };
 // sozlesmesi bitmeyen oyuncuyu birakmak: kalan maasi odenir
@@ -120,7 +120,7 @@ export function botWeek(c: Career, canReplaceAfter: boolean) {
     const maxAge = tm.style === 'seller' ? 24 : tm.style === 'ambitious' ? 33 : 30; // satici genc ve gelisecek oyuncuya, hirsli hazir oyuncuya bakar
     type Cand = { p: RosterPlayer; from: number; price: number }; const cands: Cand[] = [];
     const want = (p: RosterPlayer) => !p.loan && p.natPos === pos && p.gg >= cur + 3 && p.age <= maxAge && (p.wage || 0) <= room && marketValue(p) * 0.6 <= budget;
-    for (const it of c.pool) if (want(it.p)) cands.push({ p: it.p, from: -1, price: it.price });
+    for (const it of c.pool) if (want(it.p)) cands.push({ p: it.p, from: -1, price: signFee(it.p) });
     l.teams.forEach((ot, oi) => { if (oi === bi) return; for (const p of oi === 0 ? c.roster : ot.roster || []) if (want(p)) cands.push({ p, from: oi, price: marketValue(p) }); });
     if (!cands.length) { borrow(c, bi, pos, cur, budget, room); continue; }
     const score = (x: Cand) => x.p.gg - x.price / 2000 - x.p.age * (tm.style === 'seller' ? 0.5 : 0.1);
@@ -129,7 +129,7 @@ export function botWeek(c: Career, canReplaceAfter: boolean) {
     // ust limit: ihtiyac ve butce buyudukce daha cok oder
     const will = Math.min(budget, round10(marketValue(p) * (1 + 0.05 * Math.min(8, p.gg - cur)) * (1 + clamp(budget / Math.max(1, marketValue(p)) / 12, 0, 0.5)) * (1 + (3 - smart) * 0.05)));
     if (pick.from === -1) { // serbest futbolcu
-      if (will < pick.price * 0.9) continue; spend(tm, Math.min(pick.price, will)); c.pool = c.pool.filter((it) => it.p !== p); moveToBot(c, bi, p); news(c, 'buy', tm.short, p);
+      if (will < pick.price) continue; spend(tm, pick.price); p.wage = Math.round((p.wage || 0) * FREE_WAGE); c.pool = c.pool.filter((it) => it.p !== p); moveToBot(c, bi, p); news(c, 'buy', tm.short, p);
     } else if (pick.from === 0) { // kullanicinin futbolcusu: teklif gelir, karar kullanicinin (serbest kalma maddesi odenirse karar sorulmaz)
       if (p.loan) continue; const mlv = c.staff.manager || 0;
       if (p.clause && will >= p.clause && (tm.fm || 0) >= p.clause) { const fee = p.clause; if (sell(c, p.id, fee) === 'ok') { delete p.clause; spend(tm, fee); moveToBot(c, bi, p); news(c, 'clause', tm.short, p); c.tw.listings = c.tw.listings.filter((x) => x.id !== p.id); } continue; }

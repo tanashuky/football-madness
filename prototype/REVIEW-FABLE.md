@@ -338,3 +338,6 @@ Commit sırası: 8ee1406 hız/pencereler → dd51833 şekiller → 7402036 göre
 - Gizli değişkenler: `ASC_ISSUER_ID`, `ASC_KEY_ID`, `ASC_KEY_P8` (App Store Connect API anahtarı, **Admin** yetkili olmalı; App Manager bulut imzasına yetmiyor).
 - Paket kimliği ve takım kimliği App Store Connect'ten okunur (`client/ios/asc.mjs`). Arşiv imzasız alınır, dağıtım imzası yükleme adımında Apple'ın bulut sertifikasıyla atılır (kayıtlı cihaz gerekmez). Derleme numarası = iş akışı çalışma numarası, sürüm 1.0.
 - Karşılaşılan hatalar: geliştirme profili cihaz istiyor → imzasız arşiv; arm64 Mac kuyruğu dolu → Intel makine; "Cloud signing permission error" → Admin anahtar; "iOS 26 SDK" şartı → Xcode 26.
+
+## Serbest futbolcu: bonservis yok, imza parası (hata düzeltmesi)
+- Serbest futbolcu için istenen tutar piyasa değerine yakın bir "fiyat"tı ve bonservis gibi görünüyordu. Artık bonservis yok: futbolcuya **imza parası** (değerin %15'i) ödenir, maaşı %15 yüksek olur. İmza parası için %50–90 arası teklif verilebilir (alt limit %80, altı karşı teklif). Botlar da aynı koşulla imzalar. Sayılar onay bekliyor.

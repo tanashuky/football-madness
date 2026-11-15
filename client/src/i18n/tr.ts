@@ -184,4 +184,5 @@ export const tr: Record<string, string> = {
   'news.clause': '{club}, {name} (GG {gg}) için serbest kalma maddesini ödedi', 'news.loan': '{club}, {name} (GG {gg}) futbolcusunu kiraladı',
   'pl.release': 'Serbest bırak · kalan maaş {fm}', 'pl.release.btn': 'Serbest bırak', 'pl.release.confirm': '{name} serbest bırakılsın mı? Sözleşmesinin kalan maaşı ödenir: {fm}', 'pl.released': 'Futbolcu serbest bırakıldı', 'why.wantclause': 'kulüp kabul etti; futbolcu maddesiz sözleşme istemiyor, değerinin 2 katı madde talep ediyor', 'mng.err.wantclause': 'Futbolcu maddesiz sözleşme istemiyor; bir serbest kalma maddesi seç',
   'bid.auto.team': 'Gelen transfer tekliflerini otomatik reddet (listeye koyduklarım hariç)', 'bid.auto.player': 'Satılık değil: bu oyuncuya gelen teklifleri otomatik reddet',
+  'pl.signfree': 'İmzala · imza parası {fm}', 'pl.offer.free': 'İmza parası teklifi', 'pl.free.hint': 'Serbest futbolcu için bonservis ödenmez; kendisine imza parası ödersin ve maaşı kulüpteki oyuncuya göre %15 yüksektir. Daha düşük imza parası teklif edebilirsin; cevap sonraki hafta gelir', 'pool.signfee': 'imza', 'pool.signfee.long': 'İmza parası',
 };

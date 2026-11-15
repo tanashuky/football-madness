@@ -172,4 +172,5 @@ export const en = {
     'news.clause': '{club} paid the release clause for {name} (OVR {gg})', 'news.loan': '{club} took {name} (OVR {gg}) on loan',
     'pl.release': 'Release · remaining wages {fm}', 'pl.release.btn': 'Release', 'pl.release.confirm': 'Release {name}? The remaining wages of his contract are paid: {fm}', 'pl.released': 'Player released', 'why.wantclause': 'the club accepted; the player refuses a contract without a clause and asks for one at twice his value', 'mng.err.wantclause': 'The player refuses a contract without a clause; choose a release clause',
     'bid.auto.team': 'Auto-decline incoming transfer bids (except for players I list)', 'bid.auto.player': 'Not for sale: auto-decline bids for this player',
+    'pl.signfree': 'Sign · signing fee {fm}', 'pl.offer.free': 'Signing fee offer', 'pl.free.hint': 'No transfer fee for a free agent; you pay him a signing fee and his wage is 15% higher than a club player. You may offer a lower signing fee; the answer arrives next week', 'pool.signfee': 'sign', 'pool.signfee.long': 'Signing fee',
 };

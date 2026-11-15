@@ -1,5 +1,5 @@
 import { addLedger } from './career.js';
-import { ROSTER_MAX, fixLineup, freeNumber, genYouths, marketValue, mkPlayer, sell } from './manage.js';
+import { FREE_WAGE, ROSTER_MAX, fixLineup, freeNumber, genYouths, mkPlayer, sell, signFee } from './manage.js';
 import { loanBids, loanIn, loanOut, loanVerdict, sign, wantsClause } from './contracts.js';
 import { bidOnListings, botWeek, botsIncome, ensureBots, moveToBot, round10, takeFromBot, verdict } from './bots.js';
 export const FREE_SIZE = 14, WEEKS = { pre: 4, mid: 2 };
@@ -9,7 +9,7 @@ function newFree(c) {
     const base = Math.round(c.league.teams.reduce((a, t) => a + t.gg, 0) / c.league.teams.length);
     const star = Math.random() < 0.2; // arada bir yildiz serbest kalir
     const p = mkPlayer(c, star ? [base + 4, base + 14] : [base - 12, base + 4], [18, 34], star ? 0.8 : 0.3);
-    return { p, price: round10(marketValue(p) * rnd(0.85, 1)), left: 0, fresh: false, club: '' };
+    return { p, price: signFee(p), left: 0, fresh: false, club: '' };
 }
 export function openWindow(c, kind) {
     ensureBots(c);
@@ -24,7 +24,7 @@ export function openWindow(c, kind) {
 const replaceLeft = (c) => c.tw.open && !c.tw.closing && c.tw.weeks - c.tw.week >= 1;
 export function market(c) {
     ensureBots(c);
-    const out = c.pool.map((it) => ({ p: it.p, ti: -1, club: '', ask: it.price, listed: true }));
+    const out = c.pool.map((it) => ({ p: it.p, ti: -1, club: '', ask: signFee(it.p), listed: true }));
     c.league.teams.forEach((tm, ti) => { if (tm.me)
         return; for (const p of tm.roster || []) {
         const vd = verdict(c, ti, p, true);
@@ -35,7 +35,7 @@ export function market(c) {
 export function findMarket(c, id) {
     const it = c.pool.find((x) => x.p.id === id);
     if (it)
-        return { p: it.p, ti: -1, club: '', ask: it.price };
+        return { p: it.p, ti: -1, club: '', ask: signFee(it.p) };
     for (let ti = 0; ti < c.league.teams.length; ti++) {
         const tm = c.league.teams[ti];
         if (tm.me)
@@ -50,13 +50,15 @@ export function findMarket(c, id) {
 }
 function take(c, m, price, years, clauseK) {
     let p = m.p;
-    if (m.ti < 0)
+    if (m.ti < 0) {
         c.pool = c.pool.filter((it) => it.p.id !== m.p.id);
+        p.wage = Math.round((p.wage || 0) * FREE_WAGE);
+    }
     else
         p = takeFromBot(c, m.ti, m.p.id, price);
     if (!p)
         return false;
-    addLedger(c, `buy:${p.name}`, -price);
+    addLedger(c, `${m.ti < 0 ? 'signfee' : 'buy'}:${p.name}`, -price);
     p.num = freeNumber(c.roster);
     delete p.clause;
     sign(c, p, years, clauseK);
@@ -134,7 +136,7 @@ export function quickSell(c, id) { if (!canDeal(c))
     return 'closed'; const p = c.roster.find((x) => x.id === id); const r = sell(c, id); if (r === 'ok') {
     unlist(c, id);
     if (p)
-        c.pool.push({ p, price: round10(marketValue(p) * 0.9), left: 0, fresh: false, club: '' });
+        c.pool.push({ p, price: signFee(p), left: 0, fresh: false, club: '' });
 } return r; }
 export function acceptBid(c, id) {
     const l = c.tw.listings.find((x) => x.id === id);
