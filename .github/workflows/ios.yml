@@ -49,6 +49,9 @@ jobs:
           npm install @capacitor/core@7 @capacitor/cli@7 @capacitor/ios@7
           npx cap init "Football Madness" "$BUNDLE_ID" --web-dir www
           npx cap add ios
+          # Apple Nisan 2027'den itibaren en dusuk iOS 15 hedefi istiyor (Capacitor 7 varsayilani 14)
+          sed -i '' "s/platform :ios, '14.0'/platform :ios, '15.0'/" ios/App/Podfile
+          sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = 14.0/IPHONEOS_DEPLOYMENT_TARGET = 15.0/g' ios/App/App.xcodeproj/project.pbxproj
           npx cap sync ios
           cp ../client/ios/icon-1024.png ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png
           plutil -replace ITSAppUsesNonExemptEncryption -bool NO ios/App/App/Info.plist
